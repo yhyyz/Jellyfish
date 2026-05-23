@@ -12,7 +12,7 @@
 
 ### P0 — 立即修复（影响开发效率和稳定性）
 
-- [ ] P0-3: 清理死代码（aiStudioApi.ts / http.ts / axios 依赖 / mocks/data.ts 重构）
+- [x] P0-3: 清理死代码（aiStudioApi.ts / http.ts / axios 依赖 / mocks/data.ts 重构）
 - [ ] P0-1: 拆分 ChapterStudio.tsx（6537行 → 5-6 子组件 + 3 hooks + 消除 24 个 any）
 - [ ] P0-2: 引入 TanStack Query（替换原始 useEffect+useState 数据获取模式）
 
