@@ -1,5 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
@@ -9,23 +11,27 @@ import './index.css'
 import './i18n'
 import './services/openapi'
 import { useAppStore } from './store/useAppStore'
+import { queryClient } from './queryClient'
 
 const RootApp: React.FC = () => {
   const language = useAppStore((state) => state.language)
   const antdLocale = language === 'en-US' ? enUS : zhCN
 
   return (
-    <ConfigProvider
-      locale={antdLocale}
-      theme={{
-        token: {
-          colorPrimary: '#1677ff',
-          borderRadius: 6,
-        },
-      }}
-    >
-      <App />
-    </ConfigProvider>
+    <QueryClientProvider client={queryClient}>
+      <ConfigProvider
+        locale={antdLocale}
+        theme={{
+          token: {
+            colorPrimary: '#1677ff',
+            borderRadius: 6,
+          },
+        }}
+      >
+        <App />
+      </ConfigProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   )
 }
 

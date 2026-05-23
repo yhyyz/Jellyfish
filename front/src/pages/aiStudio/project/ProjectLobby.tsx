@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Card,
   Input,
@@ -30,6 +31,7 @@ import { useNavigate } from 'react-router-dom'
 import { chapters as mockChapters, projects as mockProjects, type Project } from '../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../services/generated'
 import type { ChapterRead, ProjectRead, ProjectStyle } from '../../../services/generated'
+import { useProjectList, useCreateProject, useDeleteProject, projectKeys } from './queries'
 import {
   ProjectVisualStyleAndStyleFields,
   type ProjectVisualStyleChoice,
@@ -61,8 +63,14 @@ type ProjectView = Project & {
 
 const ProjectLobby: React.FC = () => {
   const navigate = useNavigate()
-  const [projects, setProjects] = useState<ProjectView[]>([])
-  const [loading, setLoading] = useState(true)
+  const qc = useQueryClient()
+  const useMock = import.meta.env.VITE_USE_MOCK === 'true'
+
+  // API data via TanStack Query (skipped when mock mode is active)
+  const { data: rawProjects, isLoading: queryLoading } = useProjectList()
+  const createProjectMutation = useCreateProject()
+  const deleteProjectMutation = useDeleteProject()
+
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
@@ -84,9 +92,7 @@ const ProjectLobby: React.FC = () => {
   const [form] = Form.useForm()
   const [editForm] = Form.useForm()
 
-  const useMock = import.meta.env.VITE_USE_MOCK === 'true'
-
-  const toUIProject = (p: ProjectRead): ProjectView => {
+  const toUIProject = useCallback((p: ProjectRead): ProjectView => {
     const stats = (p.stats ?? {}) as Record<string, unknown>
     const getNum = (key: string) => {
       const v = stats[key]
@@ -116,7 +122,14 @@ const ProjectLobby: React.FC = () => {
       visualStyle: (p.visual_style as ProjectVisualStyleChoice | undefined) ?? '现实',
       defaultVideoRatio: p.default_video_ratio ?? null,
     }
-  }
+  }, [])
+
+  const projects: ProjectView[] = useMemo(() => {
+    if (useMock) return mockProjects
+    return (rawProjects ?? []).map(toUIProject)
+  }, [useMock, rawProjects, toUIProject])
+
+  const loading = useMock ? false : queryLoading
 
   const newProjectId = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -124,30 +137,6 @@ const ProjectLobby: React.FC = () => {
     }
     return `p_${Date.now()}_${Math.random().toString(16).slice(2)}`
   }
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      if (useMock) {
-        setProjects(mockProjects)
-      } else {
-        const res = await StudioProjectsService.listProjectsApiV1StudioProjectsGet({
-          page: 1,
-          pageSize: 10,
-        })
-        const items = res.data?.items ?? []
-        setProjects(items.map(toUIProject))
-      }
-    } catch {
-      setProjects(useMock ? mockProjects : [])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void load()
-  }, [])
 
   const getProjectStatus = (p: ProjectView): 'draft' | 'inProgress' | 'completed' => {
     if (p.progress >= 90) return 'completed'
@@ -353,12 +342,7 @@ const ProjectLobby: React.FC = () => {
     if (!selectedIds.length) return
     try {
       await Promise.all(
-        selectedIds.map((id) =>
-          StudioProjectsService.deleteProjectApiV1StudioProjectsProjectIdDelete({ projectId: id }),
-        ),
-      )
-      setProjects((prev) =>
-        Array.isArray(prev) ? prev.filter((p) => !selectedIds.includes(p.id)) : prev
+        selectedIds.map((id) => deleteProjectMutation.mutateAsync(id)),
       )
       setSelectedIds([])
       message.success('已批量删除选中项目')
@@ -394,26 +378,20 @@ const ProjectLobby: React.FC = () => {
   }) => {
     try {
       const createdId = newProjectId()
-      const res = await StudioProjectsService.createProjectApiV1StudioProjectsPost({
-        requestBody: {
-          id: createdId,
-          name: values.name,
-          description: values.description ?? '',
-          style: values.style as ProjectStyle,
-          visual_style: values.visual_style as any,
-          seed: values.seed,
-          unify_style: values.unifyStyle,
-          default_video_ratio: values.default_video_ratio || null,
-          progress: 0,
-        },
+      const created = await createProjectMutation.mutateAsync({
+        id: createdId,
+        name: values.name,
+        description: values.description ?? '',
+        style: values.style as ProjectStyle,
+        visual_style: values.visual_style as any,
+        seed: values.seed,
+        unify_style: values.unifyStyle,
+        default_video_ratio: values.default_video_ratio || null,
+        progress: 0,
       })
-      const created = res.data
-      if (!created) throw new Error('empty project')
-      const ui = toUIProject(created)
       message.success('项目创建成功')
       setCreateModalOpen(false)
-      setProjects((prev) => (Array.isArray(prev) ? [...prev, ui] : [ui]))
-      navigate(`/projects/${ui.id}`)
+      navigate(`/projects/${created.id}`)
     } catch {
       message.error('创建失败')
     }
@@ -459,13 +437,10 @@ const ProjectLobby: React.FC = () => {
       })
       const updated = res.data
       if (!updated) throw new Error('empty project')
-      const ui = toUIProject(updated)
       message.success('项目已更新')
       setEditModalOpen(false)
       setEditingProject(null)
-      setProjects((prev) =>
-        Array.isArray(prev) ? prev.map((x) => (x.id === ui.id ? ui : x)) : prev
-      )
+      void qc.invalidateQueries({ queryKey: projectKeys.list() })
     } catch {
       message.error('更新失败')
     }
@@ -473,9 +448,8 @@ const ProjectLobby: React.FC = () => {
 
   const handleDelete = async (projectId: string) => {
     try {
-      await StudioProjectsService.deleteProjectApiV1StudioProjectsProjectIdDelete({ projectId })
+      await deleteProjectMutation.mutateAsync(projectId)
       message.success('已删除')
-      setProjects((prev) => (Array.isArray(prev) ? prev.filter((p) => p.id !== projectId) : []))
     } catch {
       message.error('删除失败')
     }

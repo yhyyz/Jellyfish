@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
+    "@tanstack/react-query": "^5.100.13",
+    "@tanstack/react-query-devtools": "^5.100.13",
     "antd": "^5.10.0",
     "i18next": "^23.11.4",
     "i18next-browser-languagedetector": "^7.2.1",
