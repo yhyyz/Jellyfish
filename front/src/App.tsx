@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import type React from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
@@ -6,21 +7,24 @@ import NotFound from './pages/NotFound'
 import ProjectLobby from './pages/aiStudio/project/ProjectLobby'
 import ProjectWorkbench from './pages/aiStudio/project/ProjectWorkbench'
 import RoleDetailPage from './pages/aiStudio/project/ProjectWorkbench/RoleDetailPage'
-import ChapterStudio from './pages/aiStudio/chapter/ChapterStudio'
-import AssetManager from './pages/aiStudio/assets/AssetManager'
-import ActorAssetEditPage from './pages/aiStudio/assets/ActorAssetEditPage.tsx'
-import SceneAssetEditPage from './pages/aiStudio/assets/SceneAssetEditPage.tsx'
-import PropAssetEditPage from './pages/aiStudio/assets/PropAssetEditPage.tsx'
-import CostumeAssetEditPage from './pages/aiStudio/assets/CostumeAssetEditPage.tsx'
-import PromptTemplateManager from './pages/aiStudio/prompts/PromptTemplateManager'
-import FileManager from './pages/aiStudio/files/FileManager'
-import VideoEditor from './pages/aiStudio/editor/VideoEditor'
-import AgentManagement from './pages/aiStudio/agents/AgentManagement'
-import AgentEdit from './pages/aiStudio/agents/AgentEdit.tsx'
-import ModelManagement from './pages/aiStudio/models/ModelManagement'
-import { ChapterShotsPage } from './pages/aiStudio/shots/ChapterShotsPage'
-import { ChapterShotEditPage } from './pages/aiStudio/shots/ChapterShotEditPage'
+import { PageSkeleton } from './components/PageSkeleton'
 import './App.css'
+
+// 路由级懒加载：大页面拆分为独立 chunk，减小首屏 bundle 体积
+const ChapterStudio = lazy(() => import('./pages/aiStudio/chapter/ChapterStudio'))
+const AssetManager = lazy(() => import('./pages/aiStudio/assets/AssetManager'))
+const ActorAssetEditPage = lazy(() => import('./pages/aiStudio/assets/ActorAssetEditPage'))
+const SceneAssetEditPage = lazy(() => import('./pages/aiStudio/assets/SceneAssetEditPage'))
+const PropAssetEditPage = lazy(() => import('./pages/aiStudio/assets/PropAssetEditPage'))
+const CostumeAssetEditPage = lazy(() => import('./pages/aiStudio/assets/CostumeAssetEditPage'))
+const PromptTemplateManager = lazy(() => import('./pages/aiStudio/prompts/PromptTemplateManager'))
+const FileManager = lazy(() => import('./pages/aiStudio/files/FileManager'))
+const VideoEditor = lazy(() => import('./pages/aiStudio/editor/VideoEditor'))
+const AgentManagement = lazy(() => import('./pages/aiStudio/agents/AgentManagement'))
+const AgentEdit = lazy(() => import('./pages/aiStudio/agents/AgentEdit'))
+const ModelManagement = lazy(() => import('./pages/aiStudio/models/ModelManagement'))
+const ChapterShotsPage = lazy(() => import('./pages/aiStudio/shots/ChapterShotsPage').then(m => ({ default: m.ChapterShotsPage })))
+const ChapterShotEditPage = lazy(() => import('./pages/aiStudio/shots/ChapterShotEditPage').then(m => ({ default: m.ChapterShotEditPage })))
 
 /** 兼容旧链接 `/projects/:projectId/chapters` → 工作台章节 Tab */
 function NavigateToWorkbenchChaptersTab() {
@@ -39,22 +43,22 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/chapters" element={<NavigateToWorkbenchChaptersTab />} />
           <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/prep/*" element={<Navigate to="../shots" replace />} />
-          <Route path="projects/:projectId/chapters/:chapterId/studio" element={<ChapterStudio />} />
-          <Route path="projects/:projectId/chapters/:chapterId/shots/:shotId/edit" element={<ChapterShotEditPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/shots" element={<ChapterShotsPage />} />
+          <Route path="projects/:projectId/chapters/:chapterId/studio" element={<Suspense fallback={<PageSkeleton />}><ChapterStudio /></Suspense>} />
+          <Route path="projects/:projectId/chapters/:chapterId/shots/:shotId/edit" element={<Suspense fallback={<PageSkeleton />}><ChapterShotEditPage /></Suspense>} />
+          <Route path="projects/:projectId/chapters/:chapterId/shots" element={<Suspense fallback={<PageSkeleton />}><ChapterShotsPage /></Suspense>} />
           <Route path="projects/:projectId/chapters/:chapterId/prep-drafts" element={<Navigate to="../shots" replace />} />
-          <Route path="projects/:projectId/chapters/:chapterId/timeline" element={<VideoEditor />} />
-          <Route path="projects/:projectId/editor" element={<VideoEditor />} />
-          <Route path="assets" element={<AssetManager />} />
-          <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />
-          <Route path="assets/scenes/:sceneId/edit" element={<SceneAssetEditPage />} />
-          <Route path="assets/props/:propId/edit" element={<PropAssetEditPage />} />
-          <Route path="assets/costumes/:costumeId/edit" element={<CostumeAssetEditPage />} />
-          <Route path="prompts" element={<PromptTemplateManager />} />
-          <Route path="files" element={<FileManager />} />
-          <Route path="agents/:id/edit" element={<AgentEdit />} />
-          <Route path="agents" element={<AgentManagement />} />
-          <Route path="models" element={<ModelManagement />} />
+          <Route path="projects/:projectId/chapters/:chapterId/timeline" element={<Suspense fallback={<PageSkeleton />}><VideoEditor /></Suspense>} />
+          <Route path="projects/:projectId/editor" element={<Suspense fallback={<PageSkeleton />}><VideoEditor /></Suspense>} />
+          <Route path="assets" element={<Suspense fallback={<PageSkeleton />}><AssetManager /></Suspense>} />
+          <Route path="assets/actors/:actorImageId/edit" element={<Suspense fallback={<PageSkeleton />}><ActorAssetEditPage /></Suspense>} />
+          <Route path="assets/scenes/:sceneId/edit" element={<Suspense fallback={<PageSkeleton />}><SceneAssetEditPage /></Suspense>} />
+          <Route path="assets/props/:propId/edit" element={<Suspense fallback={<PageSkeleton />}><PropAssetEditPage /></Suspense>} />
+          <Route path="assets/costumes/:costumeId/edit" element={<Suspense fallback={<PageSkeleton />}><CostumeAssetEditPage /></Suspense>} />
+          <Route path="prompts" element={<Suspense fallback={<PageSkeleton />}><PromptTemplateManager /></Suspense>} />
+          <Route path="files" element={<Suspense fallback={<PageSkeleton />}><FileManager /></Suspense>} />
+          <Route path="agents/:id/edit" element={<Suspense fallback={<PageSkeleton />}><AgentEdit /></Suspense>} />
+          <Route path="agents" element={<Suspense fallback={<PageSkeleton />}><AgentManagement /></Suspense>} />
+          <Route path="models" element={<Suspense fallback={<PageSkeleton />}><ModelManagement /></Suspense>} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>

@@ -1,0 +1,54 @@
+# Frontend Check：在 PR 修改前端文件时运行类型检查与构建验证。
+#
+# 合并前置（GitHub 需在仓库设置中启用）：
+#   Settings → Rules / Branch protection → Require status checks to pass
+#   勾选首次运行后出现的检查名，一般为「Frontend Check / check」（以 Actions 界面为准）。
+#
+# 本 workflow 仅在前端相关文件变更的 PR 上运行（paths）；纯后端/文档 PR 不会产生该检查。
+name: Frontend Check
+
+on:
+  pull_request:
+    paths:
+      - "front/**"
+      - "package.json"
+      - ".github/workflows/frontend-check.yml"
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-check-${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: front/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript check
+        run: pnpm exec tsc --noEmit
+
+      - name: Build
+        run: pnpm run build
