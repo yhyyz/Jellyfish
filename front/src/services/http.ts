@@ -1,40 +1,31 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
+/**
+ * @deprecated 此模块为遗留桩代码，仅为尚未迁移到 OpenAPI generated client 的页面提供编译兼容。
+ * 所有新代码应使用 `./generated/` 中的 OpenAPI client。
+ * TODO: 迁移 aiStudio/agents 页面后删除此文件与 aiStudioApi.ts。
+ */
 
 const backendBaseUrl = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000'
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? `${backendBaseUrl}/api`
 
-const http: AxiosInstance = axios.create({
-  baseURL,
-  timeout: 10000,
-})
+/** 简易 fetch 封装，替代已移除的 axios 依赖 */
+async function request<T>(method: string, url: string, data?: unknown): Promise<T> {
+  const res = await fetch(`${baseURL}${url}`, {
+    method,
+    headers: data ? { 'Content-Type': 'application/json' } : undefined,
+    body: data ? JSON.stringify(data) : undefined,
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json() as Promise<T>
+}
 
-http.interceptors.request.use(
-  (config) => {
-    // 这里可以注入 token 等信息
-    return config
-  },
-  (error) => Promise.reject(error),
-)
+export const get = <T = unknown>(url: string): Promise<T> => request<T>('GET', url)
 
-http.interceptors.response.use(
-  (response: AxiosResponse) => response.data,
-  (error) => {
-    // 这里可以统一处理错误提示、跳转登录等
-    return Promise.reject(error)
-  },
-)
+export const post = <T = unknown>(url: string, data?: unknown): Promise<T> =>
+  request<T>('POST', url, data)
 
-// 响应拦截器已返回 response.data，此处声明为 Promise<T>
-export const get = <T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> =>
-  http.get<T>(url, config) as Promise<T>
+export const put = <T = unknown>(url: string, data?: unknown): Promise<T> =>
+  request<T>('PUT', url, data)
 
-export const post = <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> =>
-  http.post<T>(url, data, config) as Promise<T>
+export const del = <T = unknown>(url: string): Promise<T> => request<T>('DELETE', url)
 
-export const put = <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> =>
-  http.put<T>(url, data, config) as Promise<T>
-
-export const del = <T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> =>
-  http.delete<T>(url, config) as Promise<T>
-
-export default http
+export default { get, post, put, del }
