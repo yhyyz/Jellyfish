@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # API
     api_v1_prefix: str = "/api/v1"
 
+    # Authentication (Phase 1: static API Key; empty = no auth)
+    api_key: str = ""
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./jellyfish.db"
 

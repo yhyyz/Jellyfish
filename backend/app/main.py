@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1 import router as api_v1_router
 from app.bootstrap import bootstrap_all_registries
 from app.config import settings
+from app.core.auth import ApiKeyMiddleware
 from app.schemas.common import ApiResponse
 
 
@@ -40,15 +41,21 @@ async def http_exception_handler(request: Request, exc: Exception) -> JSONRespon
     else:
         code = 500
         message = "Internal server error"
-    body = ApiResponse[None](code=code, message=message, data=None, meta=None).model_dump()
+    body = ApiResponse[None](
+        code=code, message=message, data=None, meta=None
+    ).model_dump()
     return JSONResponse(status_code=code, content=body)
 
 
-async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
     """422 校验异常统一为 { code: 422, message, data: null }。"""
     assert isinstance(exc, RequestValidationError)
     message = _error_message(exc.errors())
-    body = ApiResponse[None](code=422, message=message, data=None, meta=None).model_dump()
+    body = ApiResponse[None](
+        code=422, message=message, data=None, meta=None
+    ).model_dump()
     return JSONResponse(status_code=422, content=body)
 
 
@@ -83,6 +90,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(ApiKeyMiddleware)
+
 app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
 # 影视技能路由同时挂到主应用，保证 /api/v1/film 一定可访问
 
@@ -91,4 +100,5 @@ app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
 async def health():
     """健康检查。"""
     from app.schemas.common import success_response
+
     return success_response({"status": "ok"})
