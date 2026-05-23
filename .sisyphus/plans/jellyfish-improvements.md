@@ -18,8 +18,8 @@
 
 ### P1 — 短期改进（1-2 周）
 
-- [ ] P1-3: 前端路由懒加载（React.lazy + Suspense）
-- [ ] P1-4: CI 补全前端检查（tsc + build + lint workflow）
+- [x] P1-3: 前端路由懒加载（React.lazy + Suspense）
+- [x] P1-4: CI 补全前端检查（tsc + build + lint workflow）
 - [ ] P1-1: 拆分 script_processing.py（1041行 → routes/script/ 子包）
 - [ ] P1-2: 引入 Alembic 替换手写 SQL 迁移
 - [ ] P1-5: 替换 openapi-typescript-codegen 为 @hey-api/openapi-ts
