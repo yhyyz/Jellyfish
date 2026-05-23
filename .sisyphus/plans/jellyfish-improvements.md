@@ -26,27 +26,27 @@
 
 ### P2 — 中期改进（1-2 月）
 
-- [ ] P2-2: 认证系统（Phase 1: API Key / Phase 2: JWT + 用户）
-- [ ] P2-4: 监控 & 可观测性（Prometheus + Grafana + structlog）
-- [ ] P2-3: Storage 优化（连接池 + 流式下载 + presigned URL）
-- [ ] P2-5: 替换过时依赖（react-beautiful-dnd → dnd-kit / LangChain 版本锁定）
-- [ ] P2-1: 任务系统统一（合并双重系统为单一入口）
+- [x] P2-2: 认证系统（Phase 1: API Key / Phase 2: JWT + 用户）
+- [x] P2-4: 监控 & 可观测性（Prometheus + Grafana + structlog）
+- [x] P2-3: Storage 优化（连接池 + 流式下载 + presigned URL）
+- [x] P2-5: 替换过时依赖（react-beautiful-dnd → dnd-kit / LangChain 版本锁定）
+- [ ] P2-1: 任务系统统一（合并双重系统为单一入口）— DEFERRED (高风险，需独立迭代)
 
 ### P3 — 长期优化（2-3 月）
 
-- [ ] P3-1: WebSocket 替换轮询（任务状态实时推送）
-- [ ] P3-2: 前端测试体系（Vitest 单元 + Playwright E2E）
-- [ ] P3-3: 安全加固（容器扫描 + 依赖审计 + 限流 + Key 加密）
-- [ ] P3-4: 性能优化（DB 连接池 + Redis 缓存 + CDN + 任务队列分离）
+- [ ] P3-1: WebSocket 替换轮询（任务状态实时推送）— DEFERRED
+- [ ] P3-2: 前端测试体系（Vitest 单元 + Playwright E2E）— DEFERRED
+- [x] P3-3: 安全加固（容器扫描 + 依赖审计 + 限流 + Key 加密）
+- [x] P3-4: 性能优化（DB 连接池 + Redis 缓存 + CDN + 任务队列分离）
 
 ---
 
 ## Final Verification Wave
 
-- [ ] F1: 全量 TypeScript 类型检查通过（pnpm exec tsc --noEmit）
-- [ ] F2: 后端 pylint + 测试通过
-- [ ] F3: Docker Compose 完整启动验证
-- [ ] F4: 关键路径手动 QA（项目→章节→分镜→生成→导出）
+- [x] F1: 全量 TypeScript 类型检查通过（pnpm exec tsc --noEmit）
+- [x] F2: 后端 pylint + 测试通过
+- [ ] F3: Docker Compose 完整启动验证 — DEFERRED (需要外部 DB/Redis)
+- [ ] F4: 关键路径手动 QA（项目→章节→分镜→生成→导出）— DEFERRED (需要完整环境)
 
 ---
 
