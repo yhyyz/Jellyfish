@@ -7,7 +7,7 @@ export function useTaskPageContext(
 ) {
   const registerPageContext = useTaskUiStore((state) => state.registerPageContext)
   const unregisterPageContext = useTaskUiStore((state) => state.unregisterPageContext)
-  const scopeIdRef = useRef(`task-page-context-${crypto.randomUUID()}`)
+  const scopeIdRef = useRef(`task-page-context-${crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`)
 
   const normalizedContexts = useMemo(
     () =>

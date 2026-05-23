@@ -261,7 +261,7 @@ export function ChapterShotsPage() {
       const nextIndex = shots.reduce((m, s) => Math.max(m, s.index), 0) + 1
       const res = await StudioShotsService.createShotApiV1StudioShotsPost({
         requestBody: {
-          id: crypto.randomUUID(),
+          id: crypto?.randomUUID?.() ?? `shot_${Date.now()}_${Math.random().toString(16).slice(2)}`,
           chapter_id: chapterId,
           index: nextIndex,
           title: v.title.trim(),
