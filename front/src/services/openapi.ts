@@ -11,16 +11,14 @@ declare global {
 /**
  * 初始化由 OpenAPI 生成的请求客户端。
  *
- * 说明：
- * - 生成接口的路径已包含 `/api/v1/...`，因此 BASE 默认应为空串（同源）或完整后端地址。
- * - 本地开发默认直连 `http://localhost:8000`。
+ * 开发环境通过 Vite proxy 同源代理后端 API，BASE 设为空串即可。
+ * 生产环境通过 window.__ENV.BACKEND_URL 或构建时 VITE_BACKEND_URL 指定。
  */
 export function initOpenAPI(base: string = '') {
   OpenAPI.BASE = base
 }
 
 const runtimeBackendUrl = window.__ENV?.BACKEND_URL
-const buildtimeBackendUrl = import.meta.env.VITE_BACKEND_URL
-const defaultBackendUrl = 'http://localhost:8000'
+const buildtimeBackendUrl = import.meta.env.VITE_BACKEND_URL || undefined
 
-initOpenAPI(runtimeBackendUrl ?? buildtimeBackendUrl ?? defaultBackendUrl)
+initOpenAPI(runtimeBackendUrl ?? buildtimeBackendUrl ?? '')

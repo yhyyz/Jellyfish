@@ -4,8 +4,8 @@
  * TODO: 迁移 aiStudio/agents 页面后删除此文件与 aiStudioApi.ts。
  */
 
-const backendBaseUrl = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000'
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? `${backendBaseUrl}/api`
+const backendBaseUrl = import.meta.env.VITE_BACKEND_URL || ''
+const baseURL = import.meta.env.VITE_API_BASE_URL || `${backendBaseUrl}/api`
 
 /** 简易 fetch 封装，替代已移除的 axios 依赖 */
 async function request<T>(method: string, url: string, data?: unknown): Promise<T> {
