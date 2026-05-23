@@ -1,0 +1,33 @@
+name: Security Audit
+
+on:
+  schedule:
+    # 每周一 UTC 08:00 执行
+    - cron: "0 8 * * 1"
+  pull_request:
+    paths:
+      - "backend/**"
+
+jobs:
+  pip-audit:
+    name: Dependency Audit (pip-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run pip-audit
+        run: uv run pip-audit

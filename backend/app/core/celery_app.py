@@ -26,6 +26,14 @@ celery_app.conf.update(
     task_ignore_result=True,
     timezone="Asia/Shanghai",
     enable_utc=False,
+    # 任务队列路由：将耗时的视频/图片/时间线任务分离到 slow 队列，
+    # 避免阻塞轻量文本处理等 fast 任务。
+    task_routes={
+        "app.services.worker.*video*": {"queue": "slow"},
+        "app.services.worker.*image*": {"queue": "slow"},
+        "app.services.worker.*timeline*": {"queue": "slow"},
+        "app.services.worker.*": {"queue": "fast"},
+    },
 )
 
 

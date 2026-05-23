@@ -12,6 +12,7 @@ from app.bootstrap import bootstrap_all_registries
 from app.config import settings
 from app.core.auth import ApiKeyMiddleware
 from app.core.observability import setup_logging, setup_metrics
+from app.core.rate_limit import setup_rate_limit
 from app.schemas.common import ApiResponse
 
 
@@ -93,6 +94,7 @@ app.add_middleware(ApiKeyMiddleware)
 
 app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
 
+setup_rate_limit(app)
 setup_metrics(app)
 
 

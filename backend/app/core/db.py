@@ -14,10 +14,22 @@ from app.config import settings
 
 
 def _build_engine() -> AsyncEngine:
+    """构建异步数据库引擎，显式配置连接池参数以优化并发性能。
+
+    连接池策略：
+    - pool_size=10: 常驻连接数，覆盖常规并发请求
+    - max_overflow=20: 峰值时允许额外创建的连接数
+    - pool_recycle=3600: 每小时回收连接，防止 MySQL wait_timeout 断连
+    - pool_pre_ping=True: 每次取连接前发送轻量 ping，检测已断开的连接
+    """
     return create_async_engine(
         settings.database_url,
         echo=settings.debug,
         future=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=3600,
+        pool_pre_ping=True,
     )
 
 
