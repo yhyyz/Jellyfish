@@ -11,6 +11,7 @@ from app.api.v1 import router as api_v1_router
 from app.bootstrap import bootstrap_all_registries
 from app.config import settings
 from app.core.auth import ApiKeyMiddleware
+from app.core.observability import setup_logging, setup_metrics
 from app.schemas.common import ApiResponse
 
 
@@ -62,11 +63,9 @@ async def validation_exception_handler(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化，关闭时清理。"""
-    # 启动时：供应商注册 + 任务执行器注册（幂等）
+    setup_logging()
     bootstrap_all_registries()
     yield
-    # 关闭时：清理资源
-    pass
 
 
 app = FastAPI(
@@ -93,7 +92,8 @@ app.add_middleware(
 app.add_middleware(ApiKeyMiddleware)
 
 app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
-# 影视技能路由同时挂到主应用，保证 /api/v1/film 一定可访问
+
+setup_metrics(app)
 
 
 @app.get("/health")

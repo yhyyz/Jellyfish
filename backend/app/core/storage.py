@@ -3,11 +3,13 @@
 设计目标：
 - 提供上传 / 下载 / 列表 / 详情 等基础能力；
 - 尽量不绑定具体云厂商，只依赖 S3 兼容协议；
-- 在 FastAPI 异步环境下，避免阻塞事件循环：通过 anyio 在线程池中调用 boto3。
+- 在 FastAPI 异步环境下，避免阻塞事件循环：通过 anyio 在线程池中调用 boto3；
+- S3 客户端采用模块级单例，避免每次调用重复创建连接。
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, BinaryIO
 
@@ -31,21 +33,36 @@ class StoredFileInfo:
     extra: dict[str, Any] | None = None
 
 
-def _build_s3_client():
-    if not settings.s3_bucket_name:
-        raise RuntimeError("S3 未配置：请在配置中设置 s3_bucket_name 等必要字段")
+# 模块级 S3 客户端单例：懒初始化，避免每次调用重复创建连接。
+_s3_client: Any = None
 
-    client = boto3.client(
-        "s3",
-        endpoint_url=settings.s3_endpoint_url,
-        region_name=settings.s3_region_name,
-        aws_access_key_id=settings.s3_access_key_id,
-        aws_secret_access_key=settings.s3_secret_access_key,
-        # 对 MinIO/RustFS 等自建 S3 兼容服务，优先使用 path-style，
-        # 避免解析出 <bucket>.<endpoint-host> 导致容器内 DNS 失败。
-        config=BotoConfig(s3={"addressing_style": "path"}),
-    )
-    return client
+
+def get_s3_client():
+    """获取 S3 客户端单例（懒初始化）。
+
+    首次调用时创建 boto3 S3 client 并缓存到模块级变量；
+    后续调用直接返回已有实例，避免重复握手开销。
+    """
+    global _s3_client  # noqa: PLW0603
+    if _s3_client is None:
+        if not settings.s3_bucket_name:
+            raise RuntimeError("S3 未配置：请在配置中设置 s3_bucket_name 等必要字段")
+        _s3_client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3_endpoint_url,
+            region_name=settings.s3_region_name,
+            aws_access_key_id=settings.s3_access_key_id,
+            aws_secret_access_key=settings.s3_secret_access_key,
+            # 对 MinIO/RustFS 等自建 S3 兼容服务，优先使用 path-style，
+            # 避免解析出 <bucket>.<endpoint-host> 导致容器内 DNS 失败。
+            config=BotoConfig(s3={"addressing_style": "path"}),
+        )
+    return _s3_client
+
+
+def _build_s3_client():
+    """兼容旧调用路径，内部转发到单例获取函数。"""
+    return get_s3_client()
 
 
 def _normalize_key(key: str) -> str:
@@ -195,7 +212,11 @@ async def get_file_info(*, key: str) -> StoredFileInfo:
         size=size,
         content_type=content_type,
         etag=etag,
-        extra={k: v for k, v in meta.items() if k not in {"ContentLength", "ContentType", "ETag"}},
+        extra={
+            k: v
+            for k, v in meta.items()
+            if k not in {"ContentLength", "ContentType", "ETag"}
+        },
     )
 
 
@@ -206,7 +227,9 @@ async def list_files(*, prefix: str = "") -> list[StoredFileInfo]:
     if bucket is None:
         raise RuntimeError("S3 未配置：缺少 s3_bucket_name")
 
-    normalized_prefix = _normalize_key(prefix) if prefix else settings.s3_base_path.strip().strip("/")
+    normalized_prefix = (
+        _normalize_key(prefix) if prefix else settings.s3_base_path.strip().strip("/")
+    )
 
     def _list() -> list[dict[str, Any]]:
         resp = client.list_objects_v2(Bucket=bucket, Prefix=normalized_prefix or None)
@@ -224,7 +247,10 @@ async def list_files(*, prefix: str = "") -> list[StoredFileInfo]:
                 key=key,
                 url=url,
                 size=size,
-                extra={"LastModified": item.get("LastModified"), "StorageClass": item.get("StorageClass")},
+                extra={
+                    "LastModified": item.get("LastModified"),
+                    "StorageClass": item.get("StorageClass"),
+                },
             )
         )
     return results
@@ -244,3 +270,61 @@ async def delete_file(*, key: str) -> None:
 
     await to_thread.run_sync(_delete)
 
+
+async def download_file_stream(
+    *, key: str, chunk_size: int = 65536
+) -> AsyncIterator[bytes]:
+    """流式下载文件，返回异步字节迭代器。
+
+    适用于大文件场景，避免将整个对象读入内存。
+    通过 anyio 线程池逐块读取 boto3 StreamingBody。
+
+    参数：
+    - key：逻辑 key（自动拼接 base_path）。
+    - chunk_size：每次迭代返回的最大字节数，默认 64KB。
+    """
+    client = _build_s3_client()
+    bucket = settings.s3_bucket_name
+    if bucket is None:
+        raise RuntimeError("S3 未配置：缺少 s3_bucket_name")
+
+    s3_key = _normalize_key(key)
+
+    def _get_stream():
+        obj = client.get_object(Bucket=bucket, Key=s3_key)
+        return obj["Body"]
+
+    body = await to_thread.run_sync(_get_stream)
+
+    while True:
+        chunk = await to_thread.run_sync(body.read, chunk_size)
+        if not chunk:
+            break
+        yield chunk
+
+    await to_thread.run_sync(body.close)
+
+
+def generate_presigned_url(*, key: str, expires_in: int = 3600) -> str:
+    """生成 S3 预签名 URL，允许浏览器直接访问私有对象。
+
+    参数：
+    - key：逻辑 key（自动拼接 base_path）。
+    - expires_in：URL 有效期（秒），默认 3600（1 小时）。
+
+    返回：
+    - 预签名 URL 字符串。
+    """
+    client = _build_s3_client()
+    bucket = settings.s3_bucket_name
+    if bucket is None:
+        raise RuntimeError("S3 未配置：缺少 s3_bucket_name")
+
+    s3_key = _normalize_key(key)
+
+    url: str = client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": bucket, "Key": s3_key},
+        ExpiresIn=expires_in,
+    )
+    return url
