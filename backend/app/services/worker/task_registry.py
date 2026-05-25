@@ -18,6 +18,9 @@ from app.services.commerce.product_info_extract_worker import (
     TASK_KIND as PRODUCT_INFO_EXTRACT_TASK_KIND,
     run_product_info_extract_task,
 )
+from app.services.commerce.story_script_generate_worker import (
+    build_story_script_generate_executor,
+)
 from app.services.film.generated_video import run_video_generation_task
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
@@ -108,4 +111,8 @@ task_executor_registry.register(
         runner=run_compliance_check_task,
         timeout_seconds=COMPLIANCE_CHECK_TIMEOUT_SEC,
     ),
+)
+task_executor_registry.register(
+    "story_script_generate",
+    build_story_script_generate_executor(),
 )
