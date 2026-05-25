@@ -8,6 +8,11 @@
 
 from __future__ import annotations
 
+from app.services.commerce.compliance_check_worker import (
+    DEFAULT_TIMEOUT_SEC as COMPLIANCE_CHECK_TIMEOUT_SEC,
+    TASK_KIND as COMPLIANCE_CHECK_TASK_KIND,
+    run_compliance_check_task,
+)
 from app.services.commerce.product_info_extract_worker import (
     DEFAULT_TIMEOUT_SECONDS as PRODUCT_INFO_EXTRACT_TIMEOUT,
     TASK_KIND as PRODUCT_INFO_EXTRACT_TASK_KIND,
@@ -94,5 +99,13 @@ task_executor_registry.register(
         task_kind=PRODUCT_INFO_EXTRACT_TASK_KIND,
         runner=run_product_info_extract_task,
         timeout_seconds=PRODUCT_INFO_EXTRACT_TIMEOUT,
+    ),
+)
+task_executor_registry.register(
+    COMPLIANCE_CHECK_TASK_KIND,
+    AbstractAsyncDelegatingExecutor(
+        task_kind=COMPLIANCE_CHECK_TASK_KIND,
+        runner=run_compliance_check_task,
+        timeout_seconds=COMPLIANCE_CHECK_TIMEOUT_SEC,
     ),
 )
