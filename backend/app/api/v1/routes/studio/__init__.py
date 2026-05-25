@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1.routes.studio import (
     chapters,
+    compliance,
     entities,
     files,
     image_tasks,
@@ -31,4 +32,5 @@ router.include_router(files.router, prefix="/files", tags=["studio/files"])
 router.include_router(timeline.router, prefix="/timeline", tags=["studio/timeline"])
 router.include_router(image_tasks.router, prefix="/image-tasks", tags=["studio/image-tasks"])
 router.include_router(shot_character_links.router, prefix="/shot-character-links", tags=["studio/shot-character-links"])
+router.include_router(compliance.router, prefix="/compliance", tags=["studio/compliance"])
 
