@@ -10,6 +10,7 @@ from __future__ import annotations
 from enum import Enum
 
 from app.models.types import (
+    BrandArchetype,
     ComplianceRegion,
     ComplianceSeverity,
     FileUsageKind,
@@ -21,6 +22,7 @@ from app.models.types import (
     ProjectKind,
     PromptCategory,
     StoryVariantStatus,
+    ToneDimension,
 )
 
 
@@ -188,5 +190,96 @@ def test_new_enums_are_str_subclasses() -> None:
         ProductAppearanceTiming,
         Platform,
     ):
+        member = next(iter(cls))
+        assert isinstance(member, str), f"{cls.__name__} member is not str subclass"
+
+
+# ---------- P2 新增枚举：BrandArchetype + ToneDimension ----------
+
+
+_BRAND_ARCHETYPE_VALUES = {
+    "sage",
+    "jester",
+    "rebel",
+    "provocateur",
+    "maverick",
+    "friend",
+    "expert",
+    "cheerleader",
+    "storyteller",
+    "analyst",
+    "coach",
+    "minimalist",
+}
+
+
+_TONE_DIMENSION_VALUES = {
+    "formality",
+    "seriousness",
+    "technicality",
+    "enthusiasm",
+    "humanity",
+    "activity",
+    "specificity",
+    "conciseness",
+    "conventionality",
+    "safety",
+}
+
+
+def test_brand_archetype_enum_has_12_members() -> None:
+    """BrandArchetype 必须包含 12 个 tonethief 标准 archetype。"""
+    assert len(BrandArchetype) == 12
+    assert _values(BrandArchetype) == _BRAND_ARCHETYPE_VALUES
+
+
+def test_brand_archetype_values_are_lowercase_snake_case() -> None:
+    """所有 archetype 值必须为 lowercase（无大写、无空格、无连字符）。"""
+    for member in BrandArchetype:
+        value = str(member.value)
+        assert value == value.lower(), f"{member.name} value not lowercase: {value}"
+        assert " " not in value, f"{member.name} value has space: {value}"
+        assert "-" not in value, f"{member.name} value has hyphen: {value}"
+
+
+def test_brand_archetype_specific_members_exist() -> None:
+    """显式断言 12 个 archetype 成员均可访问。"""
+    assert BrandArchetype.sage.value == "sage"
+    assert BrandArchetype.jester.value == "jester"
+    assert BrandArchetype.rebel.value == "rebel"
+    assert BrandArchetype.provocateur.value == "provocateur"
+    assert BrandArchetype.maverick.value == "maverick"
+    assert BrandArchetype.friend.value == "friend"
+    assert BrandArchetype.expert.value == "expert"
+    assert BrandArchetype.cheerleader.value == "cheerleader"
+    assert BrandArchetype.storyteller.value == "storyteller"
+    assert BrandArchetype.analyst.value == "analyst"
+    assert BrandArchetype.coach.value == "coach"
+    assert BrandArchetype.minimalist.value == "minimalist"
+
+
+def test_tone_dimension_enum_has_10_members() -> None:
+    """ToneDimension 必须包含 10 个 tonethief 维度。"""
+    assert len(ToneDimension) == 10
+    assert _values(ToneDimension) == _TONE_DIMENSION_VALUES
+
+
+def test_tone_dimension_values_match_tonethief_taxonomy() -> None:
+    """显式断言 10 个 ToneDimension 成员名称与 tonethief 词表对齐。"""
+    assert ToneDimension.formality.value == "formality"
+    assert ToneDimension.seriousness.value == "seriousness"
+    assert ToneDimension.technicality.value == "technicality"
+    assert ToneDimension.enthusiasm.value == "enthusiasm"
+    assert ToneDimension.humanity.value == "humanity"
+    assert ToneDimension.activity.value == "activity"
+    assert ToneDimension.specificity.value == "specificity"
+    assert ToneDimension.conciseness.value == "conciseness"
+    assert ToneDimension.conventionality.value == "conventionality"
+    assert ToneDimension.safety.value == "safety"
+
+
+def test_p2_enums_are_str_subclasses() -> None:
+    """BrandArchetype + ToneDimension 必须为 (str, Enum) 子类。"""
+    for cls in (BrandArchetype, ToneDimension):
         member = next(iter(cls))
         assert isinstance(member, str), f"{cls.__name__} member is not str subclass"

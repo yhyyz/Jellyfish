@@ -341,3 +341,44 @@ class Platform(str, Enum):
     xiaohongshu = "xiaohongshu"
     youtube = "youtube"
     tiktok = "tiktok"
+
+
+# === Story-Driven Commerce Enums (P2) ===
+
+
+class BrandArchetype(str, Enum):
+    """品牌人格原型 — 12 个 archetype 来自 tonethief 标准词汇表。
+
+    P2 启用：用于 commerce_story_configs.archetype + StoryVariant.archetype + ArchetypeVoiceRewriterAgent。
+    """
+
+    sage = "sage"               # 智者 — 知识/智慧
+    jester = "jester"           # 小丑 — 幽默/活力
+    rebel = "rebel"             # 反叛者 — 颠覆/独立
+    provocateur = "provocateur" # 挑衅者 — 争议/惊艳
+    maverick = "maverick"       # 独行者 — 个性/自由
+    friend = "friend"           # 朋友 — 亲切/陪伴
+    expert = "expert"           # 专家 — 权威/精确
+    cheerleader = "cheerleader" # 鼓励者 — 振奋/动力
+    storyteller = "storyteller" # 说书人 — 叙事/想象
+    analyst = "analyst"         # 分析师 — 理性/数据
+    coach = "coach"             # 教练 — 引导/激励
+    minimalist = "minimalist"   # 极简主义 — 简洁/纯粹
+
+
+class ToneDimension(str, Enum):
+    """语调维度 — 每个维度 0-10 分，配合 BrandArchetype 形成 tone_grid。
+
+    参考: tonethief 的 10 维度模型。
+    """
+
+    formality = "formality"           # Formal ↔ Casual
+    seriousness = "seriousness"       # Serious ↔ Playful
+    technicality = "technicality"     # Technical ↔ Accessible
+    enthusiasm = "enthusiasm"         # Reserved ↔ Enthusiastic
+    humanity = "humanity"             # Corporate ↔ Human
+    activity = "activity"             # Passive ↔ Active
+    specificity = "specificity"       # Vague ↔ Specific
+    conciseness = "conciseness"       # Long-winded ↔ Concise
+    conventionality = "conventionality"  # Conventional ↔ Irreverent
+    safety = "safety"                 # Safe ↔ Provocative
