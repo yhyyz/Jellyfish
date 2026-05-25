@@ -8,6 +8,15 @@ from app.core.contracts.image_generation import (
     ResponseFormat,
 )
 from app.core.contracts.provider import ProviderConfig, ProviderKey
+from app.core.contracts.story import (
+    BrandVoice,
+    ComplianceFinding,
+    ComplianceReport,
+    ProductExtractionResult,
+    Shot,
+    StoryGenerationVars,
+    StoryScript,
+)
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
 
 __all__ = [
@@ -20,4 +29,11 @@ __all__ = [
     "ImageItem",
     "InputImageRef",
     "ResponseFormat",
+    "Shot",
+    "StoryScript",
+    "StoryGenerationVars",
+    "ProductExtractionResult",
+    "ComplianceFinding",
+    "ComplianceReport",
+    "BrandVoice",
 ]
