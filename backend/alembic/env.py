@@ -15,6 +15,7 @@ from app.core.db import Base
 
 # 确保所有 ORM 模型已导入，以便 autogenerate 能检测到完整 metadata
 import app.models.llm  # noqa: F401
+import app.models.story_formula  # noqa: F401
 import app.models.studio  # noqa: F401
 import app.models.task  # noqa: F401
 import app.models.task_links  # noqa: F401

@@ -6,6 +6,7 @@ from app.models.base import TimestampMixin
 
 from app.models.compliance import ComplianceFinding, ComplianceProfile
 from app.models.llm import Model, ModelSettings, Provider
+from app.models.story_formula import StoryFormula, StoryOutcome, StoryVariant
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
 from app.models.types import FileUsageKind
@@ -78,4 +79,7 @@ __all__ = [
     "GenerationTaskLink",
     "ComplianceProfile",
     "ComplianceFinding",
+    "StoryFormula",
+    "StoryVariant",
+    "StoryOutcome",
 ]
