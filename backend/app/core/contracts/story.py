@@ -312,3 +312,58 @@ class CTAWriteVars(BaseModel):
         default="加购",
         description="目标动作：加购/下单/关注/查看/试用",
     )
+
+
+# ---------------------------------------------------------------------------
+# 品牌人格语气改写（W12-T3 ArchetypeVoiceRewriterAgent）
+# ---------------------------------------------------------------------------
+
+
+class ArchetypeRewriteVars(BaseModel):
+    """``ArchetypeVoiceRewriterAgent`` 的输入变量契约。
+
+    封装一次品牌人格语气改写所需的全部上下文：原始 ``StoryScript``
+    的序列化 dict、目标 ``archetype`` 与其自然语言描述、调性网格、
+    禁词与优先词汇表。下游 Agent 在改写时必须保留 shot 结构（id /
+    duration_sec / shot_type / camera_angle / camera_movement 不变），
+    仅改写 ``dialog`` / ``narration`` / ``opening_hook`` / ``cta_text``
+    这类纯文本字段。
+
+    设计要点：
+
+    - 与 ``CTAWriteVars`` / ``StoryGenerationVars`` 一致使用
+      ``ConfigDict(extra="forbid")``，避免上游误传字段被静默吞掉；
+    - ``original_script`` 以 ``dict[str, Any]`` 形式承接，让 worker
+      与 API 层无需再依赖 ``StoryScript`` 类型也能完成参数注入；
+    - ``archetype_description`` 是面向 LLM 的自然语言描述，便于
+      提示词层面对人格特征的刻画；
+    - ``words_to_avoid`` / ``preferred_vocab`` 提供给后置 validator
+      做硬性检查，确保改写结果可控。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    original_script: dict[str, Any] = Field(
+        ...,
+        description="原始 StoryScript 序列化后的 dict（来自 model_dump()）",
+    )
+    archetype: str = Field(
+        ...,
+        description="品牌人格原型，对应 12 类 BrandArchetype 之一",
+    )
+    archetype_description: str = Field(
+        ...,
+        description="人格的自然语言描述（用于驱动 LLM 改写语气）",
+    )
+    tone_grid: dict[str, int] = Field(
+        ...,
+        description="调性网格：dimension -> 0~10 整数刻度",
+    )
+    words_to_avoid: list[str] = Field(
+        default_factory=list,
+        description="禁用词列表，改写后必须不出现",
+    )
+    preferred_vocab: list[str] = Field(
+        default_factory=list,
+        description="优先使用的词汇表，改写时引导 LLM 倾向选用",
+    )
