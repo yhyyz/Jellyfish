@@ -19,6 +19,8 @@ from app.dependencies import get_db
 from app.schemas.commerce import (
     ProductCreate,
     ProductImageCreate,
+    ProductImageGenerationRequest,
+    ProductImageGenerationResponse,
     ProductUpdate,
 )
 from app.schemas.common import (
@@ -28,6 +30,7 @@ from app.schemas.common import (
     paginated_response,
     success_response,
 )
+from app.services.commerce.product_image_generation import ProductImageGenerationService
 from app.services.commerce.products import ProductsService
 
 router = APIRouter()
@@ -158,6 +161,40 @@ async def delete_product_image(
     """删除指定商品下的图片；image 不属于该 product 时返回 404。"""
     service = ProductsService(db)
     await service.delete_image(product_id, image_id)
+
+
+@router.post(
+    "/{product_id}/images/generate",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ApiResponse[ProductImageGenerationResponse],
+    summary="生成商品参考图（异步任务）",
+)
+async def generate_product_image(
+    product_id: str,
+    body: ProductImageGenerationRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ProductImageGenerationResponse]:
+    """触发 image_generation 任务，结果完成后由下游 worker 自动写 ProductImage 行。
+
+    路由职责（保持瘦身）：
+        1. 自动校验入参（``ProductImageGenerationRequest`` 已声明 extra="forbid"）；
+        2. 调用 :class:`ProductImageGenerationService` 完成模板解析 / 渲染 / 入队；
+        3. 把 service 返回的 dict 包成 :class:`ProductImageGenerationResponse`，
+           再走统一响应壳 ``ApiResponse``，状态码固定 ``202 Accepted``（语义
+           与 W6-T3 ``commerce/*`` 任务入口一致：请求已接收、处理尚未完成）。
+    """
+
+    service = ProductImageGenerationService(db)
+    payload = await service.enqueue_product_image_generation(
+        product_id=product_id,
+        view_angle=body.view_angle,
+        quality_level=body.quality_level,
+        reference_file_id=body.reference_file_id,
+    )
+    return success_response(
+        ProductImageGenerationResponse.model_validate(payload),
+        code=status.HTTP_202_ACCEPTED,
+    )
 
 
 __all__ = ["router"]

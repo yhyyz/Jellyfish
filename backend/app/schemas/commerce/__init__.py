@@ -15,10 +15,16 @@ from app.schemas.commerce.product import (
     ProductRead,
     ProductUpdate,
 )
+from app.schemas.commerce.product_image_generation import (
+    ProductImageGenerationRequest,
+    ProductImageGenerationResponse,
+)
 
 __all__ = [
     "ProductCreate",
     "ProductImageCreate",
+    "ProductImageGenerationRequest",
+    "ProductImageGenerationResponse",
     "ProductImageRead",
     "ProductRead",
     "ProductUpdate",
