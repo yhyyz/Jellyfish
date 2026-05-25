@@ -35,17 +35,31 @@ async def bootstrap_async_state(db: AsyncSession) -> dict[str, dict[str, int]]:
     - 幂等：重复调用只会把 DB 内容"纠回"到 canonical 版本；
     - 顺序合同：``story_formulas.prompt_template_id`` 上有
       ``ON DELETE RESTRICT`` 外键指向 ``prompt_templates``，因此
-      ``prompts`` 必须先于 ``formulas``；``compliance`` 与前两者无依赖，
-      放在最后；
+      ``prompts`` 必须先于 ``formulas``；``compliance`` 与前两者无依赖；
+      ``hook_patterns`` / ``cta_patterns`` / ``brand_archetypes`` 三个 P2
+      模式库与上述任一 seed 均无外键依赖，按"语义相关度"附在 commerce
+      已有 seed 后面，便于启动日志统一检视；
     - 返回各子 bootstrap 的统计字典，便于启动日志打印与启动期断言：
 
         {
-            "prompts":    {"inserted": N, "updated": M, "unchanged": K},
-            "formulas":   {"inserted": N, "updated": M, "unchanged": K},
-            "compliance": {"inserted": N, "updated": M, "unchanged": K},
+            "prompts":          {"inserted": N, "updated": M, "unchanged": K},
+            "formulas":         {"inserted": N, "updated": M, "unchanged": K},
+            "compliance":       {"inserted": N, "updated": M, "unchanged": K},
+            "hook_patterns":    {"inserted": N, "updated": M, "unchanged": K},
+            "cta_patterns":     {"inserted": N, "updated": M, "unchanged": K},
+            "brand_archetypes": {"inserted": N, "updated": M, "unchanged": K},
         }
     """
 
+    from app.services.commerce.builtin_brand_archetypes import (
+        bootstrap_builtin_brand_archetypes,
+    )
+    from app.services.commerce.builtin_cta_patterns import (
+        bootstrap_builtin_cta_patterns,
+    )
+    from app.services.commerce.builtin_hook_patterns import (
+        bootstrap_builtin_hook_patterns,
+    )
     from app.services.commerce.builtin_story_formulas import (
         bootstrap_builtin_story_formulas,
     )
@@ -58,4 +72,7 @@ async def bootstrap_async_state(db: AsyncSession) -> dict[str, dict[str, int]]:
     stats["prompts"] = await bootstrap_builtin_prompts(db)
     stats["formulas"] = await bootstrap_builtin_story_formulas(db)
     stats["compliance"] = await bootstrap_builtin_compliance_profiles(db)
+    stats["hook_patterns"] = await bootstrap_builtin_hook_patterns(db)
+    stats["cta_patterns"] = await bootstrap_builtin_cta_patterns(db)
+    stats["brand_archetypes"] = await bootstrap_builtin_brand_archetypes(db)
     return stats
