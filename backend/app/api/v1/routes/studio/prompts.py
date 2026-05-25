@@ -56,6 +56,19 @@ _PROMPT_CATEGORY_ZH: dict[PromptCategory, tuple[str, str]] = {
     PromptCategory.combined: ("组合提示词", "用于组合多段提示词的模板"),
     PromptCategory.bgm: ("背景音乐提示词", "用于生成背景音乐描述的提示词"),
     PromptCategory.sfx: ("音效提示词", "用于生成音效描述的提示词"),
+    # === Story-Driven Commerce 扩展（P1）===
+    PromptCategory.product_extraction: ("商品信息抽取", "从商品页 URL/文本提取结构化商品信息"),
+    PromptCategory.story_formula_generator: ("剧情公式生成器", "根据公式+商品+受众生成完整 StoryScript"),
+    PromptCategory.hook_pattern_writer: ("钩子模式撰写", "生成前 3 秒钩子文本"),
+    PromptCategory.cta_pattern_writer: ("CTA 模式撰写", "生成结尾转化语句"),
+    PromptCategory.archetype_voice_rewriter: ("品牌人格语气改写", "按 archetype + tone_grid 改写脚本对白"),
+    PromptCategory.compliance_checker: ("合规语义检查", "LLM 二次合规审核"),
+    PromptCategory.product_image_front: ("商品正面参考图", "商品正面参考图 prompt"),
+    PromptCategory.product_image_other: ("商品其他角度参考图", "商品其他角度参考图 prompt"),
+    PromptCategory.product_placement_prompt: ("商品场景植入", "商品在镜头中自然出现的视觉 prompt"),
+    PromptCategory.product_hero_prompt: ("商品高光特写", "商品高光时刻特写 prompt"),
+    PromptCategory.audience_insight: ("受众洞察分析", "受众洞察分析 prompt"),
+    PromptCategory.brand_voice_profile: ("品牌语调画像", "品牌语调画像 prompt"),
 }
 
 

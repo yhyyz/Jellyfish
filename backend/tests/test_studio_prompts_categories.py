@@ -45,6 +45,19 @@ def test_list_prompt_categories_returns_value_label_description(client: TestClie
         "costume_image_front",
         "costume_image_other",
         "combined",
+        # === Story-Driven Commerce 扩展（P1）===
+        "product_extraction",
+        "story_formula_generator",
+        "hook_pattern_writer",
+        "cta_pattern_writer",
+        "archetype_voice_rewriter",
+        "compliance_checker",
+        "product_image_front",
+        "product_image_other",
+        "product_placement_prompt",
+        "product_hero_prompt",
+        "audience_insight",
+        "brand_voice_profile",
     }
     assert "首帧图片" in labels
     assert "关键帧图片" in labels
