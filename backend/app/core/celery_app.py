@@ -26,13 +26,22 @@ celery_app.conf.update(
     task_ignore_result=True,
     timezone="Asia/Shanghai",
     enable_utc=False,
-    # 任务队列路由：将耗时的视频/图片/时间线任务分离到 slow 队列，
-    # 避免阻塞轻量文本处理等 fast 任务。
+    # 任务队列路由：根据 Celery 已注册任务名 (`task.execute*` 命名空间) 路由。
+    #
+    # 项目实际只在 `app.tasks.execute_task` 中注册了一个统一执行入口
+    # `@celery_app.task(name="task.execute")`，所以路由必须以 `task.execute*`
+    # 为锚点，而不是按模块路径 `app.services.worker.*` 匹配（旧规则永远命不中）。
+    #
+    # 约定：
+    # - `task.execute.video` / `task.execute.image` / `task.execute.timeline`
+    #   等耗时任务入口落到 `slow` 队列；
+    # - 其余 `task.execute*`（含当前默认入口 `task.execute`）落到 `fast` 队列。
+    # Celery 路由按声明顺序匹配，先列具体规则再列兜底。
     task_routes={
-        "app.services.worker.*video*": {"queue": "slow"},
-        "app.services.worker.*image*": {"queue": "slow"},
-        "app.services.worker.*timeline*": {"queue": "slow"},
-        "app.services.worker.*": {"queue": "fast"},
+        "task.execute.video*": {"queue": "slow"},
+        "task.execute.image*": {"queue": "slow"},
+        "task.execute.timeline*": {"queue": "slow"},
+        "task.execute*": {"queue": "fast"},
     },
 )
 
