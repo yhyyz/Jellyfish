@@ -150,6 +150,10 @@ class FileUsageKind(str, Enum):
     task_link = "task_link"
     upload = "upload"
     api = "api"
+    # === Story-Driven Commerce 扩展（P1）===
+    product_image = "product_image"
+    product_hero_shot = "product_hero_shot"
+    commerce_reference = "commerce_reference"
 
 
 class TimelineClipType(str, Enum):
@@ -210,3 +214,130 @@ class PromptCategory(str, Enum):
     costume_image_front = "costume_image_front"
     costume_image_other = "costume_image_other"
     combined = "combined"
+    # === Story-Driven Commerce 扩展（P1）===
+    product_extraction = "product_extraction"
+    story_formula_generator = "story_formula_generator"
+    hook_pattern_writer = "hook_pattern_writer"
+    cta_pattern_writer = "cta_pattern_writer"
+    archetype_voice_rewriter = "archetype_voice_rewriter"
+    compliance_checker = "compliance_checker"
+    product_image_front = "product_image_front"
+    product_image_other = "product_image_other"
+    product_placement_prompt = "product_placement_prompt"
+    product_hero_prompt = "product_hero_prompt"
+    audience_insight = "audience_insight"
+    brand_voice_profile = "brand_voice_profile"
+
+
+# === Story-Driven Commerce Enums (P1) ===
+
+
+class ProjectKind(str, Enum):
+    """项目业务类型：区分普通短剧与剧情带货项目。
+
+    用于 Project.kind 字段，决定项目走"剧情"还是"剧情带货"流程；
+    默认 drama 保持向后兼容，commerce_story 启用商品/合规/受众等扩展能力。
+    """
+
+    drama = "drama"
+    commerce_story = "commerce_story"
+
+
+class ProductCategory(str, Enum):
+    """商品品类：用于在带货项目中标识商品所属行业。
+
+    影响合规规则（如 health 触发免责声明要求）与故事公式选择；
+    覆盖电子/美妆/食品/服饰/家居/健康及其他兜底类。
+    """
+
+    electronics = "electronics"
+    beauty = "beauty"
+    food = "food"
+    apparel = "apparel"
+    home = "home"
+    health = "health"
+    other = "other"
+
+
+class FormulaRegion(str, Enum):
+    """故事公式所属地区取向：决定可选的叙事框架集合。
+
+    cn 对应中国市场常用的"凡人逆袭/打脸"等公式；
+    global 对应西方框架（Hero's Journey 等）。
+    """
+
+    cn = "cn"
+    global_ = "global"
+
+
+class ComplianceRegion(str, Enum):
+    """合规检查目标地区：不同地区有不同的禁用词与必备标识。
+
+    用于剧情带货脚本/视频在发布前的合规校验，按地区切换规则集。
+    """
+
+    cn_mainland = "cn_mainland"
+    hk_tw = "hk_tw"
+    overseas = "overseas"
+
+
+class ComplianceSeverity(str, Enum):
+    """合规问题严重等级：决定是否阻塞发布。
+
+    info 仅提示；warning 需关注；blocker 必须修复才能继续。
+    """
+
+    info = "info"
+    warning = "warning"
+    blocker = "blocker"
+
+
+class StoryVariantStatus(str, Enum):
+    """故事变体（Story Variant）的生命周期状态。
+
+    用于剧情带货中同一商品/受众生成多版剧本/视频时跟踪每个变体的处理阶段。
+    """
+
+    draft = "draft"
+    generating = "generating"
+    ready = "ready"
+    failed = "failed"
+
+
+class ProductRoleInStory(str, Enum):
+    """商品在故事中扮演的叙事角色。
+
+    用于指导脚本生成时如何嵌入商品；非纯广告，而是把商品融入剧情的关键点
+    （拯救者 / 催化剂 / 冲突源 / 彩蛋 / 主角同伴）。
+    """
+
+    savior = "savior"
+    catalyst = "catalyst"
+    conflict_source = "conflict_source"
+    easter_egg = "easter_egg"
+    protagonist_companion = "protagonist_companion"
+
+
+class ProductAppearanceTiming(str, Enum):
+    """商品在剧情时间线上的出现时机。
+
+    用于控制带货节奏：开场 / 中段 / 高潮 / 结尾，影响转化率与观看体验。
+    """
+
+    opening = "opening"
+    middle = "middle"
+    climax = "climax"
+    ending = "ending"
+
+
+class Platform(str, Enum):
+    """目标投放平台：决定时长、画幅与合规策略的差异化。
+
+    覆盖国内主流（抖音/快手/小红书）与海外（YouTube/TikTok）。
+    """
+
+    douyin = "douyin"
+    kuaishou = "kuaishou"
+    xiaohongshu = "xiaohongshu"
+    youtube = "youtube"
+    tiktok = "tiktok"
