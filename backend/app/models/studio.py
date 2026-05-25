@@ -7,6 +7,12 @@ AI Studio/影视制作相关的数据库模型（聚合导出器）。
 并在此处统一 re-export，保持现有导入路径兼容（`app.models.studio.*`）。
 """
 
+from app.models.commerce_assets import (
+    CommerceStoryConfig,
+    Product,
+    ProductImage,
+    ProjectProductLink,
+)
 from app.models.studio_assets import Actor, Character, CharacterPropLink, Costume, Prop, Scene
 from app.models.studio_asset_images import (
     ActorImage,
@@ -109,4 +115,9 @@ __all__ = [
     "TimelineClip",
     "ChapterTimelineState",
     "ChapterTimelineSegment",
+    # Commerce (Story-Driven Commerce P1)
+    "Product",
+    "ProductImage",
+    "ProjectProductLink",
+    "CommerceStoryConfig",
 ]
