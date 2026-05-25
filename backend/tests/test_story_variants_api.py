@@ -1,6 +1,8 @@
-"""``/api/v1/studio/story-variants`` 接口测试（W6-T2）。
+"""``/api/v1/studio/story-variants`` 接口测试（W6-T2 + W14-T3）。
 
-测试范围（≥8 用例）：
+测试范围（≥21 用例）：
+
+W6-T2 基础接口（≥8）：
 
 1. create 写入 ``status=draft`` + ``compliance_score=0`` 的变体。
 2. create 必填校验：缺 project_id / chapter_id / formula_id 应返回 422。
@@ -10,6 +12,22 @@
 6. list 空集合返回 200 + 空数组。
 7. create 422 on bad input（formula_id 为空字符串触发 ``min_length=1``）。
 8. create 服务端忽略客户端伪造的 ``status=ready``（不可绕过 draft 默认）。
+
+W14-T3 A/B 变体管理（≥13）：
+
+9.  clone 生成新 id（与源变体不同）。
+10. clone 默认深拷贝 ``script_breakdown``，与源变体内容相等但对象独立。
+11. clone 仅覆盖 ``new_archetype`` 时只改 archetype。
+12. clone 强制 ``status=draft``。
+13. clone 强制 ``is_champion=False``。
+14. clone 强制 ``compliance_score=0``。
+15. clone 源变体不存在 → 404。
+16. clone 拒绝额外未声明字段（``extra="forbid"`` → 422）。
+17. mark_champion 把目标变体 ``is_champion`` 置为 True。
+18. mark_champion 同章节其它变体的 ``is_champion`` 被清空。
+19. mark_champion 不影响其它章节 / 其它项目下的冠军。
+20. mark_champion 幂等（重复调用得到同一结果）。
+21. mark_champion 目标变体不存在 → 404。
 """
 
 # pylint: disable=invalid-name
@@ -293,6 +311,371 @@ async def test_create_ignores_client_status_override(client: TestClient) -> None
         assert data["status"] == "draft"
         assert data["is_champion"] is False
         assert data["compliance_score"] == 0
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# W14-T3：变体克隆 + 冠军标记
+# ---------------------------------------------------------------------------
+
+
+async def _create_source_variant(client: TestClient, **overrides: object) -> dict[str, object]:
+    """创建一个供后续克隆/冠军测试复用的源变体并返回响应 data。"""
+    payload = _create_payload()
+    payload.update(overrides)
+    res = client.post("/api/v1/studio/story-variants", json=payload)
+    assert res.status_code == 201, res.text
+    return res.json()["data"]
+
+
+@pytest.mark.asyncio
+async def test_clone_variant_creates_new_id(client: TestClient) -> None:
+    """克隆得到的新变体 id 与源变体不同，且为 32 位 hex。"""
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        source = await _create_source_variant(client)
+        res = client.post(f"/api/v1/studio/story-variants/{source['id']}/clone", json={})
+        assert res.status_code == 201, res.text
+        data = res.json()["data"]
+        assert data["id"] != source["id"]
+        assert len(data["id"]) == 32
+        assert data["project_id"] == source["project_id"]
+        assert data["chapter_id"] == source["chapter_id"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clone_variant_preserves_script_breakdown_by_default(client: TestClient) -> None:
+    """未传覆盖字段时，剧本与镜头分解从源变体深拷贝（值等价、对象独立）。"""
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        payload = _create_payload()
+        payload["script_breakdown"] = {"beats": [{"id": "b1", "text": "开场"}]}
+        payload["script_full_text"] = "完整剧本 demo"
+        res = client.post("/api/v1/studio/story-variants", json=payload)
+        source = res.json()["data"]
+
+        clone_res = client.post(
+            f"/api/v1/studio/story-variants/{source['id']}/clone",
+            json={},
+        )
+        assert clone_res.status_code == 201
+        cloned = clone_res.json()["data"]
+        assert cloned["script_full_text"] == source["script_full_text"]
+        assert cloned["script_breakdown"] == source["script_breakdown"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clone_variant_with_archetype_override_updates_only_archetype(
+    client: TestClient,
+) -> None:
+    """仅传 ``new_archetype`` 时只覆盖 archetype，其它继承源变体。"""
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        source = await _create_source_variant(client, archetype="hero")
+        res = client.post(
+            f"/api/v1/studio/story-variants/{source['id']}/clone",
+            json={"new_archetype": "outlaw"},
+        )
+        assert res.status_code == 201
+        data = res.json()["data"]
+        assert data["archetype"] == "outlaw"
+        assert data["formula_id"] == source["formula_id"]
+        assert data["hook_pattern_id"] == source["hook_pattern_id"]
+        assert data["cta_pattern_id"] == source["cta_pattern_id"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clone_variant_resets_status_to_draft(client: TestClient) -> None:
+    """即便源变体 status=ready，克隆出来的新变体也强制 draft。"""
+    from app.models.story_formula import StoryVariant
+    from app.models.types import StoryVariantStatus
+
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        source = await _create_source_variant(client)
+        async with session_local() as session:
+            obj = await session.get(StoryVariant, source["id"])
+            assert obj is not None
+            obj.status = StoryVariantStatus.ready
+            await session.commit()
+
+        res = client.post(f"/api/v1/studio/story-variants/{source['id']}/clone", json={})
+        assert res.status_code == 201
+        assert res.json()["data"]["status"] == "draft"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clone_variant_resets_is_champion_to_false(client: TestClient) -> None:
+    """源变体 is_champion=True 时，克隆出来的新变体仍然是 False。"""
+    from app.models.story_formula import StoryVariant
+
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        source = await _create_source_variant(client)
+        async with session_local() as session:
+            obj = await session.get(StoryVariant, source["id"])
+            assert obj is not None
+            obj.is_champion = True
+            await session.commit()
+
+        res = client.post(f"/api/v1/studio/story-variants/{source['id']}/clone", json={})
+        assert res.status_code == 201
+        assert res.json()["data"]["is_champion"] is False
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clone_variant_resets_compliance_score_to_zero(client: TestClient) -> None:
+    """源变体已有合规评分时，克隆出来的新变体重置为 0。"""
+    from app.models.story_formula import StoryVariant
+
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        source = await _create_source_variant(client)
+        async with session_local() as session:
+            obj = await session.get(StoryVariant, source["id"])
+            assert obj is not None
+            obj.compliance_score = 88
+            await session.commit()
+
+        res = client.post(f"/api/v1/studio/story-variants/{source['id']}/clone", json={})
+        assert res.status_code == 201
+        assert res.json()["data"]["compliance_score"] == 0
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clone_variant_404_on_missing_source(client: TestClient) -> None:
+    """克隆不存在的源变体 → 404 + entity_not_found 文案。"""
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        res = client.post(
+            "/api/v1/studio/story-variants/no_such_variant/clone",
+            json={},
+        )
+        assert res.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clone_variant_validates_extra_fields(client: TestClient) -> None:
+    """``extra="forbid"`` 拒绝未声明字段，例如 ``status`` / ``is_champion``。"""
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        source = await _create_source_variant(client)
+        res = client.post(
+            f"/api/v1/studio/story-variants/{source['id']}/clone",
+            json={"status": "ready"},
+        )
+        assert res.status_code == 422
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_mark_champion_sets_is_champion_true(client: TestClient) -> None:
+    """PATCH /champion 使目标变体 is_champion=True。"""
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        source = await _create_source_variant(client)
+        assert source["is_champion"] is False
+        res = client.patch(f"/api/v1/studio/story-variants/{source['id']}/champion")
+        assert res.status_code == 200, res.text
+        data = res.json()["data"]
+        assert data["id"] == source["id"]
+        assert data["is_champion"] is True
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_mark_champion_unsets_other_champions_in_same_chapter(client: TestClient) -> None:
+    """同 (project, chapter) 下其它变体的 is_champion 在标记新冠军时被清空。"""
+    from app.models.story_formula import StoryVariant
+
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        first = await _create_source_variant(client)
+        second = await _create_source_variant(client)
+        async with session_local() as session:
+            obj = await session.get(StoryVariant, first["id"])
+            assert obj is not None
+            obj.is_champion = True
+            await session.commit()
+
+        res = client.patch(f"/api/v1/studio/story-variants/{second['id']}/champion")
+        assert res.status_code == 200
+        assert res.json()["data"]["is_champion"] is True
+
+        async with session_local() as session:
+            previous = await session.get(StoryVariant, first["id"])
+            assert previous is not None
+            assert previous.is_champion is False
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_mark_champion_does_not_affect_other_chapters_or_projects(
+    client: TestClient,
+) -> None:
+    """其它章节 / 其它项目的冠军不受影响。"""
+    from app.models.story_formula import StoryVariant
+    from app.models.studio import (
+        Chapter,
+        ChapterStatus,
+        Project,
+        ProjectStyle,
+        ProjectVisualStyle,
+    )
+    from app.models.types import ProjectKind, StoryVariantStatus
+
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        async with session_local() as session:
+            session.add(
+                Chapter(
+                    id="sv_chap_other",
+                    project_id="sv_proj",
+                    index=2,
+                    title="第 2 章",
+                    summary="",
+                    raw_text="",
+                    condensed_text="",
+                    storyboard_count=0,
+                    status=ChapterStatus.draft,
+                )
+            )
+            session.add(
+                Project(
+                    id="sv_proj_other",
+                    name="另一个项目",
+                    description="",
+                    style=ProjectStyle.real_people_city,
+                    visual_style=ProjectVisualStyle.live_action,
+                    seed=0,
+                    kind=ProjectKind.commerce_story.value,
+                    unify_style=True,
+                    progress=0,
+                    stats={},
+                )
+            )
+            session.add(
+                Chapter(
+                    id="sv_chap_in_other_proj",
+                    project_id="sv_proj_other",
+                    index=1,
+                    title="他项目第 1 章",
+                    summary="",
+                    raw_text="",
+                    condensed_text="",
+                    storyboard_count=0,
+                    status=ChapterStatus.draft,
+                )
+            )
+            session.add(
+                StoryVariant(
+                    id="champ_other_chapter",
+                    project_id="sv_proj",
+                    chapter_id="sv_chap_other",
+                    formula_id="underdog_triumph",
+                    script_full_text="",
+                    script_breakdown={},
+                    status=StoryVariantStatus.draft.value,
+                    is_champion=True,
+                    compliance_score=0,
+                )
+            )
+            session.add(
+                StoryVariant(
+                    id="champ_other_project",
+                    project_id="sv_proj_other",
+                    chapter_id="sv_chap_in_other_proj",
+                    formula_id="underdog_triumph",
+                    script_full_text="",
+                    script_breakdown={},
+                    status=StoryVariantStatus.draft.value,
+                    is_champion=True,
+                    compliance_score=0,
+                )
+            )
+            await session.commit()
+
+        target = await _create_source_variant(client)
+        res = client.patch(f"/api/v1/studio/story-variants/{target['id']}/champion")
+        assert res.status_code == 200
+
+        async with session_local() as session:
+            other_chapter = await session.get(StoryVariant, "champ_other_chapter")
+            other_project = await session.get(StoryVariant, "champ_other_project")
+            assert other_chapter is not None and other_chapter.is_champion is True
+            assert other_project is not None and other_project.is_champion is True
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_mark_champion_idempotent(client: TestClient) -> None:
+    """同一变体重复 PATCH /champion 仍返回 is_champion=True。"""
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        source = await _create_source_variant(client)
+        first = client.patch(f"/api/v1/studio/story-variants/{source['id']}/champion")
+        second = client.patch(f"/api/v1/studio/story-variants/{source['id']}/champion")
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["data"]["is_champion"] is True
+        assert second.json()["data"]["is_champion"] is True
+        assert first.json()["data"]["id"] == second.json()["data"]["id"] == source["id"]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_mark_champion_404_on_missing_variant(client: TestClient) -> None:
+    """目标变体不存在 → 404。"""
+    session_local, engine = await _build_engine_with_fixtures()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        res = client.patch("/api/v1/studio/story-variants/no_such_variant/champion")
+        assert res.status_code == 404
     finally:
         app.dependency_overrides.pop(get_db, None)
         await engine.dispose()

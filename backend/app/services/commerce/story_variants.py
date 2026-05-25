@@ -1,4 +1,4 @@
-"""StoryVariant 服务（W6-T2，P1 阶段）。
+"""StoryVariant 服务（W6-T2 + W14-T3，P1/A-B 阶段）。
 
 P1 仅承担 **手动创建** 与 **列表读取** 两类入口：
 
@@ -9,22 +9,40 @@ P1 仅承担 **手动创建** 与 **列表读取** 两类入口：
   过滤，可选按 ``chapter_id`` / ``status`` 进一步收敛；按 ``created_at
   desc`` 给前端"最新优先"的列表语义。
 
+W14-T3 在此基础上扩展 A/B 变体管理：
+
+- :meth:`StoryVariantsService.clone_variant` 基于已有变体派生一个新的
+  ``draft`` 变体，可选覆盖 ``archetype`` / ``hook_pattern_id`` /
+  ``cta_pattern_id`` / ``formula_id``，剧本与镜头分解深拷贝，新 ID 由
+  服务端生成。
+- :meth:`StoryVariantsService.mark_champion` 在 ``(project_id,
+  chapter_id)`` 命名空间内单选冠军：标记目标变体的同时清空同章节其它
+  变体的 ``is_champion``，保证同一章节同时只有 1 个冠军。
+
 冠军变体（``is_champion``）与合规评分（``compliance_score``）在 P1 不
 开放写入：
-- ``is_champion`` 由 P2 ``PATCH .../champion`` 单独路径推进。
+- ``is_champion`` 由 W14-T3 ``PATCH .../champion`` 单独路径推进。
 - ``compliance_score`` 由合规检查 worker 写入，避免客户端绕过检查。
 """
 
 from __future__ import annotations
 
+import copy
+from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from fastapi import HTTPException, status as http_status
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.story_formula import StoryVariant
 from app.models.types import StoryVariantStatus
-from app.schemas.commerce.story_variant import StoryVariantCreate
+from app.schemas.commerce.story_variant import (
+    StoryVariantCloneRequest,
+    StoryVariantCreate,
+    StoryVariantRead,
+)
+from app.services.common.errors import entity_not_found
 
 
 class StoryVariantsService:
@@ -95,6 +113,104 @@ class StoryVariantsService:
         stmt = stmt.order_by(StoryVariant.created_at.desc(), StoryVariant.id.asc())
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
+
+    async def _get_or_404(self, variant_id: str) -> StoryVariant:
+        """按 ID 加载变体，缺失时统一抛 404，集中错误文案。"""
+        obj = await self._db.get(StoryVariant, variant_id)
+        if obj is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=entity_not_found("StoryVariant"),
+            )
+        return obj
+
+    async def clone_variant(
+        self,
+        variant_id: str,
+        body: StoryVariantCloneRequest,
+    ) -> dict[str, Any]:
+        """克隆现有变体，可选覆盖 archetype/hook/cta/formula 字段。
+
+        语义约束（W14-T3）：
+
+        * 新 ``id`` 由服务端 ``uuid4().hex`` 生成；客户端无法指定。
+        * ``script_full_text`` 与 ``script_breakdown`` 从源变体 **深拷贝**，
+          避免修改新变体时反向影响源 JSON。
+        * ``status`` 强制重置为 ``draft``，``is_champion`` 重置为 ``False``，
+          ``compliance_score`` 重置为 ``0``——保持"派生即新草稿"的语义，
+          A/B 流程必须重新走完合规检查与冠军评估。
+        * ``project_id`` / ``chapter_id`` / ``generated_by_task_id`` 沿用
+          源变体；A/B 派生默认在同一章节内做对照实验。
+        * 覆盖字段为 ``None`` 时表示"保持源值"，仅显式传入的字段会被改写。
+
+        Args:
+            variant_id: 源变体 ID。
+            body: 克隆请求（可选覆盖项）。
+
+        Returns:
+            序列化后的新变体字典（与 ``StoryVariantRead`` 一致）。
+
+        Raises:
+            HTTPException: 当 ``variant_id`` 不存在时返回 404。
+        """
+        source = await self._get_or_404(variant_id)
+        cloned = StoryVariant(
+            id=uuid4().hex,
+            project_id=source.project_id,
+            chapter_id=source.chapter_id,
+            formula_id=body.new_formula_id or source.formula_id,
+            hook_pattern_id=body.new_hook_pattern_id or source.hook_pattern_id,
+            cta_pattern_id=body.new_cta_pattern_id or source.cta_pattern_id,
+            archetype=body.new_archetype or source.archetype,
+            script_full_text=source.script_full_text,
+            script_breakdown=copy.deepcopy(source.script_breakdown or {}),
+            status=StoryVariantStatus.draft.value,
+            is_champion=False,
+            compliance_score=0,
+            generated_by_task_id=source.generated_by_task_id,
+        )
+        self._db.add(cloned)
+        await self._db.flush()
+        await self._db.refresh(cloned)
+        return StoryVariantRead.model_validate(cloned).model_dump(mode="json")
+
+    async def mark_champion(self, variant_id: str) -> dict[str, Any]:
+        """标记此变体为 champion，并取消同章节其它变体的 champion 标记。
+
+        语义约束（W14-T3）：
+
+        * 唯一性命名空间为 ``(project_id, chapter_id)``：同一章节同时只
+          能有 1 个冠军；其它章节 / 其它项目下的冠军不受影响。
+        * 实现策略采用 **批量 UPDATE + 单点 SET**：先把同章节其它变体
+          ``is_champion`` 清零，再把目标变体标记为 ``True``，避免 N+1
+          查询；两步在同一事务内完成由调用方（``get_db``）保证原子性。
+        * 幂等：对已经是冠军的变体再次调用同样得到 ``is_champion=True``，
+          不会因主键冲突或重复 UPDATE 产生副作用。
+
+        Args:
+            variant_id: 目标变体 ID。
+
+        Returns:
+            序列化后的目标变体字典（``is_champion=True``）。
+
+        Raises:
+            HTTPException: 当 ``variant_id`` 不存在时返回 404。
+        """
+        target = await self._get_or_404(variant_id)
+        await self._db.execute(
+            update(StoryVariant)
+            .where(
+                StoryVariant.project_id == target.project_id,
+                StoryVariant.chapter_id == target.chapter_id,
+                StoryVariant.id != target.id,
+                StoryVariant.is_champion.is_(True),
+            )
+            .values(is_champion=False)
+        )
+        target.is_champion = True
+        await self._db.flush()
+        await self._db.refresh(target)
+        return StoryVariantRead.model_validate(target).model_dump(mode="json")
 
 
 __all__ = [
