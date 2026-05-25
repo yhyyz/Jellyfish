@@ -13,7 +13,13 @@ export type ChapterTimelineSegmentRead = {
     id: string;
     shot_id: string;
     position: number;
+    /**
+     * 已保存入点毫秒；null 表示从 0
+     */
     trim_start_ms?: (number | null);
+    /**
+     * 已保存出点毫秒（exclusive）；null 表示至片尾
+     */
     trim_end_ms?: (number | null);
     clip_status: TimelineClipStatus;
     file_id?: (string | null);
