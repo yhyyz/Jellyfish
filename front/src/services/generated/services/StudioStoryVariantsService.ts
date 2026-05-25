@@ -2,8 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_dict_str__Any__ } from '../models/ApiResponse_dict_str__Any__';
 import type { ApiResponse_list_StoryVariantRead__ } from '../models/ApiResponse_list_StoryVariantRead__';
 import type { ApiResponse_StoryVariantRead_ } from '../models/ApiResponse_StoryVariantRead_';
+import type { StoryVariantCloneRequest } from '../models/StoryVariantCloneRequest';
 import type { StoryVariantCreate } from '../models/StoryVariantCreate';
 import type { StoryVariantStatus } from '../models/StoryVariantStatus';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -63,6 +65,54 @@ export class StudioStoryVariantsService {
             url: '/api/v1/studio/story-variants',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 克隆变体（W14-T3，A/B 派生；新变体强制重置为 draft）
+     * 克隆已有变体，可选覆盖 archetype/hook/cta/formula 等 A/B 维度。
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static cloneVariantApiV1StudioStoryVariantsVariantIdClonePost({
+        variantId,
+        requestBody,
+    }: {
+        variantId: string,
+        requestBody: StoryVariantCloneRequest,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/story-variants/{variant_id}/clone',
+            path: {
+                'variant_id': variantId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 标记冠军变体（W14-T3，同 (project, chapter) 单选）
+     * 将目标变体标记为冠军，并取消同章节其它变体的冠军标记。
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static markVariantChampionApiV1StudioStoryVariantsVariantIdChampionPatch({
+        variantId,
+    }: {
+        variantId: string,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/studio/story-variants/{variant_id}/champion',
+            path: {
+                'variant_id': variantId,
+            },
             errors: {
                 422: `Validation Error`,
             },

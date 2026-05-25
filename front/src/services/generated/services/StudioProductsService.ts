@@ -4,8 +4,10 @@
 /* eslint-disable */
 import type { ApiResponse_dict_str__Any__ } from '../models/ApiResponse_dict_str__Any__';
 import type { ApiResponse_PaginatedData_dict_str__Any___ } from '../models/ApiResponse_PaginatedData_dict_str__Any___';
+import type { ApiResponse_ProductImageGenerationResponse_ } from '../models/ApiResponse_ProductImageGenerationResponse_';
 import type { ProductCreate } from '../models/ProductCreate';
 import type { ProductImageCreate } from '../models/ProductImageCreate';
+import type { ProductImageGenerationRequest } from '../models/ProductImageGenerationRequest';
 import type { ProductUpdate } from '../models/ProductUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -209,6 +211,39 @@ export class StudioProductsService {
                 'product_id': productId,
                 'image_id': imageId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 生成商品参考图（异步任务）
+     * 触发 image_generation 任务，结果完成后由下游 worker 自动写 ProductImage 行。
+     *
+     * 路由职责（保持瘦身）：
+     * 1. 自动校验入参（``ProductImageGenerationRequest`` 已声明 extra="forbid"）；
+     * 2. 调用 :class:`ProductImageGenerationService` 完成模板解析 / 渲染 / 入队；
+     * 3. 把 service 返回的 dict 包成 :class:`ProductImageGenerationResponse`，
+     * 再走统一响应壳 ``ApiResponse``，状态码固定 ``202 Accepted``（语义
+     * 与 W6-T3 ``commerce*`` 任务入口一致：请求已接收、处理尚未完成）。
+     * @returns ApiResponse_ProductImageGenerationResponse_ Successful Response
+     * @throws ApiError
+     */
+    public static generateProductImageApiV1StudioProductsProductIdImagesGeneratePost({
+        productId,
+        requestBody,
+    }: {
+        productId: string,
+        requestBody: ProductImageGenerationRequest,
+    }): CancelablePromise<ApiResponse_ProductImageGenerationResponse_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/products/{product_id}/images/generate',
+            path: {
+                'product_id': productId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

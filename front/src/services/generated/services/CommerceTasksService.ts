@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_TaskEnqueueResponse_ } from '../models/ApiResponse_TaskEnqueueResponse_';
+import type { BatchGenerationRequest } from '../models/BatchGenerationRequest';
 import type { ComplianceCheckRequest } from '../models/ComplianceCheckRequest';
 import type { ProductExtractRequest } from '../models/ProductExtractRequest';
 import type { ScriptGenerateRequest } from '../models/ScriptGenerateRequest';
@@ -66,6 +67,32 @@ export class CommerceTasksService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/commerce/compliance/check',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 批量生成：一次性入队 N 个 story_script_generate 子任务
+     * 批量生成入口：把变体网格作为一次性请求落到 ``slow`` 队列上。
+     *
+     * 路由职责仍保持瘦身：仅做 Pydantic 校验 + 调 service + 包响应壳；
+     * “一行变体 -> 一个子 ``story_script_generate`` 任务”的真正编排逻辑
+     * 在 :func:`app.services.commerce.story_video_batch_generate_worker.run_story_video_batch_generate_task`
+     * 里执行，由 worker 在异步链路上完成。
+     * @returns ApiResponse_TaskEnqueueResponse_ Successful Response
+     * @throws ApiError
+     */
+    public static enqueueStoryBatchApiV1CommerceStoryBatchesPost({
+        requestBody,
+    }: {
+        requestBody: BatchGenerationRequest,
+    }): CancelablePromise<ApiResponse_TaskEnqueueResponse_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/commerce/story-batches',
             body: requestBody,
             mediaType: 'application/json',
             errors: {
