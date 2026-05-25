@@ -1,9 +1,10 @@
-"""``bootstrap_builtin_story_formulas`` 与内置 6 条公式定义的功能性测试（W3-T2）。
+"""``bootstrap_builtin_story_formulas`` 与内置 12 条公式定义的功能性测试。
 
-测试目标：
+W3-T2 引入 6 条 ``region=cn`` 中国爆款公式，W11-T1 在此之上扩展 6 条
+``region=global_`` 国际经典叙事公式。本文件的测试覆盖：
 
-1. 启动时从空库写入全部 6 条公式（``is_system=True``）。
-2. 二次调用幂等（``unchanged == 6``）。
+1. 启动时从空库写入全部 12 条公式（``is_system=True``）。
+2. 二次调用幂等（``unchanged == 12``）。
 3. 各公式 beat 时长之和 ≈ ``typical_duration_sec``（± 10s）。
 4. ``family_conflict`` 必带 ``family_conflict_compliance`` 风险标记。
 5. 全部公式引用有效的 prompt_template_id（与 W3-T1 的注册一致）。
@@ -11,6 +12,10 @@
 7. 全部公式的 typical_shot_count 在合理区间 [2, 10]。
 8. 全部公式的 sample_dialog 长度 ≥ 150 字（足够支撑 LLM 学习）。
 9. 全部公式 risk_flags 仅使用已知词汇表（拒绝拼写漂移）。
+10. 6 条 global 公式 region 字段全部为 ``FormulaRegion.global_``。
+11. 12 条公式 id 全局唯一（避免新增公式与历史 cn 公式 id 冲突）。
+12. 6 条 global 公式 psychology 长度 ≥ 80 字（确保‘为什么有效’说得清）。
+13. 6 条 global 公式 sample_dialog 长度 ≥ 150 字（与 cn 公式同等水位）。
 
 测试 DB 通过 SQLite ``:memory:`` 异步引擎构建，与项目其它 service 测试保持
 一致；并在调用 ``bootstrap_builtin_story_formulas`` 之前预先插入一条 id 为
@@ -41,7 +46,7 @@ import app.models.task_links  # noqa: F401  pylint: disable=unused-import
 
 from app.models.story_formula import StoryFormula
 from app.models.studio_prompts_files_timeline import PromptTemplate
-from app.models.types import PromptCategory
+from app.models.types import FormulaRegion, PromptCategory
 from app.services.commerce.builtin_story_formulas import (
     BUILTIN_FORMULA_DEFINITIONS,
     BUILTIN_FORMULA_PROMPT_TEMPLATE_ID,
@@ -50,7 +55,7 @@ from app.services.commerce.builtin_story_formulas import (
 )
 
 
-EXPECTED_FORMULA_IDS: frozenset[str] = frozenset(
+EXPECTED_CN_FORMULA_IDS: frozenset[str] = frozenset(
     {
         "underdog_triumph",
         "contrast_surprise",
@@ -59,6 +64,21 @@ EXPECTED_FORMULA_IDS: frozenset[str] = frozenset(
         "mystery_twist",
         "time_travel",
     }
+)
+
+EXPECTED_GLOBAL_FORMULA_IDS: frozenset[str] = frozenset(
+    {
+        "heros_journey",
+        "pixar_story_spine",
+        "three_act",
+        "scqa",
+        "storybrand_sb7",
+        "pas_bab",
+    }
+)
+
+EXPECTED_FORMULA_IDS: frozenset[str] = (
+    EXPECTED_CN_FORMULA_IDS | EXPECTED_GLOBAL_FORMULA_IDS
 )
 
 
@@ -92,16 +112,16 @@ async def _build_session() -> tuple[AsyncSession, object]:
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_inserts_all_6_formulas() -> None:
-    """新库 -> 6 条 ``is_system=True`` 行写入；ID 集合等于约定集合。"""
+async def test_bootstrap_inserts_all_12_formulas() -> None:
+    """新库 -> 12 条 ``is_system=True`` 行写入；ID 集合 = cn(6) ∪ global(6)。"""
     db, engine = await _build_session()
     async with db:
         stats = await bootstrap_builtin_story_formulas(db)
 
-        assert stats == {"inserted": 6, "updated": 0, "unchanged": 0}
+        assert stats == {"inserted": 12, "updated": 0, "unchanged": 0}
 
         rows = (await db.execute(select(StoryFormula))).scalars().all()
-        assert len(rows) == 6
+        assert len(rows) == 12
         assert {row.id for row in rows} == EXPECTED_FORMULA_IDS
         for row in rows:
             assert row.is_system is True
@@ -116,21 +136,37 @@ async def test_bootstrap_idempotent() -> None:
         first = await bootstrap_builtin_story_formulas(db)
         second = await bootstrap_builtin_story_formulas(db)
 
-        assert first == {"inserted": 6, "updated": 0, "unchanged": 0}
-        assert second == {"inserted": 0, "updated": 0, "unchanged": 6}
+        assert first == {"inserted": 12, "updated": 0, "unchanged": 0}
+        assert second == {"inserted": 0, "updated": 0, "unchanged": 12}
 
         rows = (await db.execute(select(StoryFormula))).scalars().all()
-        assert len(rows) == 6
+        assert len(rows) == 12
     await engine.dispose()
 
 
 def test_each_formula_total_beat_duration_matches_typical_duration() -> None:
-    """sum(beat.duration_sec) ≈ typical_duration_sec（± 10s）。"""
+    """sum(beat.duration_sec) ≈ typical_duration_sec（± 10s），覆盖 12 条。"""
     for definition in BUILTIN_FORMULA_DEFINITIONS:
         total = sum(beat.duration_sec for beat in definition.beats)
         delta = abs(total - definition.typical_duration_sec)
         assert delta <= 10, (
             f"formula '{definition.id}' beat sum {total}s vs "
+            f"typical {definition.typical_duration_sec}s exceeds ±10s"
+        )
+
+
+def test_each_global_formula_total_beat_duration_matches_typical_duration() -> None:
+    """单独再校一次 6 条 global 公式 beat 时长，确保新增数据手填正确。"""
+    global_defs = [
+        d for d in BUILTIN_FORMULA_DEFINITIONS if d.region == FormulaRegion.global_
+    ]
+    assert len(global_defs) == 6
+
+    for definition in global_defs:
+        total = sum(beat.duration_sec for beat in definition.beats)
+        delta = abs(total - definition.typical_duration_sec)
+        assert delta <= 10, (
+            f"global formula '{definition.id}' beat sum {total}s vs "
             f"typical {definition.typical_duration_sec}s exceeds ±10s"
         )
 
@@ -142,7 +178,7 @@ def test_family_conflict_has_mandatory_risk_flag() -> None:
 
 
 def test_all_formulas_reference_valid_prompt_template_id() -> None:
-    """6 条公式全部引用同一个内置模板 ID（与 W3-T1 注册保持一致）。"""
+    """12 条公式全部引用同一个内置模板 ID（与 W3-T1 注册保持一致）。"""
     for definition in BUILTIN_FORMULA_DEFINITIONS:
         assert (
             definition.prompt_template_id == BUILTIN_FORMULA_PROMPT_TEMPLATE_ID
@@ -184,3 +220,43 @@ def test_risk_flags_only_use_known_vocabulary() -> None:
             f"formula '{definition.id}' uses unknown risk flags {sorted(unknown)}; "
             f"vocabulary: {sorted(KNOWN_RISK_FLAGS)}"
         )
+
+
+def test_global_formulas_use_global_region() -> None:
+    """6 条新公式 region 字段必须为 ``FormulaRegion.global_``。"""
+    for definition in BUILTIN_FORMULA_DEFINITIONS:
+        if definition.id in EXPECTED_GLOBAL_FORMULA_IDS:
+            assert definition.region == FormulaRegion.global_, (
+                f"formula '{definition.id}' should be region=global_ "
+                f"but got {definition.region!r}"
+            )
+
+
+def test_all_12_formulas_unique_ids() -> None:
+    """12 条公式 id 全局唯一，防止新增 global 公式与 cn 公式撞键。"""
+    ids = [d.id for d in BUILTIN_FORMULA_DEFINITIONS]
+    assert len(ids) == 12
+    assert len(set(ids)) == 12, (
+        f"duplicate formula ids detected: "
+        f"{sorted({i for i in ids if ids.count(i) > 1})}"
+    )
+
+
+def test_all_global_formulas_have_substantial_psychology() -> None:
+    """6 条 global 公式 psychology 至少 80 字，确保‘为什么有效’说得清。"""
+    for definition in BUILTIN_FORMULA_DEFINITIONS:
+        if definition.id in EXPECTED_GLOBAL_FORMULA_IDS:
+            assert len(definition.psychology) >= 80, (
+                f"global formula '{definition.id}' psychology only "
+                f"{len(definition.psychology)} chars (need >= 80)"
+            )
+
+
+def test_all_global_formulas_have_substantial_sample_dialog() -> None:
+    """6 条 global 公式 sample_dialog 至少 150 字（与 cn 公式同等水位）。"""
+    for definition in BUILTIN_FORMULA_DEFINITIONS:
+        if definition.id in EXPECTED_GLOBAL_FORMULA_IDS:
+            assert len(definition.sample_dialog) >= 150, (
+                f"global formula '{definition.id}' sample_dialog only "
+                f"{len(definition.sample_dialog)} chars (need >= 150)"
+            )

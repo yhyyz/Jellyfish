@@ -1,11 +1,17 @@
-"""系统级剧情公式（StoryFormula）种子数据加载器（W3-T2，P1 阶段）。
+"""系统级剧情公式（StoryFormula）种子数据加载器（W3-T2 启 P1，W11-T1 起扩 P2）。
 
 本模块提供两个东西：
 
-1. ``BUILTIN_FORMULA_DEFINITIONS``：一个类型化、可在测试与 UI 复用的 6 条
-   中国市场爆款公式注册表（``underdog_triumph`` / ``contrast_surprise`` /
-   ``workplace_hero`` / ``family_conflict`` / ``mystery_twist`` /
-   ``time_travel``）。
+1. ``BUILTIN_FORMULA_DEFINITIONS``：一个类型化、可在测试与 UI 复用的 12 条
+   公式注册表，由两组组成：
+
+   - **6 条中国市场爆款公式**（``region=cn``）：``underdog_triumph`` /
+     ``contrast_surprise`` / ``workplace_hero`` / ``family_conflict`` /
+     ``mystery_twist`` / ``time_travel``。
+   - **6 条国际经典叙事公式**（``region=global_``）：``heros_journey`` /
+     ``pixar_story_spine`` / ``three_act`` / ``scqa`` / ``storybrand_sb7`` /
+     ``pas_bab``。
+
 2. ``bootstrap_builtin_story_formulas(db)``：启动时调用的幂等加载函数，
    把上述定义同步到 ``story_formulas`` 表（INSERT-OR-UPDATE，
    ``is_system=True``）。
@@ -677,13 +683,680 @@ _TIME_TRAVEL = FormulaDefinition(
 )
 
 
+# ---------------------------------------------------------------------------
+# 6 条国际经典叙事公式（global，W11-T1 P2 阶段）
+# ---------------------------------------------------------------------------
+# 与 cn 公式的关键差异：
+# - region 全部为 ``FormulaRegion.global_``，category 走 ``global_*`` 子族；
+# - sample_dialog 采用‘英文骨架 + 中文落点’的混排，便于跨语言品牌复用；
+# - 风险标记仅出现在‘易夸大效果’的几条上（hero / scqa / pas_bab），
+#   家庭/阶层/性别等地区性合规风险默认不附加（由全球分发渠道自行兜底）。
+# ---------------------------------------------------------------------------
+
+
+_HEROS_JOURNEY_DIALOG = (
+    "【Ordinary World·15s · 特写】\n"
+    "镜头：清晨写字楼里，{character} 重复着每天 9 点打卡的动作，"
+    "桌上的咖啡早已凉透。\n"
+    "旁白（英文字幕）：Every hero begins in a world that no longer fits.\n"
+    "独白：“This is fine. 这样过下去也行……吧？”\n\n"
+    "【Call to Adventure·15s · 中景】\n"
+    "镜头：邮箱弹出一封邀请，落款是 {hero_archetype}。\n"
+    "台词（导师）：“你确定要在这里耗一辈子？{product_name} 不是答案，"
+    "是入口。”\n"
+    "字幕：The call rarely comes when convenient.\n\n"
+    "【Crossing the Threshold·20s · 手—物—脸】\n"
+    "镜头：{character} 第一次打开 {product_name}，光从屏幕里涌出来。\n"
+    "独白：“OK, let's see what's on the other side.”\n"
+    "字幕：每一次跨越门槛，都是与旧自我的告别。\n\n"
+    "【Trials & Tests·25s · 中景跟随】\n"
+    "镜头：连续切换三个失败场景，{character} 在 {product_name} 的引导"
+    "下迭代。\n"
+    "台词：“{competitor_alt} 帮不了我，但这一次我不想再放弃。”\n"
+    "字幕：Failure is the tuition fee for transformation.\n\n"
+    "【Ordeal·25s · 特写推近】\n"
+    "镜头：关键时刻，{character} 面对 {audience_pain} 最严酷的版本。\n"
+    "独白：“If I quit now, I go back to who I was.”\n"
+    "字幕：The ordeal is where the real hero is born.\n\n"
+    "【Reward·25s · 远景拉变焦】\n"
+    "镜头：{character} 完成挑战，{product_name} 在场景中被举起，"
+    "像是‘信物’。\n"
+    "台词：“It wasn't just a tool. It was the bridge.”\n"
+    "字幕：Reward 不是终点，而是让你能照亮别人的火把。\n\n"
+    "【Return Transformed·25s · 大远景拉远】\n"
+    "镜头：{character} 回到熟悉的城市，但走路的姿态已经不同。\n"
+    "旁白：The hero returns, not the same.\n"
+    "字幕：你的故事，从打开 {product_name} 那一刻开始。\n"
+    "（屏幕角标持续显示“故事演绎，效果因人而异”）"
+)
+
+_HEROS_JOURNEY = FormulaDefinition(
+    id="heros_journey",
+    name="英雄之旅",
+    region=FormulaRegion.global_,
+    category="global_classic",
+    beats=[
+        Beat(
+            id="ordinary_world",
+            duration_sec=15,
+            function="建立主角的‘旧世界’与缺憾感，让观众代入 baseline",
+            shot_type="close_up",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="call_to_adventure",
+            duration_sec=15,
+            function="导师/事件/产品作为召唤者出现，制造离开舒适区的钩子",
+            shot_type="medium_shot",
+            recommended_camera_movement="dolly_in",
+        ),
+        Beat(
+            id="crossing_threshold",
+            duration_sec=20,
+            function="主角接受召唤、首次使用产品，完成与旧自我的告别",
+            shot_type="hand_object_face",
+            recommended_camera_movement="dolly_in",
+        ),
+        Beat(
+            id="trials_and_tests",
+            duration_sec=25,
+            function="一系列试炼/小挫折，强化产品作为‘旅伴’的角色",
+            shot_type="medium_shot",
+            recommended_camera_movement="track",
+        ),
+        Beat(
+            id="ordeal_climax",
+            duration_sec=25,
+            function="终极考验：把痛点放大到极致，逼出主角真正的转变",
+            shot_type="close_up",
+            recommended_camera_movement="zoom_in",
+        ),
+        Beat(
+            id="reward_seized",
+            duration_sec=25,
+            function="主角胜出、收获关键奖赏，产品被定位为‘神器’",
+            shot_type="wide_shot",
+            recommended_camera_movement="zoom_out",
+        ),
+        Beat(
+            id="return_transformed",
+            duration_sec=25,
+            function="带着新状态归来，把奖赏分享给所属社群，完成情感闭环",
+            shot_type="wide_shot",
+            recommended_camera_movement="dolly_out",
+        ),
+    ],
+    total_shots_range=(5, 9),
+    duration_sec_range=(120, 180),
+    risk_flags=["unverifiable_outcome"],
+    sample_dialog=_HEROS_JOURNEY_DIALOG,
+    typical_duration_sec=150,
+    typical_shot_count=7,
+    psychology=(
+        "神话单元（monomyth）是 Joseph Campbell 在《千面英雄》中归纳出的"
+        "跨文化叙事原型，几乎所有打动观众的故事——从《星球大战》到苹果发布会"
+        "——都可以套进‘离开 → 启程 → 试炼 → 蜕变 → 归来’这条曲线。它有效"
+        "的根源在于：观众的潜意识把主角的旅程映射到自己的成长史，产品被定位"
+        "成英雄路上的‘神器’，既不喧宾夺主又承担推动剧情的关键作用。它特别"
+        "适合品牌起源故事、创业历程、产品发布会等需要‘仪式感’的内容，"
+        "但代价是节奏偏长，必须配合至少 120 秒时长，否则压缩后会失去‘缓慢"
+        "累积 → 爆发’的情绪张力。"
+    ),
+    use_cases=[
+        "产品发布会与品牌起源故事（赋予仪式感）",
+        "创业者历程纪录片 / 创始人专访短片",
+        "励志成长类（学习、健身、技能、职业转型）",
+        "公益倡议（呼吁观众加入‘旅程’）",
+        "节庆主题大片（年终回顾、品牌周年）",
+    ],
+    avoid_cases=[
+        "短促时长（<60 秒，无法承载完整曲线）",
+        "纯功能性产品广告（卖点直给即可，不需要史诗感）",
+        "极简主义品牌（与‘宏大叙事’调性冲突）",
+        "高频复购的快消品（每条都用英雄之旅会迅速疲劳）",
+    ],
+    sort_order=70,
+)
+
+
+_PIXAR_STORY_SPINE_DIALOG = (
+    "【Once Upon a Time·10s · 远景】\n"
+    "镜头：温暖的家，{character} 与家人围坐，{product_name} 还未出现。\n"
+    "旁白：Once upon a time, there was a family that had everything except"
+    " {audience_pain} 的解法。\n\n"
+    "【Every Day·10s · 中景】\n"
+    "镜头：每天清晨，相同的早餐桌、相同的争执、相同的妥协。\n"
+    "旁白：Every day, they made do.\n"
+    "字幕：日子像复印件一样过着。\n\n"
+    "【One Day·15s · 特写推近】\n"
+    "镜头：邮箱里出现 {product_name} 的样品盒，盒子上的彩绘像童话扉页。\n"
+    "台词：{character}：“What if today is different?”\n"
+    "字幕：One day, something arrived that didn't belong to yesterday.\n\n"
+    "【Because of That·15s · 手—物—脸】\n"
+    "镜头：因为 {product_name} 出现在桌上，孩子第一次主动帮忙；"
+    "妈妈第一次有时间坐下来喝完一杯茶。\n"
+    "旁白：Because of that, small things became gentle things.\n\n"
+    "【Until Finally·15s · 中景】\n"
+    "镜头：饭桌从沉默变成笑声，{character} 看见家人拿起 {product_name}"
+    " 不再迟疑。\n"
+    "台词：家人：“I didn't know it could feel like this.”\n"
+    "字幕：Until finally, the room sounded like a home again.\n\n"
+    "【And Ever Since·10s · 远景拉远】\n"
+    "镜头：阳光透过窗帘，{product_name} 自然地放在桌角，"
+    "像家庭的新成员。\n"
+    "旁白：And ever since, the ordinary became something to look forward to.\n"
+    "字幕：温柔的故事，不需要英雄。"
+)
+
+_PIXAR_STORY_SPINE = FormulaDefinition(
+    id="pixar_story_spine",
+    name="Pixar 故事脊柱",
+    region=FormulaRegion.global_,
+    category="global_emotional",
+    beats=[
+        Beat(
+            id="once_upon_a_time",
+            duration_sec=10,
+            function="建立主角与所处世界的初始平衡，给观众安全感",
+            shot_type="wide_shot",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="every_day",
+            duration_sec=10,
+            function="呈现日常重复感，铺设‘看似正常其实有缺’的心理底色",
+            shot_type="medium_shot",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="one_day",
+            duration_sec=15,
+            function="一个轻微扰动开启故事，产品作为‘扰动者’登场",
+            shot_type="close_up",
+            recommended_camera_movement="dolly_in",
+        ),
+        Beat(
+            id="because_of_that",
+            duration_sec=15,
+            function="连锁反应：每个变化都因前一变化而生，体现因果",
+            shot_type="hand_object_face",
+            recommended_camera_movement="track",
+        ),
+        Beat(
+            id="until_finally",
+            duration_sec=15,
+            function="情感高点抵达，主角与世界关系完成温柔的重塑",
+            shot_type="medium_shot",
+            recommended_camera_movement="zoom_in",
+        ),
+        Beat(
+            id="and_ever_since",
+            duration_sec=10,
+            function="新平衡定格，产品自然内化为日常的一部分",
+            shot_type="wide_shot",
+            recommended_camera_movement="dolly_out",
+        ),
+    ],
+    total_shots_range=(4, 6),
+    duration_sec_range=(60, 90),
+    risk_flags=[],
+    sample_dialog=_PIXAR_STORY_SPINE_DIALOG,
+    typical_duration_sec=75,
+    typical_shot_count=6,
+    psychology=(
+        "Pixar 在内部培训中提炼出的 6 段‘故事脊柱’是连孩子也能听懂的最小"
+        "叙事骨架。它的力量来自‘every day → one day → because of that →"
+        " until finally’这条情绪斜坡：先把观众放回熟悉感中，再用一个轻微的"
+        "扰动开启故事，最后通过连锁反应抵达情感高点。这种结构非常适合家庭、"
+        "宠物、教育、母婴类温情品牌，能在 60–90 秒内完成完整的情绪曲线，"
+        "而不会让观众感觉‘被销售’，因此特别适合品牌的长期内容（content"
+        " engine）而非促销广告。"
+    ),
+    use_cases=[
+        "家庭情感类商品（厨电、家居、清洁、家电）",
+        "萌宠商品（宠粮、玩具、宠物医疗周边）",
+        "教育产品（亲子学习、绘本、玩具）",
+        "文创周边与节庆送礼场景",
+        "母婴 / 育儿用品的温情向内容",
+    ],
+    avoid_cases=[
+        "严肃 / 技术类商品（B2B、工业品、企业服务）",
+        "老年人或权威感主导的受众（与童话感不符）",
+        "需要严肃决策的高客单（金融、医疗、企业服务）",
+        "黑色幽默 / 反讽类品牌（与温情叙事冲突）",
+    ],
+    sort_order=80,
+)
+
+
+_THREE_ACT_DIALOG = (
+    "【Setup·Act 1 World·15s · 远景】\n"
+    "镜头：城市清晨的天际线，镜头从城市拉到一个普通公寓，{character} 起床、"
+    "刷牙、出门。\n"
+    "旁白：In a world that asks too much and rewards too little……\n\n"
+    "【Inciting Incident·15s · 中景】\n"
+    "镜头：{character} 在地铁里看到一则关于 {product_name} 的故事，"
+    "第一次被打动。\n"
+    "台词（旁观者）：“Looks like exactly the thing she needs.”\n"
+    "字幕：The story changes when the question is finally asked.\n\n"
+    "【Rising Action·Act 2·25s · 中景跟随】\n"
+    "镜头：{character} 把 {product_name} 带回生活，连续三次试用、"
+    "三次微调，每一次都更接近答案。\n"
+    "独白：“Why didn't I find this sooner?”\n"
+    "字幕：成长不是一夜之间，而是一个个小决定的叠加。\n\n"
+    "【Midpoint Twist·15s · 特写推近】\n"
+    "镜头：第一次真正的困难出现，{audience_pain} 比预期更顽固。\n"
+    "台词：“Maybe I was wrong about this.”\n"
+    "字幕：A story without a midpoint twist is just a list of events.\n\n"
+    "【Dark Moment·15s · 特写】\n"
+    "镜头：{character} 独自坐在窗边，桌上的 {product_name} 静静躺着。\n"
+    "独白：“If even this can't help me, what can?”\n"
+    "字幕：英雄都会有想放弃的瞬间。\n\n"
+    "【Climax·Act 3·20s · 远景拉变焦】\n"
+    "镜头：{character} 重新拿起 {product_name}，做出关键选择；"
+    "周围人见证她的改变。\n"
+    "台词：“I'm done waiting for permission.”\n"
+    "字幕：The third act is not about luck. It's about choosing to stand up"
+    " again.\n\n"
+    "【New Equilibrium·15s · 大远景】\n"
+    "镜头：城市灯光在背景亮起，{character} 走出门，{product_name}"
+    " 已成为日常。\n"
+    "旁白：The world looks the same. She doesn't.\n"
+    "字幕：每一个三幕故事，都是关于‘回到起点却不再是起点’。"
+)
+
+_THREE_ACT = FormulaDefinition(
+    id="three_act",
+    name="三幕结构",
+    region=FormulaRegion.global_,
+    category="global_classic",
+    beats=[
+        Beat(
+            id="setup_world",
+            duration_sec=15,
+            function="第一幕：建立世界、人物、与‘缺憾感’，给观众坐标系",
+            shot_type="wide_shot",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="inciting_incident",
+            duration_sec=15,
+            function="触发事件，把人物推出舒适区，开启第二幕",
+            shot_type="medium_shot",
+            recommended_camera_movement="dolly_in",
+        ),
+        Beat(
+            id="rising_action",
+            duration_sec=25,
+            function="第二幕上升：连续小胜与小败，刻画成长曲线",
+            shot_type="medium_shot",
+            recommended_camera_movement="track",
+        ),
+        Beat(
+            id="midpoint_twist",
+            duration_sec=15,
+            function="第二幕中点：方向反转，让目标变得更难",
+            shot_type="close_up",
+            recommended_camera_movement="zoom_in",
+        ),
+        Beat(
+            id="dark_moment",
+            duration_sec=15,
+            function="第二幕低点：‘all is lost’时刻，逼出主角真正的决断",
+            shot_type="close_up",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="climax",
+            duration_sec=20,
+            function="第三幕高潮：兑现承诺，让人物完成内在与外在的双重抵达",
+            shot_type="wide_shot",
+            recommended_camera_movement="zoom_out",
+        ),
+        Beat(
+            id="new_equilibrium",
+            duration_sec=15,
+            function="收束新常态：世界看似相同，但主角已不同",
+            shot_type="wide_shot",
+            recommended_camera_movement="dolly_out",
+        ),
+    ],
+    total_shots_range=(6, 9),
+    duration_sec_range=(90, 180),
+    risk_flags=[],
+    sample_dialog=_THREE_ACT_DIALOG,
+    typical_duration_sec=120,
+    typical_shot_count=7,
+    psychology=(
+        "三幕结构是西方戏剧自亚里士多德以来最稳定的叙事容器：第一幕铺设"
+        "世界与人物，第二幕通过冲突逼迫人物改变，第三幕兑现承诺。它在 90"
+        "–180 秒的中长视频里是最‘安全’的选择，因为观众的潜意识对这条曲"
+        "线已经有完整预期，创作者只需把品牌放在合适位置（通常作为催化剂或"
+        "试炼）。它的代价是必须在 setup 与 rising action 上花足够时间，"
+        "过短的视频反而会显得刻意，因此不适合需要前 3 秒就爆点的强 CTR"
+        "信息流场景。"
+    ),
+    use_cases=[
+        "通用品牌故事（多受众、多场景）",
+        "多人物剧情（人物间存在张力）",
+        "品牌纪录片 / 微电影",
+        "产品发布前的预热‘旅程’",
+        "跨季营销主题大片",
+    ],
+    avoid_cases=[
+        "极短时长（<45 秒，无法完整呈现三幕）",
+        "追求‘信息密度大于情绪曲线’的硬广",
+        "仅有单一卖点、不存在转折的简单产品",
+        "信息流前 3 秒必须爆点的强 CTR 场景",
+    ],
+    sort_order=90,
+)
+
+
+_SCQA_DIALOG = (
+    "【Situation·10s · 远景】\n"
+    "镜头：会议室全景，{character} 是 CEO，PPT 显示业务过去三年的稳定曲线。\n"
+    "旁白：For three years, {audience_pain} was something we managed,"
+    " not solved.\n"
+    "字幕：Situation：行业里所有人都这么做。\n\n"
+    "【Complication·10s · 中景推近】\n"
+    "镜头：曲线突然下滑，会议室的笑容变成沉默。\n"
+    "台词：高管：“Same playbook, different outcomes. That's the new"
+    " normal.”\n"
+    "字幕：Complication：旧地图找不到新大陆。\n\n"
+    "【Question·10s · 特写】\n"
+    "镜头：{character} 站在白板前写下三个字：Then what?\n"
+    "独白：“If everything that worked before stops working, where do we"
+    " look?”\n"
+    "字幕：Question：决策者真正需要回答的，从来不是‘怎么做’，而是‘做什么’。\n\n"
+    "【Answer·15s · 手—物—脸】\n"
+    "镜头：{character} 把 {product_name} 接入企业系统，仪表盘指标在 24 "
+    "小时内重新跑动。\n"
+    "台词：“{product_name} doesn't replace the team. It gives the team"
+    " back its time.”\n"
+    "字幕：Answer：不是更多努力，而是更聪明的杠杆。\n"
+    "（屏幕角标“案例演绎，实施效果与企业上下文相关”）"
+)
+
+_SCQA = FormulaDefinition(
+    id="scqa",
+    name="SCQA 商务叙事",
+    region=FormulaRegion.global_,
+    category="global_business",
+    beats=[
+        Beat(
+            id="situation",
+            duration_sec=10,
+            function="陈述受众已知现状，让对方点头，建立认知共识",
+            shot_type="wide_shot",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="complication",
+            duration_sec=10,
+            function="抛出复杂化变量，让对方紧张：旧路径开始失效",
+            shot_type="medium_shot",
+            recommended_camera_movement="dolly_in",
+        ),
+        Beat(
+            id="question",
+            duration_sec=10,
+            function="把张力凝结成一个决策问题，让对方主动思考",
+            shot_type="close_up",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="answer",
+            duration_sec=15,
+            function="给出基于产品的清晰答案，强调‘杠杆’而非‘加班’",
+            shot_type="hand_object_face",
+            recommended_camera_movement="dolly_in",
+        ),
+    ],
+    total_shots_range=(3, 5),
+    duration_sec_range=(30, 60),
+    risk_flags=["unverifiable_outcome"],
+    sample_dialog=_SCQA_DIALOG,
+    typical_duration_sec=45,
+    typical_shot_count=4,
+    psychology=(
+        "SCQA 由 McKinsey 顾问提出，是 Barbara Minto‘金字塔写作法’的口语化"
+        "版本。它把任何复杂论述压缩为四步：现状（让对方点头）、复杂化（让"
+        "对方紧张）、提问（让对方主动思考）、回答（提供你早就准备好的答案"
+        "）。这条公式不是讲故事，而是模拟决策路径，因此特别适合 B2B、SaaS、"
+        "企业服务等需要‘先博取信任再做承诺’的高客单价品类；情感型快消品"
+        "请勿使用，会显得冷漠且与品类调性冲突。"
+    ),
+    use_cases=[
+        "B2B 产品 / SaaS 上线介绍",
+        "企业服务（咨询、IT、安全、合规）",
+        "高端消费品（说服决策者，不只是激发情绪）",
+        "行业大会演讲短片",
+        "投资者关系沟通片段",
+    ],
+    avoid_cases=[
+        "情感型快消品（情绪 > 逻辑的品类）",
+        "短直效响应广告（<30s 不够铺设‘情境’）",
+        "受众已经熟知行业现状的内行用户（铺垫显冗长）",
+        "需要突出‘人’而非‘问题’的品牌故事",
+    ],
+    sort_order=100,
+)
+
+
+_STORYBRAND_SB7_DIALOG = (
+    "【Character·8s · 特写】\n"
+    "镜头：{character} 是一名独立咨询师，桌上堆满她为客户解决问题的笔记。\n"
+    "旁白：Every story has a hero. Today's hero is you.\n"
+    "字幕：你，就是这个故事的主角。\n\n"
+    "【Problem·10s · 中景推近】\n"
+    "镜头：客户在电话那头发火；{character} 关上电脑，疲惫地揉着眉心。\n"
+    "台词（客户）：“I just need it to work. Not another tool, not another"
+    " framework.”\n"
+    "字幕：External：工具太多，时间太少。Internal：永远像在追赶。\n\n"
+    "【Guide·12s · 中景】\n"
+    "镜头：{product_name} 出现在画面里，不是在炫技，而是在‘倾听’。\n"
+    "旁白：A good guide doesn't put themselves in the spotlight."
+    " They put the hero there.\n"
+    "字幕：{product_name} 不是你的解决方案，而是你的副驾驶。\n\n"
+    "【Plan·10s · 手—物—脸】\n"
+    "镜头：三步骤清单出现：1) Connect 2) Configure 3) Confirm。\n"
+    "台词：“Here is the plan. Three steps. One outcome.”\n"
+    "字幕：清晰的计划比好听的承诺更可信。\n\n"
+    "【Call to Action·10s · 中景推近】\n"
+    "镜头：{character} 点击‘开始’，画面切到一个直接的按钮。\n"
+    "字幕（直接 CTA）：Start your first project with {product_name} today.\n\n"
+    "【Success·15s · 远景拉变焦】\n"
+    "镜头：{character} 在咖啡馆悠然地与客户开会，工作没有压垮生活。\n"
+    "旁白：This is what success looks like when the hero has the right"
+    " guide.\n"
+    "字幕：你想要的人生节奏，{product_name} 帮你扛住。\n\n"
+    "【Failure Avoidance·10s · 特写】\n"
+    "镜头：闪回到上一段‘无 guide’的疲惫日常，但语气是‘你不必再回到那里’。\n"
+    "旁白：Without the right guide, every day looks like the last.\n"
+    "字幕：故事的反面不是失败，是停滞。"
+)
+
+_STORYBRAND_SB7 = FormulaDefinition(
+    id="storybrand_sb7",
+    name="StoryBrand SB7 框架",
+    region=FormulaRegion.global_,
+    category="global_business",
+    beats=[
+        Beat(
+            id="character_introduced",
+            duration_sec=8,
+            function="把客户而不是品牌设定为主角，触发自我聚焦",
+            shot_type="close_up",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="problem_revealed",
+            duration_sec=10,
+            function="同时揭示外在问题与内在感受，建立深层共情",
+            shot_type="medium_shot",
+            recommended_camera_movement="dolly_in",
+        ),
+        Beat(
+            id="guide_appears",
+            duration_sec=12,
+            function="品牌作为‘向导’出现，强调倾听与同理心",
+            shot_type="medium_shot",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="plan_unveiled",
+            duration_sec=10,
+            function="三步骤的清晰计划，把抽象解决方案落到可执行步骤",
+            shot_type="hand_object_face",
+            recommended_camera_movement="track",
+        ),
+        Beat(
+            id="call_to_action",
+            duration_sec=10,
+            function="给出直接、不含糊的下一步动作（CTA）",
+            shot_type="medium_shot",
+            recommended_camera_movement="dolly_in",
+        ),
+        Beat(
+            id="success_vision",
+            duration_sec=15,
+            function="描绘‘成功后的生活’具象画面，强化目标感",
+            shot_type="wide_shot",
+            recommended_camera_movement="zoom_out",
+        ),
+        Beat(
+            id="failure_avoided",
+            duration_sec=10,
+            function="温和提示‘不行动的代价’，触发损失厌恶但不制造焦虑",
+            shot_type="close_up",
+            recommended_camera_movement="static",
+        ),
+    ],
+    total_shots_range=(5, 8),
+    duration_sec_range=(60, 90),
+    risk_flags=[],
+    sample_dialog=_STORYBRAND_SB7_DIALOG,
+    typical_duration_sec=75,
+    typical_shot_count=7,
+    psychology=(
+        "StoryBrand 的核心反转是‘客户才是英雄，品牌只是向导’。Donald"
+        " Miller 把神话原型简化为 7 个清单要素：人物—问题—向导—计划—呼吁—"
+        "成功—失败，方便商业内容快速复用。它的心理学根据是‘自我聚焦偏差’"
+        "：人只对‘和我有关的故事’投入注意力；把品牌放在‘向导’位置而不是"
+        "‘主角’位置，会显著提高观众的代入感与转化率。它最适合服务型、咨询"
+        "型、解决方案型品牌；缺点是过于线性，不适合多人物、复杂情节剧。"
+    ),
+    use_cases=[
+        "服务型品牌（咨询、教练、培训、医疗服务）",
+        "解决方案导向品牌（SaaS、工具类应用）",
+        "个体创业者 / 独立顾问 / 教练等‘以人立品’角色",
+        "数字产品落地页 / Onboarding 短片",
+        "课程销售短视频",
+    ],
+    avoid_cases=[
+        "多角色、复杂剧情的剧情向内容",
+        "强调‘品牌即英雄’的奢侈品 / 文化品牌",
+        "不需要明确 CTA 的形象广告",
+        "纪录片 / 散文化叙事内容",
+    ],
+    sort_order=110,
+)
+
+
+_PAS_BAB_DIALOG = (
+    "【Pain·10s · 特写静止】\n"
+    "镜头：{character} 凌晨两点盯着屏幕，{audience_pain} 把一切搞砸。\n"
+    "独白（字幕同步）：This is the third time this week. I can't keep"
+    " doing this.\n"
+    "字幕：Pain：你以为只是今天，但其实是每天。\n\n"
+    "【Agitate·10s · 中景推近】\n"
+    "镜头：闹钟响、咖啡洒、客户来电同时炸响，节奏剪辑加快。\n"
+    "台词：“I tried {competitor_alt}. I tried harder. I tried earlier.”\n"
+    "字幕：Agitate：你试过的方法不是不努力，而是方向错了。\n"
+    "       Before：总是疲于救火。\n\n"
+    "【Solution / Bridge·15s · 手—物—脸】\n"
+    "镜头：{product_name} 接入工作流，画面节奏从混乱切到整齐有序。\n"
+    "台词：“{product_name} didn't make it easier. It made it possible.”\n"
+    "字幕：Solution：让你不用再拼命，靠的是更对的工具。\n"
+    "       After：你可以收工了。\n"
+    "       Bridge：从今天开始，让 {product_name} 成为那道桥。\n"
+    "（屏幕角标“演绎，效果因业务场景而异”）"
+)
+
+_PAS_BAB = FormulaDefinition(
+    id="pas_bab",
+    name="PAS / BAB 直效响应",
+    region=FormulaRegion.global_,
+    category="global_direct_response",
+    beats=[
+        Beat(
+            id="pain",
+            duration_sec=10,
+            function="开场即痛点：让目标受众在 2 秒内识别‘这是我的问题’",
+            shot_type="close_up",
+            recommended_camera_movement="static",
+        ),
+        Beat(
+            id="agitate",
+            duration_sec=10,
+            function="放大痛点频次与代价，触发损失厌恶（Before 状态）",
+            shot_type="medium_shot",
+            recommended_camera_movement="dolly_in",
+        ),
+        Beat(
+            id="solution_bridge",
+            duration_sec=15,
+            function="产品作为‘桥’把 Before 切换到 After，给出明确 CTA",
+            shot_type="hand_object_face",
+            recommended_camera_movement="dolly_in",
+        ),
+    ],
+    total_shots_range=(2, 4),
+    duration_sec_range=(30, 45),
+    risk_flags=["unverifiable_outcome"],
+    sample_dialog=_PAS_BAB_DIALOG,
+    typical_duration_sec=35,
+    typical_shot_count=3,
+    psychology=(
+        "PAS（Pain-Agitate-Solution）与 BAB（Before-After-Bridge）是直效"
+        "响应文案的两大经典骨架，本质上是同一条认知路径：先放大现状的"
+        "痛苦差，再呈现产品跨越差值的桥梁。它依赖损失厌恶（Kahneman &"
+        " Tversky）——人为‘避免失去’付出的努力，平均是‘获得同等价值’"
+        "的两倍。因此 PAS-BAB 在限时促销、转化落地页、短直效广告中表现"
+        "极佳；但它会过度刺激焦虑情绪，长期使用会损害品牌资产，不适合"
+        "品牌建设阶段。"
+    ),
+    use_cases=[
+        "直效响应广告（信息流、短视频前贴片）",
+        "转化落地页 / 短电商投放",
+        "限时促销 / 秒杀活动",
+        "A/B 测试中的‘强刺激’变体",
+        "售前漏斗顶部的引流内容",
+    ],
+    avoid_cases=[
+        "品牌建设期内容（长期使用会让用户疲劳）",
+        "高端品牌（焦虑营销与品牌调性冲突）",
+        "健康 / 医疗 / 情感等高敏感品类（放大痛苦易触红线）",
+        "强调‘理性决策’的 B2B（叙事过于煽情）",
+    ],
+    sort_order=120,
+)
+
+
 #: 全量内置公式定义，顺序即 ``sort_order`` 升序：
-#: 1. underdog_triumph（凡人逆袭）
-#: 2. contrast_surprise（对比反转）
-#: 3. workplace_hero（职场逆袭）
-#: 4. family_conflict（家庭冲突·高风险）
-#: 5. mystery_twist（悬疑反转）
-#: 6. time_travel（时空穿越）
+#: 1. underdog_triumph（凡人逆袭，cn）
+#: 2. contrast_surprise（对比反转，cn）
+#: 3. workplace_hero（职场逆袭，cn）
+#: 4. family_conflict（家庭冲突·高风险，cn）
+#: 5. mystery_twist（悬疑反转，cn）
+#: 6. time_travel（时空穿越，cn）
+#: 7. heros_journey（英雄之旅，global）
+#: 8. pixar_story_spine（Pixar 故事脊柱，global）
+#: 9. three_act（三幕结构，global）
+#: 10. scqa（SCQA 商务叙事，global）
+#: 11. storybrand_sb7（StoryBrand SB7，global）
+#: 12. pas_bab（PAS/BAB 直效响应，global）
 BUILTIN_FORMULA_DEFINITIONS: list[FormulaDefinition] = [
     _UNDERDOG_TRIUMPH,
     _CONTRAST_SURPRISE,
@@ -691,6 +1364,12 @@ BUILTIN_FORMULA_DEFINITIONS: list[FormulaDefinition] = [
     _FAMILY_CONFLICT,
     _MYSTERY_TWIST,
     _TIME_TRAVEL,
+    _HEROS_JOURNEY,
+    _PIXAR_STORY_SPINE,
+    _THREE_ACT,
+    _SCQA,
+    _STORYBRAND_SB7,
+    _PAS_BAB,
 ]
 
 
@@ -755,7 +1434,12 @@ def _diff_orm_against_payload(
 async def bootstrap_builtin_story_formulas(
     db: AsyncSession,
 ) -> dict[str, int]:
-    """启动时调用，幂等地确保 6 条中国爆款公式存在于 ``story_formulas`` 表中。
+    """启动时调用，幂等地确保 12 条系统级公式存在于 ``story_formulas`` 表中。
+
+    数据来自 :data:`BUILTIN_FORMULA_DEFINITIONS`：
+
+    - 6 条 ``region=cn`` 中国市场爆款公式（W3-T2 P1 阶段引入）；
+    - 6 条 ``region=global_`` 国际经典叙事公式（W11-T1 P2 阶段引入）。
 
     幂等策略：
     - 以 ``StoryFormula.id`` 作为业务键。
@@ -776,7 +1460,7 @@ async def bootstrap_builtin_story_formulas(
 
     Returns:
         ``{"inserted": N, "updated": M, "unchanged": K}``，N+M+K 等于
-        :data:`BUILTIN_FORMULA_DEFINITIONS` 的长度（当前为 6）。
+        :data:`BUILTIN_FORMULA_DEFINITIONS` 的长度（当前为 12）。
     """
     counters: dict[str, int] = {"inserted": 0, "updated": 0, "unchanged": 0}
 
