@@ -5,7 +5,14 @@ from fastapi import APIRouter
 from app.api.v1.routes import film, health, llm, studio
 from app.api.v1.routes.commerce import router as commerce_router
 from app.api.v1.routes.script import router as script_router
-from app.api.v1.routes.studio import story_formulas, story_projects, story_variants
+from app.api.v1.routes.studio import (
+    brand_archetypes,
+    cta_patterns,
+    hook_patterns,
+    story_formulas,
+    story_projects,
+    story_variants,
+)
 
 router = APIRouter()
 
@@ -31,4 +38,21 @@ router.include_router(
     story_variants.router,
     prefix="/studio/story-variants",
     tags=["studio/story-variants"],
+)
+
+# === W14-T4: Pattern library 只读 API（hook/cta/archetype 选择器）===
+router.include_router(
+    hook_patterns.router,
+    prefix="/studio/hook-patterns",
+    tags=["studio/hook-patterns"],
+)
+router.include_router(
+    cta_patterns.router,
+    prefix="/studio/cta-patterns",
+    tags=["studio/cta-patterns"],
+)
+router.include_router(
+    brand_archetypes.router,
+    prefix="/studio/brand-archetypes",
+    tags=["studio/brand-archetypes"],
 )
