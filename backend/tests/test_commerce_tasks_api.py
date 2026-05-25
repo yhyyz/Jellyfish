@@ -50,6 +50,7 @@ from app.services.commerce.task_dispatch import (
     TASK_KIND_COMPLIANCE_CHECK,
     TASK_KIND_PRODUCT_INFO_EXTRACT,
     TASK_KIND_STORY_SCRIPT_GENERATE,
+    TASK_KIND_STORY_VIDEO_BATCH_GENERATE,
 )
 
 
@@ -331,3 +332,100 @@ def test_compliance_check_rejects_extra_fields(
     )
     assert resp.status_code == 422
     mock_send_task.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests: story-batches (W14-T1)
+# ---------------------------------------------------------------------------
+
+
+def _valid_batch_payload() -> dict[str, Any]:
+    """构造合法批量请求体，覆盖 2 个变体的最小可用形态。"""
+
+    return {
+        "project_id": "proj-1",
+        "chapter_id": "chap-1",
+        "product": {"name": "演示商品"},
+        "audience": {"age_band": "25-34"},
+        "target_duration_sec": 60,
+        "platform": "douyin",
+        "variants": [
+            {"formula_id": "underdog_triumph", "archetype": "sage", "label": "v1"},
+            {"formula_id": "dramatic_reversal", "archetype": "hero", "label": "v2"},
+        ],
+        "parallelism": 2,
+    }
+
+
+def test_enqueue_story_batch_returns_202(
+    client_with_db, mock_send_task
+) -> None:
+    """合法请求体 -> 202 + envelope + slow 队列投递。"""
+
+    resp = _post(client_with_db, "/story-batches", _valid_batch_payload())
+    assert resp.status_code == 202
+
+    body = resp.json()
+    assert body["code"] == 202
+    assert body["message"] == "success"
+    assert body["data"]["task_kind"] == TASK_KIND_STORY_VIDEO_BATCH_GENERATE
+    assert body["data"]["status"] == GenerationTaskStatus.pending.value
+    assert _UUID_HEX.match(body["data"]["task_id"])
+
+    # 批量任务自身只投递一次，落 slow 队列；子任务的 send_task 由 worker
+    # 在 Celery 消费阶段触发，不在此处入口路径上发生。
+    mock_send_task.assert_called_once()
+    args, kwargs = mock_send_task.call_args
+    assert args[0] == "task.execute"
+    assert kwargs["args"] == [body["data"]["task_id"]]
+    assert kwargs["queue"] == "slow"
+
+
+def test_enqueue_story_batch_validates_extra_fields(
+    client_with_db, mock_send_task
+) -> None:
+    """``BatchGenerationRequest`` 必须 ``extra='forbid'`` -> 422。"""
+
+    payload = _valid_batch_payload()
+    payload["rogue_field"] = "should_be_rejected"
+    resp = _post(client_with_db, "/story-batches", payload)
+    assert resp.status_code == 422
+    mock_send_task.assert_not_called()
+
+
+def test_enqueue_story_batch_calls_send_task_for_each_variant(
+    client_with_db, mock_send_task, session_local
+) -> None:
+    """API 入口落一行 batch 任务；payload 完整保留 N 个变体。
+
+    W14-T1 的入口阶段只投递一次 batch 自身（``slow`` 队列），子任务的
+    N 次 ``send_task`` 由 worker 在 Celery 消费阶段触发；本测试通过
+    断言 batch 行 ``payload['run_args']['variants']`` 数量与请求一致，
+    覆盖“N 个变体最终会被 worker 转化成 N 个子任务”这一契约。
+    """
+
+    payload = _valid_batch_payload()
+    payload["variants"] = [
+        {"formula_id": f"f{i}", "label": f"v{i}"} for i in range(1, 5)
+    ]
+    resp = _post(client_with_db, "/story-batches", payload)
+    assert resp.status_code == 202
+
+    body = resp.json()
+    task_id = body["data"]["task_id"]
+
+    import asyncio
+
+    row = asyncio.run(_fetch_task(session_local, task_id))
+    assert row is not None
+    assert row.task_kind == TASK_KIND_STORY_VIDEO_BATCH_GENERATE
+    assert row.status == GenerationTaskStatus.pending
+    persisted = row.payload["run_args"]
+    assert len(persisted["variants"]) == 4
+    formula_ids = {v["formula_id"] for v in persisted["variants"]}
+    assert formula_ids == {"f1", "f2", "f3", "f4"}
+
+    mock_send_task.assert_called_once()
+    args, kwargs = mock_send_task.call_args
+    assert args[0] == "task.execute"
+    assert kwargs["queue"] == "slow"

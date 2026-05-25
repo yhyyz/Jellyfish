@@ -367,3 +367,109 @@ class ArchetypeRewriteVars(BaseModel):
         default_factory=list,
         description="优先使用的词汇表，改写时引导 LLM 倾向选用",
     )
+
+
+# ---------------------------------------------------------------------------
+# 批量生成（W14-T1 ``story_video_batch_generate``）
+# ---------------------------------------------------------------------------
+
+
+class BatchVariantSpec(BaseModel):
+    """批量生成中单个变体的参数规格（参数网格里的一行）。
+
+    存在原因：
+        ``story_video_batch_generate`` 任务一次性入队 N 个
+        ``story_script_generate`` 子任务做参数网格扫描，每行需要描述
+        “要换哪些公式 / 原型 / 钩子 / CTA / 调性网格”。把这一行抽成
+        独立模型而不是 dict[str, Any]，可以让前端在联调期就能拿到
+        422 的明确反馈，避免拼写错误漂到 worker 层才报错。
+
+    Attributes:
+        formula_id: 该变体使用的故事公式 ID（必填）。
+        archetype: 该变体的品牌人格原型；为空时使用项目默认值。
+        hook_pattern_id: 钩子模式 ID；为空表示沿用公式默认开场。
+        cta_pattern_id: CTA 模式 ID；为空表示沿用公式默认结尾。
+        tone_grid: 调性网格 dimension -> 0~10 整数刻度；缺省为空 dict。
+        label: 用户备注（如 "v1-hero" / "v2-control"），用于在结果面板
+            上一眼区分批量结果。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    formula_id: str = Field(..., min_length=1, description="该变体使用的故事公式 ID")
+    archetype: Optional[str] = Field(
+        None, description="品牌人格原型；为空时使用项目/批量级默认值"
+    )
+    hook_pattern_id: Optional[str] = Field(
+        None, description="钩子模式 ID；为空表示沿用公式默认开场"
+    )
+    cta_pattern_id: Optional[str] = Field(
+        None, description="CTA 模式 ID；为空表示沿用公式默认结尾"
+    )
+    tone_grid: dict[str, int] = Field(
+        default_factory=dict,
+        description="调性网格：dimension -> 0~10 整数刻度",
+    )
+    label: Optional[str] = Field(
+        None, description="用户备注，例如 v1-hero / v2-control，便于结果对照"
+    )
+
+
+class BatchGenerationRequest(BaseModel):
+    """批量生成请求 —— 一次性产出 N 个变体（参数网格扫描）。
+
+    存在原因：
+        与 :class:`ScriptGenerateRequest` 不同，本请求承载“一次扫描多个
+        参数变体”的批量编排语义。把项目锚点（``project_id`` /
+        ``chapter_id``）、共享的产品/受众/平台/时长，以及变体网格
+        （``variants``）放在一起，作为 ``story_video_batch_generate``
+        worker 的入参契约。
+
+    设计要点：
+        - ``model_config = ConfigDict(extra="forbid")``：与既有 commerce
+          请求体保持一致，避免上游误传字段被静默吞掉；
+        - ``target_duration_sec`` 的 ``ge=15, le=180`` 与
+          :class:`StoryGenerationVars` / ``ScriptGenerateRequest`` 对齐，
+          避免变体级时长漂移到无意义区间；
+        - ``variants`` 长度上限 10，下限 1：plan 给批量任务定的硬约束，
+          避免一次性扫到几十个变体把队列撑爆；
+        - ``parallelism`` 仅作为编排提示，实际并发受 Celery worker 队列
+          并发限制约束，本字段保留以便未来下放给调度器使用。
+
+    Attributes:
+        project_id: 所属项目 ID。
+        chapter_id: 所属章节 ID。
+        product: 商品快照 JSON（worker 不再回查 DB）。
+        audience: 受众画像 JSON。
+        target_duration_sec: 目标视频时长（秒），15 ≤ x ≤ 180。
+        platform: 目标投放平台，默认 ``douyin``。
+        variants: 变体规格列表，长度区间 [1, 10]。
+        parallelism: 期望的并发上限（1..4），默认 2；实际并发以队列
+            消费者为准。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str = Field(..., min_length=1, description="所属项目 ID")
+    chapter_id: str = Field(..., min_length=1, description="所属章节 ID")
+    product: dict[str, Any] = Field(..., description="商品快照 JSON")
+    audience: dict[str, Any] = Field(..., description="受众画像 JSON")
+    target_duration_sec: int = Field(
+        ...,
+        ge=15,
+        le=180,
+        description="目标视频时长（秒），约束在 15-180 之间",
+    )
+    platform: str = Field(default="douyin", description="目标投放平台，默认 douyin")
+    variants: list[BatchVariantSpec] = Field(
+        ...,
+        min_length=1,
+        max_length=10,
+        description="变体规格列表，长度区间 [1, 10]",
+    )
+    parallelism: int = Field(
+        default=2,
+        ge=1,
+        le=4,
+        description="期望并发上限（1..4），实际并发以 Celery 队列消费者为准",
+    )

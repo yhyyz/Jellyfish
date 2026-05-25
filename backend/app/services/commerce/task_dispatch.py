@@ -33,6 +33,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.celery_app import celery_app
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus
+from app.services.commerce.story_video_batch_generate_worker import (
+    DEFAULT_QUEUE as STORY_BATCH_QUEUE,
+    TASK_KIND as TASK_KIND_STORY_VIDEO_BATCH_GENERATE,
+)
 
 #: 商品信息抽取任务 ``task_kind``，与 worker 注册表保持一致。
 TASK_KIND_PRODUCT_INFO_EXTRACT = "product_info_extract"
@@ -48,6 +52,11 @@ _CELERY_ENTRY_TASK = "task.execute"
 
 #: 默认投递队列：3 个 commerce/* 任务均属分钟级，与 worker SLA 对齐。
 _DEFAULT_QUEUE = "fast"
+
+#: 批量任务专用队列：从 worker 模块直接读取，避免常量在两个文件间漂移。
+#: W14-T1 将 ``story_video_batch_generate`` 显式落到 ``slow`` 队列，
+#: 避免与 ``fast`` 队列上的 commerce 单任务争抢消费者。
+_STORY_BATCH_QUEUE = STORY_BATCH_QUEUE
 
 
 class CommerceTaskDispatchService:
@@ -114,6 +123,33 @@ class CommerceTaskDispatchService:
             run_args=body,
         )
 
+    async def enqueue_story_batch(self, body: dict[str, Any]) -> dict[str, Any]:
+        """创建 ``task_kind=story_video_batch_generate`` 的批量任务并投递到 slow 队列。
+
+        与其它 commerce/* 任务的差异：
+            - **队列不同**：本任务落到 ``slow`` 队列，避免与 ``fast`` 队列上
+              的 commerce 单任务争抢消费者；
+            - **耗时不同**：本任务自身只做编排（落 N 个子任务行 + 投递），
+              但等待子任务全部入库的链路允许 7200s 余量，由 worker 侧的
+              ``timeout_seconds`` 控制。
+
+        Args:
+            body: 由 :class:`app.core.contracts.story.BatchGenerationRequest`
+                ``model_dump`` 出来的 dict，结构由请求 schema 校验过；本服务
+                只会把它原样塞进 ``payload['run_args']``，不再二次校验。
+
+        Returns:
+            ``{"task_id", "task_kind", "status", "enqueued_at"}`` 四元组的
+            dict，``task_id`` 即批量任务 ID，前端可用它后续轮询批量任务
+            状态以拿到子任务 ID 列表。
+        """
+
+        return await self._enqueue(
+            task_kind=TASK_KIND_STORY_VIDEO_BATCH_GENERATE,
+            run_args=body,
+            queue=_STORY_BATCH_QUEUE,
+        )
+
     # ------------------------------------------------------------------
     # 内部辅助：所有 commerce/* 任务的统一落表+投递逻辑
     # ------------------------------------------------------------------
@@ -123,6 +159,7 @@ class CommerceTaskDispatchService:
         *,
         task_kind: str,
         run_args: dict[str, Any],
+        queue: str = _DEFAULT_QUEUE,
     ) -> dict[str, Any]:
         """统一落表 + Celery 投递的内部实现。
 
@@ -133,12 +170,14 @@ class CommerceTaskDispatchService:
                :class:`app.core.task_manager.TaskManager.create` 出来的形态完
                全一致，方便 worker 复用 ``payload['run_args']`` 取参约定）；
             3. ``add`` + ``flush`` 进 session；不在此处 commit；
-            4. 调用 ``celery_app.send_task("task.execute", args=[task_id], queue="fast")``
-               把任务塞到 fast 队列。
+            4. 调用 ``celery_app.send_task("task.execute", args=[task_id], queue=queue)``
+               把任务投递到指定队列（默认 ``fast``）。
 
         Args:
             task_kind: 业务任务类型；必须出现在 worker registry 中。
             run_args: 透传给 worker 的执行参数 dict。
+            queue: 目标 Celery 队列；默认 ``fast``，批量任务等长耗时入口
+                可显式传 ``slow``。
 
         Returns:
             ``{"task_id", "task_kind", "status", "enqueued_at"}``。
@@ -164,13 +203,13 @@ class CommerceTaskDispatchService:
         self.db.add(row)
         await self.db.flush()
 
-        # 显式指定 queue="fast"：虽然 task_routes 也会把 ``task.execute*`` 路
-        # 由到 fast，但显式传参可以避免后续有人改路由规则时 commerce 任务
-        # 误落到 slow 队列；同时让单测可以直接断言 queue 参数。
+        # 显式指定 queue：虽然 task_routes 也会把 ``task.execute*`` 路由到
+        # fast，但显式传参可以避免后续有人改路由规则时 commerce 任务误落到
+        # 其它队列；同时让单测可以直接断言 queue 参数（fast vs slow）。
         celery_app.send_task(
             _CELERY_ENTRY_TASK,
             args=[task_id],
-            queue=_DEFAULT_QUEUE,
+            queue=queue,
         )
 
         return {
@@ -186,4 +225,5 @@ __all__ = [
     "TASK_KIND_COMPLIANCE_CHECK",
     "TASK_KIND_PRODUCT_INFO_EXTRACT",
     "TASK_KIND_STORY_SCRIPT_GENERATE",
+    "TASK_KIND_STORY_VIDEO_BATCH_GENERATE",
 ]

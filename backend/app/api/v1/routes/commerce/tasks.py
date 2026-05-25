@@ -25,6 +25,7 @@ from app.schemas.commerce.tasks import (
     ScriptGenerateRequest,
     TaskEnqueueResponse,
 )
+from app.core.contracts.story import BatchGenerationRequest
 from app.schemas.common import ApiResponse, success_response
 from app.services.commerce.task_dispatch import CommerceTaskDispatchService
 
@@ -85,6 +86,32 @@ async def enqueue_compliance_check(
 
     service = CommerceTaskDispatchService(db)
     payload = await service.enqueue_compliance_check(body.model_dump())
+    return success_response(
+        TaskEnqueueResponse.model_validate(payload),
+        code=status.HTTP_202_ACCEPTED,
+    )
+
+
+@router.post(
+    "/story-batches",
+    response_model=ApiResponse[TaskEnqueueResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="批量生成：一次性入队 N 个 story_script_generate 子任务",
+)
+async def enqueue_story_batch(
+    body: BatchGenerationRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskEnqueueResponse]:
+    """批量生成入口：把变体网格作为一次性请求落到 ``slow`` 队列上。
+
+    路由职责仍保持瘦身：仅做 Pydantic 校验 + 调 service + 包响应壳；
+    “一行变体 -> 一个子 ``story_script_generate`` 任务”的真正编排逻辑
+    在 :func:`app.services.commerce.story_video_batch_generate_worker.run_story_video_batch_generate_task`
+    里执行，由 worker 在异步链路上完成。
+    """
+
+    service = CommerceTaskDispatchService(db)
+    payload = await service.enqueue_story_batch(body.model_dump())
     return success_response(
         TaskEnqueueResponse.model_validate(payload),
         code=status.HTTP_202_ACCEPTED,

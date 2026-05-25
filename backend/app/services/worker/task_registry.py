@@ -26,6 +26,9 @@ from app.services.commerce.product_info_extract_worker import (
 from app.services.commerce.story_script_generate_worker import (
     build_story_script_generate_executor,
 )
+from app.services.commerce.story_video_batch_generate_worker import (
+    build_story_video_batch_generate_executor,
+)
 from app.services.film.generated_video import run_video_generation_task
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
@@ -120,6 +123,10 @@ task_executor_registry.register(
 task_executor_registry.register(
     "story_script_generate",
     build_story_script_generate_executor(),
+)
+task_executor_registry.register(
+    "story_video_batch_generate",
+    build_story_video_batch_generate_executor(),
 )
 # W12-T4: P2 commerce workers — hook/cta/archetype 三个 in-place patch executor，
 # 共同消费 StoryVariant.script_breakdown，单次注册集中在此处避免与 W5 系列竞态。
