@@ -1,8 +1,9 @@
 """系统级 :class:`ComplianceProfile` 内置启动注册（idempotent bootstrap）。
 
 为什么存在：
-    剧情带货合规链路在 P1 引入 ``cn_mainland_default`` 规则集；它是系统
-    预置（``is_system=True``）数据，必须在应用首次启动后落地到
+    剧情带货合规链路从 P1 引入 ``cn_mainland_default``，W11-T4 起扩展到
+    ``cn_mainland_health`` / ``overseas_default``。它们均为系统预置
+    （``is_system=True``）数据，必须在应用首次启动后落地到
     ``compliance_profiles`` 表，且重复启动不重复写入。本模块即为该 seed
     流程的承载点。
 
@@ -20,8 +21,9 @@
         else                     -> "inserted"
 
 边界：
-    - P1 仅注入 ``cn_mainland_default``。``cn_mainland_health`` /
-      ``overseas_default`` / ``hk_tw`` 等留给 P2，禁止在 P1 引入；
+    - 当前注入 3 个 profile：``cn_mainland_default`` /
+      ``cn_mainland_health`` / ``overseas_default``。``hk_tw`` 暂未提供，
+      留给后续 plan；
     - 与 :func:`app.services.studio.builtin_prompts.bootstrap_builtin_prompts`
       共用 :class:`AsyncSession`，调用顺序由 :mod:`app.bootstrap` 维护：
       ``prompts -> formulas -> compliance``。
@@ -37,16 +39,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.compliance import ComplianceProfile
 from app.services.compliance.builtin_rules import (
     CN_MAINLAND_DEFAULT_PROFILE,
+    CN_MAINLAND_HEALTH_PROFILE,
+    OVERSEAS_DEFAULT_PROFILE,
     ComplianceProfileDefinition,
     serialize_rules,
 )
 
 # ---------------------------------------------------------------------------
-# 注册表 —— P1 仅注入 cn_mainland_default
+# 注册表 —— 当前注入 3 个内置 profile
 # ---------------------------------------------------------------------------
 
 BUILTIN_COMPLIANCE_PROFILES: tuple[ComplianceProfileDefinition, ...] = (
     CN_MAINLAND_DEFAULT_PROFILE,
+    CN_MAINLAND_HEALTH_PROFILE,
+    OVERSEAS_DEFAULT_PROFILE,
 )
 
 

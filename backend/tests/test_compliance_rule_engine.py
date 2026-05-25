@@ -31,7 +31,9 @@ from app.services.compliance.bootstrap_compliance import (
     bootstrap_builtin_compliance_profiles,
 )
 from app.services.compliance.builtin_rules import (
+    CN_MAINLAND_HEALTH_RULES,
     CN_MAINLAND_RULES,
+    OVERSEAS_RULES,
     serialize_rules,
 )
 from app.services.compliance.rule_engine import (
@@ -358,9 +360,238 @@ async def test_bootstrap_repairs_drifted_profile() -> None:
 
     await engine.dispose()
 
-    assert stats == {"inserted": 0, "updated": 1, "unchanged": 0}
+    assert stats == {
+        "inserted": 0,
+        "updated": 1,
+        "unchanged": len(BUILTIN_COMPLIANCE_PROFILES) - 1,
+    }
     assert repaired.name == "中国大陆默认合规规则集"
     assert len(repaired.rules) == len(CN_MAINLAND_RULES)
+
+
+# ---------------------------------------------------------------------------
+# W11-T4: cn_mainland_health 专项规则
+# ---------------------------------------------------------------------------
+
+
+def _scan_health(
+    text: str,
+    *,
+    product_category: ProductCategory = ProductCategory.health,
+    duration_sec: int = 60,
+) -> list[ComplianceFindingDTO]:
+    """用 cn_mainland_health 规则集（含 default 8 条 + 健康专项 4 条）扫描。"""
+
+    engine = ComplianceRuleEngine(rules=CN_MAINLAND_HEALTH_RULES)
+    return engine.scan(
+        text,
+        region=ComplianceRegion.cn_mainland,
+        product_category=product_category,
+        script_duration_sec=duration_sec,
+    )
+
+
+def test_cn_mainland_health_rules_inherit_default() -> None:
+    """cn_mainland_health 必须继承 cn_mainland_default 全部 8 条规则，并新增 4 条。"""
+
+    default_ids = {rule.id for rule in CN_MAINLAND_RULES}
+    health_ids = {rule.id for rule in CN_MAINLAND_HEALTH_RULES}
+    assert default_ids.issubset(health_ids)
+    new_ids = health_ids - default_ids
+    assert new_ids == {
+        "cn_health_no_efficacy_claim",
+        "cn_health_required_disclaimer",
+        "cn_health_no_medical_terms",
+        "cn_health_no_age_specific_claim",
+    }
+
+
+def test_cn_mainland_health_blocks_efficacy_claim_for_health_only() -> None:
+    """健康类商品出现治疗/疗效暗示词 -> blocker 级 finding。"""
+
+    text = (
+        _LEGAL_LABEL
+        + "本视频为剧情演绎，产品功效因人而异。这款保健品能彻底解决你的失眠。"
+    )
+    findings = _scan_health(text)
+    eff = [f for f in findings if f.rule_id == "cn_health_no_efficacy_claim"]
+    assert len(eff) >= 1
+    assert any(f.matched_text == "彻底解决" for f in eff)
+    assert all(f.severity == ComplianceSeverity.blocker for f in eff)
+
+
+def test_cn_mainland_health_does_not_apply_efficacy_to_beauty() -> None:
+    """beauty 类项目使用 cn_mainland_default profile，不应包含健康类专项规则。
+
+    rule 引擎对 ``banned_phrase`` 不做品类过滤，所以"不触发"的正确实现方式
+    是：beauty 项目根本不加载 cn_mainland_health 规则集。这里通过结构断言
+    验证 cn_mainland_default 中确实不存在健康专项规则。
+    """
+
+    default_ids = {rule.id for rule in CN_MAINLAND_RULES}
+    assert "cn_health_no_efficacy_claim" not in default_ids
+    assert "cn_health_no_medical_terms" not in default_ids
+    assert "cn_health_no_age_specific_claim" not in default_ids
+    assert "cn_health_required_disclaimer" not in default_ids
+
+
+def test_cn_mainland_health_required_disclaimer_full_text() -> None:
+    """缺失完整免责声明（'本视频为剧情演绎，产品功效因人而异'）-> blocker。"""
+
+    text = _LEGAL_LABEL + "这款产品体验很好，推荐大家试一下。"
+    findings = _scan_health(text)
+    disc = [f for f in findings if f.rule_id == "cn_health_required_disclaimer"]
+    assert len(disc) == 1
+    assert disc[0].severity == ComplianceSeverity.blocker
+
+    legal_text = (
+        _LEGAL_LABEL
+        + "本视频为剧情演绎，产品功效因人而异，请咨询医生意见。这款产品体验很好。"
+    )
+    legal_findings = _scan_health(legal_text)
+    assert all(
+        f.rule_id != "cn_health_required_disclaimer" for f in legal_findings
+    )
+
+
+# ---------------------------------------------------------------------------
+# W11-T4: overseas_default 海外规则集
+# ---------------------------------------------------------------------------
+
+
+def _scan_overseas(
+    text: str,
+    *,
+    duration_sec: int = 60,
+    brand_aliases_override: tuple[str, ...] | None = None,
+) -> list[ComplianceFindingDTO]:
+    """用 OVERSEAS_RULES 扫描；region 固定 ``overseas``，category 固定 ``other``。"""
+
+    engine = ComplianceRuleEngine(rules=OVERSEAS_RULES)
+    return engine.scan(
+        text,
+        region=ComplianceRegion.overseas,
+        product_category=ProductCategory.other,
+        script_duration_sec=duration_sec,
+        brand_aliases_override=brand_aliases_override,
+    )
+
+
+def test_overseas_default_warns_on_fake_credentials() -> None:
+    """虚构 Harvard PhD 等海外学历应产出 warning。"""
+
+    text = "Hi everyone, I'm a Harvard PhD recommending this. Dramatization."
+    findings = _scan_overseas(text)
+    creds = [f for f in findings if f.rule_id == "overseas_no_made_up_credentials"]
+    assert len(creds) >= 1
+    assert any(f.matched_text == "Harvard PhD" for f in creds)
+    assert all(f.severity == ComplianceSeverity.warning for f in creds)
+
+
+def test_overseas_default_brand_cap_3_per_60s() -> None:
+    """60s 海外脚本 cap=3，超过 3 次 -> warning（cap 比国内宽松）。"""
+
+    text = (
+        "BrandX is amazing. BrandX changed my life. "
+        "BrandX is the future. BrandX rules. Dramatization."
+    )
+    findings = _scan_overseas(
+        text,
+        duration_sec=60,
+        brand_aliases_override=("BrandX",),
+    )
+    brand = [f for f in findings if f.rule_id == "overseas_brand_mention_cap_60s"]
+    assert len(brand) == 1
+    assert brand[0].severity == ComplianceSeverity.warning
+    assert brand[0].location == "mention_count:4"
+
+
+def test_overseas_default_brand_cap_does_not_warn_at_3_mentions() -> None:
+    """正好 3 次（=cap）不应触发；阈值是严格大于。"""
+
+    text = "BrandX is amazing. BrandX changed my life. BrandX rules. Dramatization."
+    findings = _scan_overseas(
+        text,
+        duration_sec=60,
+        brand_aliases_override=("BrandX",),
+    )
+    assert all(f.rule_id != "overseas_brand_mention_cap_60s" for f in findings)
+
+
+def test_overseas_default_blocks_unverifiable_outcome() -> None:
+    """命中 'guaranteed results' / 'miracle cure' 等极致宣称 -> warning。"""
+
+    text = "This product offers guaranteed results in 7 days. Dramatization."
+    findings = _scan_overseas(text)
+    unv = [f for f in findings if f.rule_id == "overseas_no_unverifiable_outcome"]
+    assert len(unv) >= 1
+    assert any(f.matched_text == "guaranteed results" for f in unv)
+
+
+def test_overseas_default_required_dramatization_label() -> None:
+    """缺少 dramatization / ad / sponsored 任一标签 -> warning。"""
+
+    text = "Just a regular product video without any disclaimer text."
+    findings = _scan_overseas(text)
+    label = [f for f in findings if f.rule_id == "overseas_required_authentic_label"]
+    assert len(label) == 1
+    assert label[0].severity == ComplianceSeverity.warning
+
+    legal_text = "Just a regular product video. #ad"
+    legal_findings = _scan_overseas(legal_text)
+    assert all(
+        f.rule_id != "overseas_required_authentic_label" for f in legal_findings
+    )
+
+
+# ---------------------------------------------------------------------------
+# W11-T4: bootstrap 3 profiles
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_inserts_3_profiles_total() -> None:
+    """全新数据库一次性写入 cn_mainland_default + cn_mainland_health + overseas_default。"""
+
+    db, engine = await _build_session()
+    async with db:
+        stats = await bootstrap_builtin_compliance_profiles(db)
+        rows = (await db.execute(select(ComplianceProfile))).scalars().all()
+
+    await engine.dispose()
+
+    assert stats == {"inserted": 3, "updated": 0, "unchanged": 0}
+    assert len(BUILTIN_COMPLIANCE_PROFILES) == 3
+    assert len(rows) == 3
+    ids = {row.id for row in rows}
+    assert ids == {"cn_mainland_default", "cn_mainland_health", "overseas_default"}
+
+    health_row = next(row for row in rows if row.id == "cn_mainland_health")
+    assert health_row.region == ComplianceRegion.cn_mainland
+    assert health_row.is_system is True
+    assert len(health_row.rules) == len(CN_MAINLAND_HEALTH_RULES)
+
+    overseas_row = next(row for row in rows if row.id == "overseas_default")
+    assert overseas_row.region == ComplianceRegion.overseas
+    assert overseas_row.is_system is True
+    assert len(overseas_row.rules) == len(OVERSEAS_RULES)
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_idempotent_with_3_profiles() -> None:
+    """三个 profile 都在的情况下，重复 bootstrap 不重复写入。"""
+
+    db, engine = await _build_session()
+    async with db:
+        first = await bootstrap_builtin_compliance_profiles(db)
+        second = await bootstrap_builtin_compliance_profiles(db)
+        rows = (await db.execute(select(ComplianceProfile))).scalars().all()
+
+    await engine.dispose()
+
+    assert first == {"inserted": 3, "updated": 0, "unchanged": 0}
+    assert second == {"inserted": 0, "updated": 0, "unchanged": 3}
+    assert len(rows) == 3
 
 
 # ---------------------------------------------------------------------------
