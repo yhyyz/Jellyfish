@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -93,6 +93,64 @@ class StoryGenerationVars(BaseModel):
         description="目标脚本时长（秒），区间 [15, 180]",
     )
     platform: str = Field(..., description="目标投放平台，如 douyin / tiktok / reels")
+
+
+# ---------------------------------------------------------------------------
+# 前 3 秒钩子（HookWriterAgent）
+# ---------------------------------------------------------------------------
+
+
+class ShotHook(BaseModel):
+    """前 3 秒钩子文本输出 —— ``HookWriterAgent`` 的产出。
+
+    用于对 ``StoryScript.opening_hook`` 字段做单独优化（A/B 测试或 refinement），
+    与脚本主流程解耦：generator 已生成基础钩子，本结构作为可替换候选。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    hook_text: str = Field(
+        ...,
+        min_length=4,
+        max_length=80,
+        description="前 3 秒钩子文本（中文，建议 ≤30 字）",
+    )
+    pattern_id: str = Field(..., description="使用的 hook_pattern ID")
+    pattern_type: str = Field(
+        ...,
+        description="模式分类：question/conflict/contrast/numerical/curiosity/...",
+    )
+    rationale: Optional[str] = Field(
+        None,
+        description="为什么选择这个钩子的简要解释；可为空",
+    )
+
+
+class HookWriteVars(BaseModel):
+    """``HookWriterAgent`` 的输入变量契约。
+
+    与 ``hook_pattern_writer_v1`` 模板对齐：模板暴露 ``pattern_id`` /
+    ``product`` / ``audience`` 三个 jinja 变量，本结构在 Agent 入口侧拆分得
+    更细，便于 worker / API 层组装；Agent 内部再合成模板所需 dict。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pattern_id: str = Field(..., description="目标 hook 模式 ID")
+    pattern_type: str = Field(
+        ...,
+        description="模式分类，需与 ShotHook.pattern_type 自然映射",
+    )
+    product_name: str = Field(..., description="商品名称")
+    product_description: Optional[str] = Field(None, description="商品描述/卖点综述，可为空")
+    audience_pain_points: list[str] = Field(
+        default_factory=list,
+        description="受众痛点列表，可为空",
+    )
+    audience_demographics: dict[str, Any] = Field(
+        default_factory=dict,
+        description="受众人口画像（年龄/性别/动机等），可为空",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -202,3 +260,55 @@ class BrandVoice(BaseModel):
 
     archetype: str = Field(..., description="品牌人格原型（占位）")
     tone_grid: dict = Field(..., description="调性网格占位结构")
+
+
+# ---------------------------------------------------------------------------
+# CTA 文案（W12-T2 CTAWriterAgent）
+# ---------------------------------------------------------------------------
+
+
+class CTAText(BaseModel):
+    """结尾 CTA 输出 — CTAWriterAgent 的产出。
+
+    描述一条结尾 Call-To-Action 文案的产出结果，包含文本本体、
+    所采用的 cta_pattern ID、硬度等级、紧迫感类型以及（可选的）
+    转化设计简要说明，供任务编排与素材落库消费。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cta_text: str = Field(
+        ...,
+        min_length=4,
+        max_length=120,
+        description="CTA 文本（中文，包含动作号召）",
+    )
+    pattern_id: str = Field(..., description="使用的 cta_pattern ID")
+    hardness: str = Field(..., description="soft/medium/hard")
+    urgency_type: str = Field(
+        ...,
+        description="scarcity/urgency/social_proof/benefit/risk_removal",
+    )
+    rationale: str | None = Field(None, description="转化设计简要说明")
+
+
+class CTAWriteVars(BaseModel):
+    """CTAWriterAgent 的输入变量。
+
+    封装写作 CTA 所需的全部上下文：所选 cta_pattern、硬度、
+    紧迫感类型、商品基本信息（名称/链接/折扣文案）以及目标动作，
+    用于驱动 LLM 输出符合 CTAText schema 的结果。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pattern_id: str
+    hardness: str
+    urgency_type: str
+    product_name: str
+    product_url: str | None = None
+    discount_text: str | None = None
+    target_action: str = Field(
+        default="加购",
+        description="目标动作：加购/下单/关注/查看/试用",
+    )
