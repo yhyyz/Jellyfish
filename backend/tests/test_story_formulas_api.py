@@ -1,13 +1,18 @@
-"""``/api/v1/studio/story-formulas`` 只读接口测试（W6-T2）。
+"""``/api/v1/studio/story-formulas`` 只读接口测试（W6-T2，W14 更新）。
 
-测试范围（≥6 用例）：
+测试范围：
 
-- list 默认返回 6 条（与 ``bootstrap_builtin_story_formulas`` 一致）。
-- list 按 ``region=cn`` 仍返回 6 条（全部内置公式都是 cn）。
+- list 默认返回 12 条（6 cn + 6 global，与 ``bootstrap_builtin_story_formulas`` 一致）。
+- list 按 ``region=cn`` 返回 6 条 cn 内置公式。
+- list 按 ``region=global`` 返回 6 条国际经典叙事公式（W11-T1 新增）。
 - list 按 ``category=cn_workplace`` 只剩 1 条（``workplace_hero``）。
 - detail 不存在的 ID -> 404。
 - detail 存在 ID 返回完整结构（含 ``structure.beats``）。
 - list 默认按 ``sort_order`` 升序输出。
+
+W11-T1 引入了 6 条 ``region=global`` 的国际叙事公式（Hero's Journey、Pixar
+Story Spine、Three-Act、SCQA、StoryBrand SB7、PAS/BAB），因此默认 list
+长度由 6 变为 12，本文件相关断言已同步更新。
 
 测试基于内存 SQLite + ``app.dependency_overrides[get_db]``，并预先写入
 ``story_formula_generator_v1`` 占位 PromptTemplate，以满足
@@ -50,7 +55,7 @@ from app.services.commerce.builtin_story_formulas import (
 
 
 async def _build_engine_with_formulas() -> tuple[async_sessionmaker[AsyncSession], AsyncEngine]:
-    """构建一次性 SQLite 引擎并写入 6 条系统公式。"""
+    """构建一次性 SQLite 引擎并写入 12 条系统公式（6 cn + 6 global）。"""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with engine.begin() as conn:
@@ -84,8 +89,8 @@ def _make_override(session_local: async_sessionmaker[AsyncSession]):
 
 
 @pytest.mark.asyncio
-async def test_list_returns_all_six_formulas(client: TestClient) -> None:
-    """默认 list 返回全部 6 条系统公式。"""
+async def test_list_returns_all_twelve_formulas(client: TestClient) -> None:
+    """默认 list 返回全部 12 条系统公式（6 cn + 6 global）。"""
     session_local, engine = await _build_engine_with_formulas()
     app.dependency_overrides[get_db] = _make_override(session_local)
     try:
@@ -94,15 +99,23 @@ async def test_list_returns_all_six_formulas(client: TestClient) -> None:
         body = res.json()
         assert body["code"] == 200
         items = body["data"]
-        assert len(items) == 6
+        assert len(items) == 12
         ids = {item["id"] for item in items}
         assert ids == {
+            # 6 条 cn 内置公式（W3-T2 锁定）
             "underdog_triumph",
             "contrast_surprise",
             "workplace_hero",
             "family_conflict",
             "mystery_twist",
             "time_travel",
+            # 6 条 global 国际叙事公式（W11-T1 新增）
+            "heros_journey",
+            "pixar_story_spine",
+            "three_act",
+            "scqa",
+            "storybrand_sb7",
+            "pas_bab",
         }
     finally:
         app.dependency_overrides.pop(get_db, None)
@@ -111,7 +124,7 @@ async def test_list_returns_all_six_formulas(client: TestClient) -> None:
 
 @pytest.mark.asyncio
 async def test_list_filtered_by_region_cn(client: TestClient) -> None:
-    """region=cn 过滤后仍是全部 6 条（内置公式均为 cn）。"""
+    """region=cn 过滤后返回 6 条 cn 内置公式。"""
     session_local, engine = await _build_engine_with_formulas()
     app.dependency_overrides[get_db] = _make_override(session_local)
     try:
@@ -120,6 +133,31 @@ async def test_list_filtered_by_region_cn(client: TestClient) -> None:
         items = res.json()["data"]
         assert len(items) == 6
         assert all(item["region"] == "cn" for item in items)
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_list_filtered_by_region_global(client: TestClient) -> None:
+    """region=global 过滤后返回 W11-T1 新增的 6 条国际叙事公式。"""
+    session_local, engine = await _build_engine_with_formulas()
+    app.dependency_overrides[get_db] = _make_override(session_local)
+    try:
+        res = client.get("/api/v1/studio/story-formulas", params={"region": "global"})
+        assert res.status_code == 200
+        items = res.json()["data"]
+        assert len(items) == 6
+        assert all(item["region"] == "global" for item in items)
+        ids = {item["id"] for item in items}
+        assert ids == {
+            "heros_journey",
+            "pixar_story_spine",
+            "three_act",
+            "scqa",
+            "storybrand_sb7",
+            "pas_bab",
+        }
     finally:
         app.dependency_overrides.pop(get_db, None)
         await engine.dispose()
