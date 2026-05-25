@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.base import TimestampMixin
-from app.models.types import ChapterStatus, ProjectStyle, ProjectVisualStyle
+from app.models.types import ChapterStatus, ProjectKind, ProjectStyle, ProjectVisualStyle
 
 if TYPE_CHECKING:
     from app.models.studio_assets import Actor, Character, Costume, Prop, Scene
@@ -35,6 +35,14 @@ class Project(Base, TimestampMixin):
         comment="画面表现形式（真人/动漫等）",
     )
     seed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="随机种子")
+    kind: Mapped[ProjectKind] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ProjectKind.drama.value,
+        server_default=ProjectKind.drama.value,
+        index=True,
+        comment="项目类型：drama=短剧；commerce_story=剧情带货",
+    )
     unify_style: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, comment="是否统一风格（跨章节）")
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="进度百分比（0-100）")
     default_video_ratio: Mapped[str | None] = mapped_column(
