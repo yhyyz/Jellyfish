@@ -176,7 +176,9 @@ def test_list_profiles_filters_by_region(client_with_db) -> None:
 
     resp_other = client_with_db.get("/api/v1/studio/compliance/profiles?region=overseas")
     assert resp_other.status_code == 200
-    assert resp_other.json()["data"] == []
+    other_body = resp_other.json()
+    assert all(p["region"] == "overseas" for p in other_body["data"])
+    assert any(p["id"] == "overseas_default" for p in other_body["data"])
 
 
 def test_get_profile_returns_full_rules_json(client_with_db) -> None:

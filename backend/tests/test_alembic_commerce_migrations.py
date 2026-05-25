@@ -1,20 +1,20 @@
-"""Alembic 迁移集成测试 — 覆盖 W2-T5 新增的 5 条 revision (0002-0006)。
+"""Alembic 迁移集成测试 — 覆盖 W2/W11 新增的 6 条 revision (0002-0007)。
 
 测试目标：
 
 1. ``alembic upgrade head`` 在"pre-0002"状态的 SQLite 库上能成功执行，且
-   生成的 schema 与 ORM 模型一致（10 张新表 + ``projects.kind`` 列）。
-2. ``alembic downgrade base`` 能干净回滚至 0001（10 张新表全部消失，
+   生成的 schema 与 ORM 模型一致（13 张新表 + ``projects.kind`` 列）。
+2. ``alembic downgrade base`` 能干净回滚至 0001（13 张新表全部消失，
    ``projects.kind`` 列消失）。
 3. upgrade → downgrade → upgrade 往返后 schema 完全一致（表名/索引/外键
    集合都不变），保证迁移真正幂等。
-4. 5 条 revision 在脚本目录中形成线性单 head 链：
-   0001 ← 0002 ← 0003 ← 0004 ← 0005 ← 0006。
+4. 6 条 revision 在脚本目录中形成线性单 head 链：
+   0001 ← 0002 ← 0003 ← 0004 ← 0005 ← 0006 ← 0007。
 5. 升级 0002 后，pre-0002 即已写入的 ``projects`` 行能拿到
    ``kind='drama'`` 默认值（由 server_default + UPDATE 双保险回填）。
 
-为了模拟"pre-0002"环境（``projects`` 没有 ``kind`` 列、且 10 张新表都
-不存在），fixture 先用 ``Base.metadata`` 创建当前 35 张老表，再显式删
+为了模拟"pre-0002"环境（``projects`` 没有 ``kind`` 列、且 13 张新表都
+不存在），fixture 先用 ``Base.metadata`` 创建当前老表，再显式删
 除 ``ix_projects_kind`` 索引和 ``projects.kind`` 列，最后把
 ``alembic_version`` 表的版本号设为 ``0001``。
 """
@@ -49,7 +49,7 @@ import app.models.task  # noqa: F401  pylint: disable=unused-import
 import app.models.task_links  # noqa: F401  pylint: disable=unused-import
 
 
-# === 常量：W2-T5 新增的 10 张表 ===
+# === 常量：W2/W11 新增的 13 张表 ===
 NEW_TABLES: frozenset[str] = frozenset(
     {
         "products",
@@ -62,6 +62,10 @@ NEW_TABLES: frozenset[str] = frozenset(
         "compliance_profiles",
         "compliance_findings",
         "api_key_quotas",
+        # W11-T2a (revision 0007) — pattern libraries
+        "hook_patterns",
+        "cta_patterns",
+        "brand_archetypes",
     }
 )
 
@@ -73,6 +77,7 @@ EXPECTED_CHAIN: tuple[tuple[str, str | None], ...] = (
     ("0004", "0003"),
     ("0005", "0004"),
     ("0006", "0005"),
+    ("0007", "0006"),
 )
 
 # 每条 revision 必须显式声明的关键索引（用于 test_upgrade 的 spot check）。
@@ -311,7 +316,7 @@ def test_roundtrip_preserves_schema(baseline_engine: Engine) -> None:
 # Test 4: linear revision chain
 # --------------------------------------------------------------------------- #
 def test_revision_chain_is_linear() -> None:
-    """The revision graph must form a single linear chain ending at 0006.
+    """The revision graph must form a single linear chain ending at 0007.
 
     Verifies, for every expected (rev, down_rev) pair, that:
     - the revision exists in the script directory
@@ -336,7 +341,7 @@ def test_revision_chain_is_linear() -> None:
             )
 
     heads = script.get_heads()
-    assert list(heads) == ["0006"], f"expected single head 0006, got {heads!r}"
+    assert list(heads) == ["0007"], f"expected single head 0007, got {heads!r}"
 
 
 # --------------------------------------------------------------------------- #
