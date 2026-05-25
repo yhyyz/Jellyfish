@@ -5,7 +5,7 @@
  *
  * 这是带货剧情项目的中央创作页：
  * - 顶部：项目头（项目名 + 关键配置 + 关联商品）
- * - 中部：左 FormulaPicker + 中 ScriptEditor + 右 ComplianceWarningBanner
+ * - 中部：左 VariantList + FormulaPicker + 中 ScriptEditor + 右 ComplianceWarningBanner
  * - 底部：ShotTimelineStrip
  * - 浮动 CTA：「生成新脚本」「合规检查」
  *
@@ -38,7 +38,6 @@ import {
   Empty,
   Modal,
   Row,
-  Select,
   Space,
   Spin,
   Tag,
@@ -67,6 +66,7 @@ import { FormulaPicker } from './components/FormulaPicker'
 import { ScriptEditor } from './components/ScriptEditor'
 import { ComplianceWarningBanner } from './components/ComplianceWarningBanner'
 import { ShotTimelineStrip } from './components/ShotTimelineStrip'
+import { VariantList } from './components/VariantList'
 import { useQuery } from '@tanstack/react-query'
 
 /** Platform 枚举 → 中文展示 */
@@ -333,36 +333,27 @@ const StoryWorkbench: React.FC = () => {
       {/* 顶部项目头 */}
       <ProjectHeader project={project} primaryProduct={primaryProduct} />
 
-      {/* 变体切换条（多变体时显示） */}
-      {variants.length > 1 ? (
-        <Card size="small" className="mb-2">
-          <Space size={8} wrap>
-            <span className="text-xs text-gray-500">当前变体：</span>
-            <Select
-              size="small"
-              value={activeVariantId ?? undefined}
-              style={{ minWidth: 240 }}
-              onChange={setActiveVariantId}
-              options={variants.map((v) => ({
-                value: v.id,
-                label: `v${v.id.slice(0, 8)} · ${v.status} · 合规 ${v.compliance_score}`,
-              }))}
-            />
-            {variantsLoading ? <span className="text-xs text-gray-400">加载中...</span> : null}
-          </Space>
-        </Card>
+      {variantsLoading && variants.length === 0 ? (
+        <div className="mb-2 text-xs text-gray-400">变体加载中...</div>
       ) : null}
 
-      {/* 中部三栏 */}
+      {/* 中部四栏：变体列表 / 公式选择 / 剧本编辑 / 合规提醒 */}
       <Row gutter={12} className="min-h-0 flex-1">
         <Col xs={24} lg={5} className="min-h-0">
+          <VariantList
+            variants={variants}
+            activeVariantId={activeVariantId}
+            onSelect={setActiveVariantId}
+          />
+        </Col>
+        <Col xs={24} lg={4} className="min-h-0">
           <FormulaPicker
             selectedId={selectedFormulaId}
             onChange={setSelectedFormulaId}
             region="cn"
           />
         </Col>
-        <Col xs={24} lg={14} className="min-h-0">
+        <Col xs={24} lg={10} className="min-h-0">
           <ScriptEditor variant={activeVariant} readOnly />
         </Col>
         <Col xs={24} lg={5} className="min-h-0">

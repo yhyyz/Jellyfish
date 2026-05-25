@@ -25,6 +25,7 @@ import type {
   ComplianceCheckRequest,
   ComplianceFindingRead,
   ScriptGenerateRequest,
+  StoryVariantCloneRequest,
   StoryVariantCreate,
   StoryVariantRead,
   StoryVariantStatus,
@@ -90,6 +91,62 @@ export function useCreateStoryVariant() {
     },
     onSuccess: (variant) => {
       void qc.invalidateQueries({ queryKey: [...storyVariantKeys.all, 'list', variant.project_id] })
+    },
+  })
+}
+
+/**
+ * 克隆变体（W14-T3，A/B 派生）。
+ *
+ * 调用 `POST /story-variants/{variant_id}/clone`：基于源变体生成一个新的
+ * `draft` 变体，可选覆盖 `archetype` / `hook_pattern_id` / `cta_pattern_id` /
+ * `formula_id` / `label` 等 A/B 维度。
+ *
+ * 成功后失效全部变体列表缓存（不区分 projectId / chapterId / status），
+ * 因为新增项可能落在任意分组的列表里。
+ */
+export function useCloneStoryVariant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      variantId,
+      body,
+    }: {
+      variantId: string
+      body: StoryVariantCloneRequest
+    }) => {
+      const res = await StudioStoryVariantsService.cloneVariantApiV1StudioStoryVariantsVariantIdClonePost({
+        variantId,
+        requestBody: body,
+      })
+      return res.data
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storyVariantKeys.all })
+    },
+  })
+}
+
+/**
+ * 标记冠军变体（W14-T3，同 (project, chapter) 单选）。
+ *
+ * 调用 `PATCH /story-variants/{variant_id}/champion`：将目标变体置为冠军，
+ * 后端会同步取消同章节其它变体的冠军标记。
+ *
+ * 成功后失效变体列表缓存以触发列表重新拉取，让 UI 上的「Champion」标签
+ * 与服务端状态保持一致。
+ */
+export function useMarkVariantChampion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (variantId: string) => {
+      const res = await StudioStoryVariantsService.markVariantChampionApiV1StudioStoryVariantsVariantIdChampionPatch({
+        variantId,
+      })
+      return res.data
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storyVariantKeys.all })
     },
   })
 }
