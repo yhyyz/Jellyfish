@@ -4,8 +4,8 @@ description: "剧情带货 (Story-Driven Commerce) 的数据模型、状态语�
 weight: 50
 ---
 
-> 本文属于"当前架构"文档，描述 P1 阶段已经落库生效的剧情带货数据模型与
-> 模块边界。P2 / P3 的扩展计划见 [任务计划](/docs/plans/)。
+> 本文属于"当前架构"文档，描述 P1 与 P2 阶段已经落库生效的剧情带货数据
+> 模型与模块边界。P3 扩展计划见 [任务计划](/docs/plans/)。
 
 ## Overview
 
@@ -41,10 +41,31 @@ P1 已经落库的范围：
 - `ApiKeyQuota` 1 张表（P3 partner API 预留）；
 - 6 条 P1 内置剧情公式与配套提示词模板。
 
-P1 不在范围（需查阅 `plans` 文档）：A/B 变体克隆 + Champion 标记、
-国际叙事公式（Hero's Journey 等）、HookPattern / CTAPattern /
-BrandArchetype 库、健康/海外专项合规 profile、效果数据写入与分析、
-Partner API 启用、多平台导出预设。
+P2 已经落库的范围（W11–W14）：
+
+- 6 条国际叙事公式（Hero's Journey / Pixar / 三幕 / SCQA / SB7 / PAS-BAB），
+  公式总数 12（W11-T1 commit `0895303`）；
+- `hook_patterns` / `cta_patterns` / `brand_archetypes` 3 张模式库表
+  + 27 条内置 seed（10 钩子 + 5 CTA + 12 品牌人格，
+  W11-T2 commits `a87b45f` + `1e8b475`，alembic `0007`）；
+- `BrandArchetype`（12 值）+ `ToneDimension`（10 值）枚举（W11-T3
+  commit `4bb1345`），用于 `commerce_story_configs.archetype` /
+  `tone_grid` + `StoryVariant.archetype`；
+- `cn_mainland_health` + `overseas_default` 两个新合规 profile
+  + 9 条新规则（W11-T4 commit `9483962`），合规规则总数 17；
+- 3 个 P2 Agent：`HookWriterAgent` / `CTAWriterAgent` /
+  `ArchetypeVoiceRewriterAgent`（W12 commits `8c8c6e9` `2a5b340`
+  `450431d`）；
+- 4 个 P2 task_kind：`hook_writer` / `cta_writer` /
+  `archetype_rewrite` / `story_video_batch_generate`
+  （W12-T4 + W14-T1）；
+- A/B 变体克隆 + Champion 标记 API（W14-T3 commit `1d89126`）；
+- 商品图生成 API（W14-T2 commit `145e776`）；
+- 模式库只读 API（W14-T4 commit `c59fa4a`）；
+- 批量剧本生成 API（W14-T1 commit `860b09f`）。
+
+P3 不在范围（仍待实现）：效果数据写入与分析、Partner API
+启用、多平台导出预设、Slack/邮件合规告警、品牌资产保险柜。
 
 ## 项目类型 (Project Kind)
 
@@ -226,6 +247,23 @@ ON DELETE CASCADE）：
 所有公式硬绑定到提示词模板 `story_formula_generator_v1`（由
 `app/services/studio/builtin_prompts.py` 在更早阶段写入）。
 
+### P2 内置 6 条国际公式（W11-T1 commit `0895303`）
+
+定义同样在 `app/services/commerce/builtin_story_formulas.py`，与 P1 公
+式一同由 `bootstrap_builtin_story_formulas(db)` 幂等写入；`region` 统
+一为 `global`。
+
+| `id` | 名称 | `region` | 典型时长 | 典型镜头数 | `risk_flags` |
+| --- | --- | --- | ---: | ---: | --- |
+| `heros_journey` | 英雄之旅 | global | 150s | 7 | `unverifiable_outcome` |
+| `pixar_story_spine` | Pixar 故事脊柱 | global | 75s | 6 | — |
+| `three_act` | 三幕结构 | global | 120s | 7 | — |
+| `scqa` | SCQA 商务叙事 | global | 45s | 4 | `unverifiable_outcome` |
+| `storybrand_sb7` | StoryBrand SB7 | global | 75s | 7 | — |
+| `pas_bab` | PAS / BAB 直效响应 | global | 35s | 3 | `unverifiable_outcome` |
+
+公式总数：**12（P1 6 + P2 6）**。
+
 ### Risk Flag 受控词汇表
 
 `KNOWN_RISK_FLAGS` 是公式 `risk_flags` 的允许集合，新增类型必须同步到
@@ -243,6 +281,72 @@ ON DELETE CASCADE）：
 `FormulaDefinition` 在 Pydantic 校验阶段就拒绝未知 flag，避免脏数据
 入库。
 
+## 模式库（P2 引入）
+
+P2 在 alembic `0007_create_pattern_libraries` 中新增 3 张系统级模式表
+（W11-T2 commits `a87b45f` + `1e8b475`），所有内置 seed 由
+`bootstrap_builtin_pattern_libraries` 在应用启动时幂等写入。
+
+### `hook_patterns` 表
+
+10 条内置钩子模式，覆盖 `KNOWN_PATTERN_TYPES` 受控词汇表，每条记录包
+含 `template_text`（Jinja2 渲染时作为 `HookWriterAgent` 的核心
+prompt）、`psychology`、`use_cases`、`avoid_cases` 字段。
+
+| `pattern_type` | 含义 |
+| --- | --- |
+| `question` | 提问钩子（"你有没有遇到过…"） |
+| `conflict` | 冲突钩子（直接抛出对立情境） |
+| `contrast` | 对比钩子（前后差异冲击） |
+| `numerical` | 数字钩子（"3 个动作"） |
+| `curiosity` | 好奇心缺口钩子 |
+| `shock` | 震惊钩子 |
+| `relatable` | 共鸣钩子（"是不是你也…"） |
+| `dialogue` | 对白钩子（直接以台词开场） |
+| `visual` | 视觉冲击钩子 |
+| `pov` | POV / 第一视角钩子 |
+
+### `cta_patterns` 表
+
+5 条内置 CTA 模式，按 `hardness × urgency_type` 二维分类：
+
+- `hardness`：`soft` / `medium` / `hard`
+- `urgency_type`：`scarcity` / `urgency` / `social_proof` / `benefit` /
+  `risk_removal`
+
+由 `CTAWriterAgent` 在结尾镜头生成转化文本时引用。
+
+### `brand_archetypes` 表
+
+12 条内置品牌人格原型，参照 tonethief 标准词汇表，`id` 与
+`BrandArchetype` 枚举一一对应：`sage` / `jester` / `rebel` /
+`provocateur` / `maverick` / `friend` / `expert` / `cheerleader` /
+`storyteller` / `analyst` / `coach` / `minimalist`。每条记录额外保留
+`motivation` / `voice_traits` / `speech_patterns` / `sample_brands`
+字段，用于 `ArchetypeVoiceRewriterAgent` 渲染 prompt。
+
+### `BrandArchetype` 与 `ToneDimension` 枚举（W11-T3 commit `4bb1345`）
+
+`BrandArchetype` 为前述 12 个 archetype 的 enum，应用层 DTO
+（`commerce_story_configs.archetype` / `StoryVariant.archetype` /
+`ArchetypeRewriteVars.target_archetype`）统一以该 enum 校验取值。
+
+`ToneDimension` 是 10 个语调维度，每个维度 0–10 分，组合形成
+`commerce_story_configs.tone_grid`：
+
+| 维度 | 语义两端 |
+| --- | --- |
+| `formality` | Formal ↔ Casual |
+| `seriousness` | Serious ↔ Playful |
+| `technicality` | Technical ↔ Accessible |
+| `enthusiasm` | Reserved ↔ Enthusiastic |
+| `humanity` | Corporate ↔ Human |
+| `activity` | Passive ↔ Active |
+| `specificity` | Vague ↔ Specific |
+| `conciseness` | Long-winded ↔ Concise |
+| `conventionality` | Conventional ↔ Irreverent |
+| `safety` | Safe ↔ Provocative |
+
 ## 脚本变体 (Story Variant)
 
 ### `story_variants` 表
@@ -255,12 +359,12 @@ A/B 变体容器，同一项目可生成多版剧本：
 | `project_id` | `String(64)` FK→`projects` ON DELETE CASCADE | 所属项目 |
 | `chapter_id` | `String(64)` FK→`chapters` ON DELETE CASCADE | 所属章节 |
 | `formula_id` | `String(64)` FK→`story_formulas` ON DELETE RESTRICT | 公式被引用时禁止删除 |
-| `hook_pattern_id / cta_pattern_id` | `String(64)?` | P2 启用，无硬 FK |
-| `archetype` | `String(32)?` | 品牌人格（P2 启用枚举） |
+| `hook_pattern_id / cta_pattern_id` | `String(64)?` | P2 已启用，软引用 `hook_patterns` / `cta_patterns` |
+| `archetype` | `String(32)?` | 品牌人格，P2 取值受 `BrandArchetype` enum 约束 |
 | `script_full_text` | `Text` | 完整剧本文本 |
 | `script_breakdown` | `JSON dict` | 镜头分解结果 JSON（StoryScript 序列化） |
 | `status` | `StoryVariantStatus` | draft / generating / ready / failed |
-| `is_champion` | `Boolean` | A/B 优胜标记（P2 启用） |
+| `is_champion` | `Boolean` | A/B 优胜标记（P2 启用，见下方语义） |
 | `compliance_score` | `Integer` | 合规评分 0–100（合规检查器写入） |
 | `generated_by_task_id` | `String(64)?` | 触发它的 GenerationTask（无硬 FK） |
 
@@ -268,6 +372,21 @@ A/B 变体容器，同一项目可生成多版剧本：
 `app/core/contracts/story.py`）的 JSON 序列化形态，包含 `shots[]`、
 总时长、镜头总数、所用公式、开场钩子、CTA 文案与品牌口播次数等
 统计字段。
+
+### `is_champion` 语义（W14-T3 commit `1d89126`）
+
+`is_champion` 在同一 `(project_id, chapter_id)` 维度内是**互斥单选**
+状态：
+
+- 标记一个变体为 champion 时（`PATCH /studio/story-variants/{id}/champion`），
+  service 层自动将同 `(project, chapter)` 下其他变体的 `is_champion`
+  置为 `False`，确保任意时刻只有一个 champion；
+- `is_champion` 不参与 `StoryVariantStatus` 状态机判断，仅作为业务侧
+  的"已选定上线版本"标记；
+- 删除 champion 变体后不会自动指派新 champion，由前端在变体列表中重新
+  选择；
+- A/B 克隆（`POST /studio/story-variants/{id}/clone`）出来的新变体
+  默认 `is_champion=False`，不会继承源变体的 champion 标记。
 
 ### `story_outcomes` 表（P1 建表，P3 写入）
 
@@ -339,7 +458,44 @@ bootstrap 幂等序列化进 `compliance_profiles.rules`：
 
 D3 决策：**P1 blocker 仅在 `banned_phrase` + `required_label`
 + `required_disclaimer`**；LLM 模糊判断一律为 warning，避免误报阻塞
-发布。`cn_mainland_health` / `overseas_default` / `hk_tw` 保留给 P2。
+发布。`cn_mainland_health` / `overseas_default` 已在 P2 落库（见下），
+`hk_tw` 仍保留给后续阶段。
+
+### P2 新增 9 条规则与 2 个 profile（W11-T4 commit `9483962`）
+
+`builtin_rules.py` 在 P2 阶段补齐 `cn_mainland_health` 与
+`overseas_default` 两个新 profile，配合 `bootstrap_compliance.py` 幂等
+写入 `compliance_profiles.rules`。
+
+#### `cn_mainland_health` profile
+
+继承 `cn_mainland_default` 的 8 条基础规则，再叠加 4 条针对健康类商品
+的强约束：
+
+| `rule_id` | `kind` | `severity` | 说明 |
+| --- | --- | --- | --- |
+| `cn_health_no_efficacy_claim` | `banned_phrase` | **blocker** | 禁止暗示治疗效果 |
+| `cn_health_required_disclaimer` | `required_disclaimer` | **blocker** | 必须含完整健康类免责声明 |
+| `cn_health_no_medical_terms` | `banned_phrase` | warning | 禁医疗术语 |
+| `cn_health_no_age_specific_claim` | `banned_phrase` | warning | 禁年龄绝对承诺 |
+
+#### `overseas_default` profile
+
+5 条独立规则，针对海外平台（YouTube / TikTok 等）的认证、宣称与品牌
+口播节奏：
+
+| `rule_id` | `kind` | `severity` | 说明 |
+| --- | --- | --- | --- |
+| `overseas_no_made_up_credentials` | `banned_phrase` | warning | 禁伪造资历 |
+| `overseas_no_unverifiable_outcome` | `banned_phrase` | warning | 禁不可验证宣称 |
+| `overseas_no_misleading_urgency` | `banned_phrase` | warning | 禁虚假紧迫 |
+| `overseas_required_authentic_label` | `required_label` | warning | 必须含 `Dramatization` / `Ad` / `Sponsored` 标识 |
+| `overseas_brand_mention_cap_60s` | `brand_mention_cap` | warning | 海外品牌口播 60s 内 ≤ 3 次（较国内宽松） |
+
+合规 profile 总数：**3（P1 `cn_mainland_default` + P2
+`cn_mainland_health` + P2 `overseas_default`）**。
+
+合规规则总数：**17（P1 8 + P2 9）**。
 
 ### 双引擎合并策略
 
@@ -375,6 +531,77 @@ P1 仅建表、不挂业务逻辑、不暴露读写接口。
 
 D6 决策：P1 即建表避免未来迁移。
 
+## P2 新增 Agents（W12）
+
+P2 在 `app/chains/agents/commerce/` 下落地 3 个新的 LangChain Agent，
+对应剧情带货生产链路中"开场钩子重写 / CTA 重写 / 整体语调改写"
+三个细分任务：
+
+| Agent | 文件 | 输入 DTO | 输出 DTO |
+| --- | --- | --- | --- |
+| `HookWriterAgent` | `hook_writer_agent.py` | `HookWriteVars` | `ShotHook` |
+| `CTAWriterAgent` | `cta_writer_agent.py` | `CTAWriteVars` | `CTAText` |
+| `ArchetypeVoiceRewriterAgent` | `archetype_voice_rewriter_agent.py` | `ArchetypeRewriteVars` | `StoryScript`（结构保留） |
+
+`ArchetypeVoiceRewriterAgent` 额外定义了两条静态 validator：
+
+- `validate_structure_preserved`：确保改写前后的镜头数量、`shot.id`、
+  `duration`、`shot_type`、`camera_angle`、`camera_movement`、
+  `brand_mention_count` 完全一致；
+- `validate_words_to_avoid`：扫描输出文本，确认没有命中
+  `ArchetypeRewriteVars.words_to_avoid` 中的禁用词。
+
+入参 / 出参 DTO 全部下沉到 `app/core/contracts/story.py`，遵循 AGENTS.md
+约束（`tasks` 不持有跨层 DTO）。
+
+## P2 新增 task_kinds（W12-T4 + W14-T1）
+
+| `task_kind` | 队列 | 默认 timeout | runner 行为 |
+| --- | --- | --- | --- |
+| `hook_writer` | fast | 180s | 在已存在的变体上重写 `opening_hook` |
+| `cta_writer` | fast | 120s | 在已存在的变体上重写 `cta_text` |
+| `archetype_rewrite` | fast | 600s | 整脚本改写 + 更新 `StoryVariant.archetype` |
+| `story_video_batch_generate` | slow | 7200s | 批量入队 N 个 `story_script_generate` 子任务 |
+
+剧情带货链路 task_kind 总数：**8**（P1 3 个 + P2 4 个 + 现有
+`image_generation` / `video_generation` 等通用任务）。
+
+## P2 新增 API 端点（W14）
+
+P2 在 `api/v1/routes/studio/` 与 `api/v1/routes/commerce/` 下新增 12
+个端点，统一走 `ApiResponse` 响应壳。
+
+### 变体管理（W14-T3 commit `1d89126`）
+
+- `POST /api/v1/studio/story-variants/{id}/clone` —— 克隆变体，
+  可选覆盖 `archetype` / `formula_id` / `hook_pattern_id` /
+  `cta_pattern_id`；
+- `PATCH /api/v1/studio/story-variants/{id}/champion` —— 标记 champion，
+  自动将同 `(project, chapter)` 下其他变体置为非 champion。
+
+### 商品图生成（W14-T2 commit `145e776`）
+
+- `POST /api/v1/studio/products/{id}/images/generate` —— 触发
+  `image_generation` 任务，按 `quality_level × view_angle` 维度生成
+  商品图。
+
+### 批量生成（W14-T1 commit `860b09f`）
+
+- `POST /api/v1/commerce/story-batches` —— 一次入队 1–10 个
+  `story_script_generate` 子任务，由 `story_video_batch_generate`
+  父任务统一编排。
+
+### 模式库只读 API（W14-T4 commit `c59fa4a`）
+
+- `GET /api/v1/studio/hook-patterns[?pattern_type=...]` +
+  `/api/v1/studio/hook-patterns/{id}`
+- `GET /api/v1/studio/cta-patterns[?hardness=&urgency_type=]` +
+  `/api/v1/studio/cta-patterns/{id}`
+- `GET /api/v1/studio/brand-archetypes` +
+  `/api/v1/studio/brand-archetypes/{id}`
+
+剧情带货链路 API 端点总数：**34（P1 22 + P2 12）**。
+
 ## ER 关系图
 
 ```text
@@ -406,9 +633,9 @@ Project (kind=commerce_story)
 ApiKeyQuota (P1 建表, P3 启用 partner API 时使用)
 ```
 
-## Alembic 迁移链 (P1)
+## Alembic 迁移链 (P1 + P2)
 
-P1 阶段共落库 6 个迁移，必须按顺序执行：
+P1 阶段落库 6 个迁移，P2 阶段新增 1 个，共 7 个迁移按顺序执行：
 
 | Revision | 文件 | 说明 |
 | --- | --- | --- |
@@ -418,10 +645,13 @@ P1 阶段共落库 6 个迁移，必须按顺序执行：
 | `0004` | `0004_create_story_formulas.py` | `story_formulas` / `story_variants` / `story_outcomes` |
 | `0005` | `0005_create_compliance.py` | `compliance_profiles` / `compliance_findings` |
 | `0006` | `0006_create_api_key_quotas.py` | `api_key_quotas` |
+| `0007` | `0007_create_pattern_libraries.py` | **P2**: `hook_patterns` / `cta_patterns` / `brand_archetypes` |
 
-迁移之外的"系统级数据"（提示词模板、剧情公式、合规 profile）通过
-应用启动时 `app.bootstrap` 调用的 `bootstrap_*` 幂等函数写入，避免把
-SQLite 测试与 MySQL 生产的差异写进 SQL 文件。
+总迁移数：**7（baseline + 6 P1 + 1 P2）**。
+
+迁移之外的"系统级数据"（提示词模板、剧情公式、合规 profile、模式库
+seed）通过应用启动时 `app.bootstrap` 调用的 `bootstrap_*` 幂等函数写
+入，避免把 SQLite 测试与 MySQL 生产的差异写进 SQL 文件。
 
 ## 状态语义对齐
 
@@ -504,19 +734,25 @@ backend/
   `app/services/commerce/builtin_story_formulas.py` 与
   `app/services/compliance/builtin_rules.py`）。
 
-## 不在 P1 范围
+## 不在 P2 范围
 
-下列项目已知会进入后续阶段，但 P1 **未实现**，请勿基于现有代码假设
-其存在：
+P2 已经把下列原本"P1 未实现"项目全部落库（详见各章节注解）：
 
-- A/B 变体克隆与 Champion 标记（P2）
-- 国际叙事公式（Hero's Journey、Pixar Pitch、Save the Cat 等）（P2）
-- HookPattern / CTAPattern / BrandArchetype 库（P2）
-- `cn_mainland_health` / `overseas_default` / `hk_tw` 等专项合规
-  profile（P2）
-- 效果数据（StoryOutcome）写入与分析（P3）
+- ~~A/B 变体克隆与 Champion 标记~~ → 已完成 W14-T3
+- ~~国际叙事公式（Hero's Journey、Pixar、SCQA、SB7、PAS-BAB 等）~~ →
+  已完成 W11-T1
+- ~~HookPattern / CTAPattern / BrandArchetype 库~~ → 已完成 W11-T2
+- ~~`cn_mainland_health` / `overseas_default` 专项合规 profile~~ →
+  已完成 W11-T4
+
+下列项目仍未实现，将进入 P3 阶段，请勿基于现有代码假设其存在：
+
+- 效果数据（`StoryOutcome`）写入与分析（P3）
 - Partner API 启用与 `ApiKeyQuota` 业务逻辑（P3）
 - 多平台导出预设（抖音/快手/小红书/YouTube/TikTok 不同导出参数）（P3）
+- Slack / 邮件合规告警（P3）
+- 品牌资产保险柜（P3）
+- `hk_tw` 合规 profile（P3）
 
 ## References
 
