@@ -25,6 +25,7 @@ const AgentEdit = lazy(() => import('./pages/aiStudio/agents/AgentEdit'))
 const ModelManagement = lazy(() => import('./pages/aiStudio/models/ModelManagement'))
 const ChapterShotsPage = lazy(() => import('./pages/aiStudio/shots/ChapterShotsPage').then(m => ({ default: m.ChapterShotsPage })))
 const ChapterShotEditPage = lazy(() => import('./pages/aiStudio/shots/ChapterShotEditPage').then(m => ({ default: m.ChapterShotEditPage })))
+const ProductLibrary = lazy(() => import('./pages/aiStudio/commerce/products/ProductLibrary'))
 
 /** 兼容旧链接 `/projects/:projectId/chapters` → 工作台章节 Tab */
 function NavigateToWorkbenchChaptersTab() {
@@ -59,6 +60,7 @@ const App: React.FC = () => {
           <Route path="agents/:id/edit" element={<Suspense fallback={<PageSkeleton />}><AgentEdit /></Suspense>} />
           <Route path="agents" element={<Suspense fallback={<PageSkeleton />}><AgentManagement /></Suspense>} />
           <Route path="models" element={<Suspense fallback={<PageSkeleton />}><ModelManagement /></Suspense>} />
+          <Route path="commerce/products" element={<Suspense fallback={<PageSkeleton />}><ProductLibrary /></Suspense>} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>
