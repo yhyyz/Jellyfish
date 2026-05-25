@@ -1,8 +1,10 @@
 """SQLAlchemy ORM 模型。"""
 
 from app.core.db import Base
+from app.models.api_quota import ApiKeyQuota
 from app.models.base import TimestampMixin
 
+from app.models.compliance import ComplianceFinding, ComplianceProfile
 from app.models.llm import Model, ModelSettings, Provider
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
@@ -74,4 +76,6 @@ __all__ = [
     "ModelSettings",
     "GenerationTask",
     "GenerationTaskLink",
+    "ComplianceProfile",
+    "ComplianceFinding",
 ]

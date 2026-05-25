@@ -18,6 +18,7 @@ import app.models.llm  # noqa: F401
 import app.models.studio  # noqa: F401
 import app.models.task  # noqa: F401
 import app.models.task_links  # noqa: F401
+import app.models.compliance  # noqa: F401
 
 config = context.config
 
