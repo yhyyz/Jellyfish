@@ -3,8 +3,10 @@
 from app.core.db import Base
 from app.models.api_quota import ApiKeyQuota
 from app.models.base import TimestampMixin
-
+from app.models.brand_archetype import BrandArchetype
 from app.models.compliance import ComplianceFinding, ComplianceProfile
+from app.models.cta_pattern import CtaPattern
+from app.models.hook_pattern import HookPattern
 from app.models.llm import Model, ModelSettings, Provider
 from app.models.story_formula import StoryFormula, StoryOutcome, StoryVariant
 from app.models.task import GenerationTask
@@ -86,6 +88,9 @@ __all__ = [
     "StoryFormula",
     "StoryVariant",
     "StoryOutcome",
+    "HookPattern",
+    "CtaPattern",
+    "BrandArchetype",
     "Product",
     "ProductImage",
     "ProjectProductLink",
