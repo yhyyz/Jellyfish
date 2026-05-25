@@ -8,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import router as api_v1_router
-from app.bootstrap import bootstrap_all_registries
+from app.bootstrap import bootstrap_all_registries, bootstrap_async_state
 from app.config import settings
 from app.core.auth import ApiKeyMiddleware
+from app.core.db import async_session_maker
 from app.core.observability import setup_logging, setup_metrics
 from app.core.rate_limit import setup_rate_limit
 from app.schemas.common import ApiResponse
@@ -63,9 +64,29 @@ async def validation_exception_handler(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动时初始化，关闭时清理。"""
+    """应用生命周期：启动时初始化，关闭时清理。
+
+    顺序：
+    1. 配置日志；
+    2. 同步注册（providers / task adapters，内存结构）；
+    3. 异步引导（系统级 PromptTemplate 等需要 DB 会话的状态）。
+
+    第 3 步对启动失败容忍：若 DB 不可用（例如刚启动尚未 init_db），
+    仅打印 warning，不阻断进程；正常生产路径会在 lifespan 之外通过
+    init_db 或迁移先建好表。
+    """
+
     setup_logging()
     bootstrap_all_registries()
+    try:
+        async with async_session_maker() as db:
+            await bootstrap_async_state(db)
+    except Exception as exc:  # pragma: no cover - 启动期容错
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "bootstrap_async_state skipped: %s", exc
+        )
     yield
 
 

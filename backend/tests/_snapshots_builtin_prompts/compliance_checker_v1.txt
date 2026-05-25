@@ -1,0 +1,31 @@
+你是合规审查官，请对下方剧本进行 LLM 侧语义层面的二次合规检查。
+（规则引擎已先行做过关键词命中，本步骤补充语义、上下文、隐喻等维度。）
+
+【脚本】
+{&#39;shots&#39;: [{&#39;id&#39;: &#39;shot_001&#39;, &#39;duration_sec&#39;: 4, &#39;dialog&#39;: &#39;我又被同事说气色差。&#39;}, {&#39;id&#39;: &#39;shot_002&#39;, &#39;duration_sec&#39;: 4, &#39;dialog&#39;: &#39;今晚试试这瓶。&#39;}], &#39;opening_hook&#39;: &#39;你以为是熬夜，其实是脸已经罢工。&#39;, &#39;cta_text&#39;: &#39;购物车低价 30 单可见。&#39;}
+
+【目标地区】
+region: cn_mainland（cn_mainland / hk_tw / overseas）
+
+【商品品类】
+product_category: beauty
+
+【关注维度】
+1. 绝对化用语 / 误导性承诺；
+2. 与品类相关的强制声明缺失（如食品/保健需免责声明）；
+3. 隐含医疗、金融、教育等监管暗示；
+4. 影射真实人物 / 品牌 / 政治符号；
+5. 性别、年龄、地域等冒犯性表达；
+6. 风险提示完整度（投资 / 美妆 / 健身等）。
+
+【输出】
+仅输出符合 ComplianceReport schema 的 JSON：
+{
+  "variant_id": null,
+  "region": "cn_mainland",
+  "product_category": "beauty",
+  "findings": [ComplianceFinding, ...],
+  "score": <0-100>,
+  "summary": "<= 120 字概述>"
+}
+不要输出 Markdown / 解释 / 代码块。

@@ -1,0 +1,17 @@
+请为剧情中的“商品高光时刻”生成图像 prompt（hero shot），用于反转 / 揭示 /
+转化点。
+
+商品：{&#39;name&#39;: &#39;DemoSerum&#39;, &#39;brand&#39;: &#39;DemoLab&#39;, &#39;category&#39;: &#39;beauty&#39;, &#39;description&#39;: &#39;纯净配方精华，敏肌可用&#39;, &#39;selling_points&#39;: [&#39;快速补水&#39;, &#39;提亮肤色&#39;, &#39;舒缓泛红&#39;], &#39;pain_points_solved&#39;: [&#39;晨起暗沉&#39;, &#39;换季干痒&#39;], &#39;target_audience&#39;: {&#39;age_range&#39;: &#39;25-34&#39;, &#39;city_tier&#39;: &#39;T1&#39;}}
+戏剧时刻：镜头慢推近瓶身，背光勾出轮廓
+
+输出要求：
+- 商品占画面 50% 以上，处于视觉中心；
+- 光位戏剧化：背光 / 顶光 / 边缘光强调轮廓；
+- 背景虚化或纯色，避免与商品争夺注意力；
+- 可加入轻微动效暗示（粒子 / 蒸汽 / 反射），但不破坏真实感；
+- 商品状态在该时刻最“新”：无指纹 / 无划痕 / 包装完好；
+- 输出英文 prompt + 中文负面提示。
+
+负面提示：
+low quality, deformed product, multiple products, busy background,
+flat lighting, watermark, text, logo, oversharpened, plasticky surface.

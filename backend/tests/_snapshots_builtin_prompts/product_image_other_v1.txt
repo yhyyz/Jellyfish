@@ -1,0 +1,17 @@
+为商品生成一张非正面角度（detail）的参考图 prompt。
+
+商品：{&#39;name&#39;: &#39;DemoSerum&#39;, &#39;brand&#39;: &#39;DemoLab&#39;, &#39;category&#39;: &#39;beauty&#39;, &#39;description&#39;: &#39;纯净配方精华，敏肌可用&#39;, &#39;selling_points&#39;: [&#39;快速补水&#39;, &#39;提亮肤色&#39;, &#39;舒缓泛红&#39;], &#39;pain_points_solved&#39;: [&#39;晨起暗沉&#39;, &#39;换季干痒&#39;], &#39;target_audience&#39;: {&#39;age_range&#39;: &#39;25-34&#39;, &#39;city_tier&#39;: &#39;T1&#39;}}
+角度：detail（front / back / side / detail / in_use）
+
+输出要求：
+- 严格保持商品身份一致性：与正面图同型号、同配色、同包装；
+- view_angle=back：呈现背面接口 / 标签 / 包装信息；
+- view_angle=side：突出轮廓与厚度；
+- view_angle=detail：聚焦关键工艺 / 材质细节；
+- view_angle=in_use：商品处于真实使用场景（手部 / 桌面 / 户外）；
+- 同样使用 8k 分辨率、电影级光影；
+- 输出英文 prompt + 中文负面提示。
+
+负面提示：
+low quality, deformed product, distorted shape, fake reflection,
+mismatched color, multiple products, watermark, text, logo.

@@ -1,0 +1,16 @@
+为商品生成一张高质量正面参考图的图像生成 prompt。
+
+商品：{&#39;name&#39;: &#39;DemoSerum&#39;, &#39;brand&#39;: &#39;DemoLab&#39;, &#39;category&#39;: &#39;beauty&#39;, &#39;description&#39;: &#39;纯净配方精华，敏肌可用&#39;, &#39;selling_points&#39;: [&#39;快速补水&#39;, &#39;提亮肤色&#39;, &#39;舒缓泛红&#39;], &#39;pain_points_solved&#39;: [&#39;晨起暗沉&#39;, &#39;换季干痒&#39;], &#39;target_audience&#39;: {&#39;age_range&#39;: &#39;25-34&#39;, &#39;city_tier&#39;: &#39;T1&#39;}}
+风格：minimalist clean
+
+输出要求：
+- 一段英文 prompt + 一段中文负面提示，便于直接喂给图像模型；
+- 拍摄角度：正前方，居中构图，桌面或纯色背景；
+- 高品质商业静物摄影，材质 / 反光 / 阴影真实；
+- 8k 分辨率、电影级细节、专业棚拍光位；
+- 与商品类目自适应（食品强调质感，电子产品强调金属/玻璃）；
+- 不出现 logo 文字以外的水印 / 签名 / 多余道具。
+
+负面提示（强烈负面）：
+low quality, blurry, deformed, watermark, text, logo, jpeg artifacts,
+overexposed, plastic looking, multiple products, cluttered background.

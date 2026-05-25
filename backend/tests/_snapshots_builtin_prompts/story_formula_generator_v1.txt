@@ -1,0 +1,53 @@
+你是“剧情驱动型电商”的资深编剧。请基于下列上下文，输出一份满足全部硬性
+约束的 StoryScript JSON。注意：本任务下游会做 Pydantic 严格校验，任何
+schema 不符或硬约束违规都会触发自动重试。
+
+【公式】
+{&#39;id&#39;: &#39;underdog_triumph&#39;, &#39;name&#39;: &#39;凡人逆袭&#39;, &#39;beats&#39;: [{&#39;id&#39;: &#39;low_point&#39;, &#39;duration_sec&#39;: 18, &#39;function&#39;: &#39;羞辱处境&#39;}, {&#39;id&#39;: &#39;turning_point&#39;, &#39;duration_sec&#39;: 12, &#39;function&#39;: &#39;商品入场&#39;}, {&#39;id&#39;: &#39;triumph&#39;, &#39;duration_sec&#39;: 30, &#39;function&#39;: &#39;反转高光&#39;}]}
+
+【商品】
+{&#39;name&#39;: &#39;DemoSerum&#39;, &#39;brand&#39;: &#39;DemoLab&#39;, &#39;category&#39;: &#39;beauty&#39;, &#39;description&#39;: &#39;纯净配方精华，敏肌可用&#39;, &#39;selling_points&#39;: [&#39;快速补水&#39;, &#39;提亮肤色&#39;, &#39;舒缓泛红&#39;], &#39;pain_points_solved&#39;: [&#39;晨起暗沉&#39;, &#39;换季干痒&#39;], &#39;target_audience&#39;: {&#39;age_range&#39;: &#39;25-34&#39;, &#39;city_tier&#39;: &#39;T1&#39;}}
+
+【受众】
+{&#39;age_range&#39;: &#39;25-34&#39;, &#39;gender&#39;: &#39;F&#39;, &#39;city_tier&#39;: &#39;T1&#39;, &#39;motivation&#39;: &#39;通勤前 30 秒护肤&#39;}
+
+【品牌人格 / Tone Grid】
+- archetype: sage
+- tone_grid: {&#39;formal&#39;: 4, &#39;energy&#39;: 7, &#39;humor&#39;: 6, &#39;warmth&#39;: 7, &#39;specificity&#39;: 8}
+
+【目标参数】
+- target_duration_sec: 60
+- platform: douyin
+
+【硬性约束】
+1. shots 数量 3~30，单镜 duration_sec ∈ [2, 20]；总时长须落在
+   target_duration_sec 的 ±10% 漂移区间内。
+2. 商品出现层级（product_focus_level）必须包含且仅包含三次：
+   一次 subtle、一次 functional、一次 hero；其余镜头使用 none。
+3. 整段脚本中 brand_mention_count（is_brand_mention=true 的镜头数）按
+   60s 折算后不得超过 2，避免硬广感。
+4. opening_hook 必须能在前 3 秒制造冲突 / 反差 / 强情绪锚点；
+   cta_text 必须落到一个明确动作（点击购物车、领券、加购等）。
+5. dialog 与 narration 至少存在一项；纯空镜不得超过总镜头数的 25%。
+6. shots[i].id 必须为 ``shot_001`` 这类零填充三位序号。
+7. punchline 镜头（is_punchline=true）至少出现一次，落在公式 beat 中
+   被标记为转折/反转的位置。
+
+【风格指引】
+- 口语化、画面感强；避免机翻腔与广告腔；
+- archetype 的语气贯穿全脚本，但不要在每句对白里硬塞品牌；
+- 涉及功效 / 健康 / 财务等敏感品类时，禁用绝对化用语；
+- 一切人名、地名保持中性，不得出现真实公众人物。
+
+【输出】
+仅输出 JSON，必须严格匹配 StoryScript schema：
+{
+  "total_duration_sec": <number>,
+  "total_shots": <int>,
+  "formula_id": "<string>",
+  "shots": [Shot, ...],
+  "opening_hook": "<string>",
+  "cta_text": "<string>",
+  "brand_mention_count": <int>
+}
+任何 schema 不符即视为失败：不要给出 Markdown，不要解释，不要前后缀。

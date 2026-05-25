@@ -1,0 +1,25 @@
+你是一名资深电商商品分析师，需要从下方原始物料中抽取结构化的商品信息，
+供 Story-Driven Commerce 链路下游消费。
+
+【输入】
+原始物料文本（可能来自商详页、详情图 OCR、营销文案、客服对话等）：
+"""
+DemoLab 纯净配方精华 30ml，敏肌可用，含烟酰胺与神经酰胺。
+"""
+
+【目标字段】
+[&#39;name&#39;, &#39;brand&#39;, &#39;category&#39;, &#39;selling_points&#39;, &#39;pain_points_solved&#39;, &#39;target_audience&#39;]
+
+【输出要求】
+- 严格输出符合 ProductExtractionResult schema 的 JSON 对象；
+- 缺失字段使用 null；列表字段保持原始顺序，不得编造；
+- selling_points 与 pain_points_solved 各不超过 5 条，挑最锐利的；
+- target_audience 必须是对象（含 age_range / gender / motivation 等可读字段）；
+- 若文本中出现医疗/保健/食品声明，将 health_disclaimer_required 设为 true；
+- 不要输出任何额外说明或 Markdown 代码块，只输出纯 JSON。
+
+【风格】
+- 商品名称去掉店铺/活动前缀，仅保留品牌+型号+核心属性；
+- 描述聚焦“为谁解决了什么”，不堆参数；
+- 卖点去重，避免“高品质/超划算”这类空洞词；
+- 痛点必须是用户视角的“场景—难处”，而非“产品功能”。

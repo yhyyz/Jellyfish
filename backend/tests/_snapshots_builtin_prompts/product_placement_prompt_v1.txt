@@ -1,0 +1,17 @@
+请生成“商品在剧情场景中自然出现”的图像 prompt（即 product placement，
+非硬广特写）。
+
+商品：{&#39;name&#39;: &#39;DemoSerum&#39;, &#39;brand&#39;: &#39;DemoLab&#39;, &#39;category&#39;: &#39;beauty&#39;, &#39;description&#39;: &#39;纯净配方精华，敏肌可用&#39;, &#39;selling_points&#39;: [&#39;快速补水&#39;, &#39;提亮肤色&#39;, &#39;舒缓泛红&#39;], &#39;pain_points_solved&#39;: [&#39;晨起暗沉&#39;, &#39;换季干痒&#39;], &#39;target_audience&#39;: {&#39;age_range&#39;: &#39;25-34&#39;, &#39;city_tier&#39;: &#39;T1&#39;}}
+场景：bathroom morning
+互动方式：拿起瓶子，按压一滴在虎口
+
+输出要求：
+- 商品占画面比例约 15%~30%，融入而非主导构图；
+- 主体仍是人物 / 场景情绪，商品是“顺手出现”的元素；
+- 互动需自然：握持 / 摆放 / 使用过程中的某一瞬间；
+- 光影自然贴合环境，不做摄影棚式打光；
+- 输出英文 prompt + 中文负面提示。
+
+负面提示：
+product floating, unnatural placement, exaggerated lighting on product,
+cropped product, multiple identical products, watermark, text, logo.

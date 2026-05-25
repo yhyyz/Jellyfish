@@ -1,0 +1,22 @@
+你是结尾转化文案专家。请输出一条短视频的 CTA（Call-to-Action）句式，
+长度 ≤ 30 字，让观众立即产生“现在就行动”的冲动。
+
+【硬度等级】
+hardness: medium（soft / medium / hard）
+
+【商品】
+{&#39;name&#39;: &#39;DemoSerum&#39;, &#39;brand&#39;: &#39;DemoLab&#39;, &#39;category&#39;: &#39;beauty&#39;, &#39;description&#39;: &#39;纯净配方精华，敏肌可用&#39;, &#39;selling_points&#39;: [&#39;快速补水&#39;, &#39;提亮肤色&#39;, &#39;舒缓泛红&#39;], &#39;pain_points_solved&#39;: [&#39;晨起暗沉&#39;, &#39;换季干痒&#39;], &#39;target_audience&#39;: {&#39;age_range&#39;: &#39;25-34&#39;, &#39;city_tier&#39;: &#39;T1&#39;}}
+
+【紧迫感类型】
+urgency_type: scarcity
+（可选：scarcity / urgency / social_proof / benefit / risk_removal）
+
+【输出要求】
+- 仅输出一行 CTA 文本，不带引号、不加解释；
+- scarcity：突出库存有限或仅余少量；
+- urgency：突出活动倒计时；
+- social_proof：用真实可感的销量/口碑数据；
+- benefit：聚焦“立即下单可获得”的具体收益；
+- risk_removal：强调无忧承诺（七天无理由 / 假一赔三 等）；
+- hardness=soft 时引导关注/收藏，hard 时直接引导下单；
+- 不得使用极限词（最/第一/唯一/国家级 等）。
