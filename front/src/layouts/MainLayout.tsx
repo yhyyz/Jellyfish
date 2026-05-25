@@ -37,6 +37,8 @@ const MainLayout: React.FC = () => {
     if (location.pathname.startsWith('/prompts')) return ['prompts']
     if (location.pathname.startsWith('/commerce/products')) return ['commerce-products', 'commerce']
     if (location.pathname.startsWith('/commerce/projects')) return ['commerce-projects', 'commerce']
+    if (location.pathname.startsWith('/commerce/compliance')) return ['commerce-compliance', 'commerce']
+    if (location.pathname.startsWith('/commerce/formulas')) return ['commerce-formulas', 'commerce']
     if (location.pathname.startsWith('/files')) return ['files']
     if (location.pathname.startsWith('/agents')) return ['agents']
     if (location.pathname.startsWith('/models')) return ['models']
@@ -135,6 +137,7 @@ const MainLayout: React.FC = () => {
       children: [
         { key: 'commerce-products', label: <Link to="/commerce/products">商品库</Link> },
         { key: 'commerce-projects', label: <Link to="/commerce/projects">剧情项目</Link> },
+        { key: 'commerce-compliance', label: <Link to="/commerce/compliance">合规中心</Link> },
       ],
     },
     {

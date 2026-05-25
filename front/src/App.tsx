@@ -28,6 +28,8 @@ const ChapterShotEditPage = lazy(() => import('./pages/aiStudio/shots/ChapterSho
 const ProductLibrary = lazy(() => import('./pages/aiStudio/commerce/products/ProductLibrary'))
 const StoryProjectLobby = lazy(() => import('./pages/aiStudio/commerce/projects/StoryProjectLobby'))
 const StoryWorkbench = lazy(() => import('./pages/aiStudio/commerce/projects/StoryWorkbench'))
+const ComplianceCenter = lazy(() => import('./pages/aiStudio/commerce/compliance/ComplianceCenter'))
+const FormulaLibrary = lazy(() => import('./pages/aiStudio/commerce/formulas/FormulaLibrary'))
 
 /** 兼容旧链接 `/projects/:projectId/chapters` → 工作台章节 Tab */
 function NavigateToWorkbenchChaptersTab() {
@@ -65,6 +67,8 @@ const App: React.FC = () => {
           <Route path="commerce/products" element={<Suspense fallback={<PageSkeleton />}><ProductLibrary /></Suspense>} />
           <Route path="commerce/projects" element={<Suspense fallback={<PageSkeleton />}><StoryProjectLobby /></Suspense>} />
           <Route path="commerce/projects/:projectId" element={<Suspense fallback={<PageSkeleton />}><StoryWorkbench /></Suspense>} />
+          <Route path="commerce/compliance" element={<Suspense fallback={<PageSkeleton />}><ComplianceCenter /></Suspense>} />
+          <Route path="commerce/formulas" element={<Suspense fallback={<PageSkeleton />}><FormulaLibrary /></Suspense>} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>
