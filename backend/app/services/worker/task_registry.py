@@ -8,11 +8,16 @@
 
 from __future__ import annotations
 
+from app.services.commerce.archetype_rewrite_worker import (
+    build_archetype_rewrite_executor,
+)
 from app.services.commerce.compliance_check_worker import (
     DEFAULT_TIMEOUT_SEC as COMPLIANCE_CHECK_TIMEOUT_SEC,
     TASK_KIND as COMPLIANCE_CHECK_TASK_KIND,
     run_compliance_check_task,
 )
+from app.services.commerce.cta_writer_worker import build_cta_writer_executor
+from app.services.commerce.hook_writer_worker import build_hook_writer_executor
 from app.services.commerce.product_info_extract_worker import (
     DEFAULT_TIMEOUT_SECONDS as PRODUCT_INFO_EXTRACT_TIMEOUT,
     TASK_KIND as PRODUCT_INFO_EXTRACT_TASK_KIND,
@@ -115,4 +120,11 @@ task_executor_registry.register(
 task_executor_registry.register(
     "story_script_generate",
     build_story_script_generate_executor(),
+)
+# W12-T4: P2 commerce workers — hook/cta/archetype 三个 in-place patch executor，
+# 共同消费 StoryVariant.script_breakdown，单次注册集中在此处避免与 W5 系列竞态。
+task_executor_registry.register("hook_writer", build_hook_writer_executor())
+task_executor_registry.register("cta_writer", build_cta_writer_executor())
+task_executor_registry.register(
+    "archetype_rewrite", build_archetype_rewrite_executor()
 )
