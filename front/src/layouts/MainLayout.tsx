@@ -9,6 +9,7 @@ import {
   PictureOutlined,
   FileTextOutlined,
   ApiOutlined,
+  ShopOutlined,
 } from '@ant-design/icons'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
@@ -34,6 +35,8 @@ const MainLayout: React.FC = () => {
     if (location.pathname === '/projects' || location.pathname.startsWith('/projects/')) return ['projects']
     if (location.pathname.startsWith('/assets')) return ['assets']
     if (location.pathname.startsWith('/prompts')) return ['prompts']
+    if (location.pathname.startsWith('/commerce/products')) return ['commerce-products', 'commerce']
+    if (location.pathname.startsWith('/commerce/projects')) return ['commerce-projects', 'commerce']
     if (location.pathname.startsWith('/files')) return ['files']
     if (location.pathname.startsWith('/agents')) return ['agents']
     if (location.pathname.startsWith('/models')) return ['models']
@@ -61,6 +64,15 @@ const MainLayout: React.FC = () => {
       editor: '视频剪辑',
       edit: '编辑',
     }
+    // Commerce 分组下的段名映射，避免与顶层 projects/products 冲突
+    const commercePathLabels: Record<string, string> = {
+      commerce: '剧情带货',
+      products: '商品库',
+      projects: '剧情项目',
+      formulas: '公式库',
+      compliance: '合规中心',
+      analytics: '效果分析',
+    }
     path.forEach((segment, i) => {
       // 特殊：/projects/:projectId/chapters/:chapterId/* 中的 chapterId 段不展示（避免出现“章节”这一层）
       if (path[0] === 'projects' && path[2] === 'chapters' && i === 3) {
@@ -86,7 +98,7 @@ const MainLayout: React.FC = () => {
       }
 
       const isLast = i === path.length - 1
-      let label = pathLabels[segment]
+      let label = path[0] === 'commerce' ? commercePathLabels[segment] : pathLabels[segment]
       if (label === undefined) {
         if (path[0] === 'projects' && i === 1) label = '项目工作台'
         else if (path[2] === 'chapters' && i === 3) label = '章节'
@@ -115,6 +127,15 @@ const MainLayout: React.FC = () => {
       key: 'prompts',
       icon: <FileTextOutlined />,
       label: <Link to="/prompts">提示词模板</Link>,
+    },
+    {
+      key: 'commerce',
+      icon: <ShopOutlined />,
+      label: '剧情带货',
+      children: [
+        { key: 'commerce-products', label: <Link to="/commerce/products">商品库</Link> },
+        { key: 'commerce-projects', label: <Link to="/commerce/projects">剧情项目</Link> },
+      ],
     },
     {
       key: 'models',
@@ -186,6 +207,7 @@ const MainLayout: React.FC = () => {
         <Menu
           mode="inline"
           selectedKeys={selectedKeys}
+          defaultOpenKeys={location.pathname.startsWith('/commerce') ? ['commerce'] : []}
           items={menuItems}
           style={{ borderRight: 'none', paddingTop: 8 }}
         />
