@@ -8,6 +8,11 @@
 
 from __future__ import annotations
 
+from app.services.commerce.product_info_extract_worker import (
+    DEFAULT_TIMEOUT_SECONDS as PRODUCT_INFO_EXTRACT_TIMEOUT,
+    TASK_KIND as PRODUCT_INFO_EXTRACT_TASK_KIND,
+    run_product_info_extract_task,
+)
 from app.services.film.generated_video import run_video_generation_task
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
@@ -81,5 +86,13 @@ task_executor_registry.register(
         task_kind="shot_frame_prompt",
         runner=run_shot_frame_prompt_task,
         timeout_seconds=600.0,
+    ),
+)
+task_executor_registry.register(
+    PRODUCT_INFO_EXTRACT_TASK_KIND,
+    AbstractAsyncDelegatingExecutor(
+        task_kind=PRODUCT_INFO_EXTRACT_TASK_KIND,
+        runner=run_product_info_extract_task,
+        timeout_seconds=PRODUCT_INFO_EXTRACT_TIMEOUT,
     ),
 )
