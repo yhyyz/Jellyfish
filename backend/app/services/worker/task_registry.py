@@ -30,6 +30,9 @@ from app.services.commerce.story_video_batch_generate_worker import (
     build_story_video_batch_generate_executor,
 )
 from app.services.film.generated_video import run_video_generation_task
+from app.services.studio.asr_subtitle_generate_worker import (
+    build_asr_subtitle_generate_executor,
+)
 from app.services.studio.chapter_av_plan_worker import build_chapter_av_plan_executor
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.studio.tts_generate_worker import build_tts_generate_executor
@@ -143,3 +146,8 @@ task_executor_registry.register("tts_generate", build_tts_generate_executor())
 # P3 W17 T17-7: 章节级 AV plan worker（slow 队列，7200s 超时），
 # Decision F 决策树编排：estimate → speed_adjust → llm_rewrite → hold。
 task_executor_registry.register("chapter_av_plan", build_chapter_av_plan_executor())
+# P3 W17 收尾（Decision D 修订）: ASR 字幕反推 worker（fast 队列，600s 超时），
+# 用 DashScope Paraformer-v2 对 keep_native 路径生成视频的原音反推字级时间戳。
+task_executor_registry.register(
+    "asr_subtitle_generate", build_asr_subtitle_generate_executor()
+)

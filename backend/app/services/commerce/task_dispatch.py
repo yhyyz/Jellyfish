@@ -50,6 +50,12 @@ TASK_KIND_COMPLIANCE_CHECK = "compliance_check"
 #: TTS 合成任务 ``task_kind``，与 ``app.services.studio.tts_generate_worker`` 注册表同步。
 TASK_KIND_TTS_GENERATE = "tts_generate"
 
+#: ASR 字幕反推任务 ``task_kind``，与
+#: ``app.services.studio.asr_subtitle_generate_worker`` 注册表同步。
+#: P3 W17 收尾（Decision D 修订）：``keep_native`` 路径下游 worker，
+#: 用 DashScope Paraformer-v2 对模型自带原音反推字级时间戳生成字幕。
+TASK_KIND_ASR_SUBTITLE_GENERATE = "asr_subtitle_generate"
+
 #: 章节级 AV plan 任务 ``task_kind``，与
 #: ``app.services.studio.chapter_av_plan_worker`` 注册表同步。
 #: P3 W17 T17-7：Decision F 决策树编排，slow 队列。
@@ -147,6 +153,26 @@ class CommerceTaskDispatchService:
 
         return await self._enqueue(
             task_kind=TASK_KIND_TTS_GENERATE,
+            run_args=body,
+        )
+
+    async def enqueue_asr_subtitle_generate(self, body: dict[str, Any]) -> dict[str, Any]:
+        """创建 ``task_kind=asr_subtitle_generate`` 的 :class:`GenerationTask` 并投递（fast 队列）。
+
+        ``keep_native`` 路径专用：把已生成视频/音频送进 DashScope Paraformer-v2
+        反推字级时间戳生成字幕。属分钟级任务（单镜头视频通常 ≤ 6s 音频，
+        ASR 延迟 30-60s），与 TTS 对称走 ``fast`` 队列。
+
+        Args:
+            body: ASR 字幕反推请求 dict（至少包含 ``video_file_id``，可选
+                ``language_hints``）。
+
+        Returns:
+            ``{"task_id", "task_kind", "status", "enqueued_at"}``。
+        """
+
+        return await self._enqueue(
+            task_kind=TASK_KIND_ASR_SUBTITLE_GENERATE,
             run_args=body,
         )
 
@@ -269,6 +295,7 @@ class CommerceTaskDispatchService:
 
 __all__ = [
     "CommerceTaskDispatchService",
+    "TASK_KIND_ASR_SUBTITLE_GENERATE",
     "TASK_KIND_CHAPTER_AV_PLAN",
     "TASK_KIND_COMPLIANCE_CHECK",
     "TASK_KIND_PRODUCT_INFO_EXTRACT",

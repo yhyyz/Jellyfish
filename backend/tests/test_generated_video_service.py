@@ -563,3 +563,160 @@ async def test_build_run_args_accepts_supported_ratio_without_size(monkeypatch: 
 
         assert run_args["input"]["ratio"] == "9:16"
     await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# audio_strategy Level 2 prompt hint 注入（P3 W17 收尾，Decision D 修订）
+# ---------------------------------------------------------------------------
+
+
+def test_audio_strategy_prompt_hint_dict_has_both_strategies() -> None:
+    """``_AUDIO_STRATEGY_PROMPT_HINTS`` 必须同时定义两条路径文案。
+
+    任意一条缺失都会让 build_run_args 在对应分支静默退化为空 hint，
+    破坏镜头-音轨的语义对齐契约。
+    """
+
+    from app.models.types import AudioStrategy
+    from app.services.studio.generation.video.build_context import (
+        _AUDIO_STRATEGY_PROMPT_HINTS,
+        get_audio_strategy_prompt_hint,
+    )
+
+    assert AudioStrategy.silent_with_tts in _AUDIO_STRATEGY_PROMPT_HINTS
+    assert AudioStrategy.keep_native in _AUDIO_STRATEGY_PROMPT_HINTS
+    silent_hint = _AUDIO_STRATEGY_PROMPT_HINTS[AudioStrategy.silent_with_tts]
+    native_hint = _AUDIO_STRATEGY_PROMPT_HINTS[AudioStrategy.keep_native]
+    assert silent_hint and native_hint, "两条文案必须非空"
+    assert silent_hint != native_hint, "两条文案必须语义不同"
+    # getter 兜底：未在 dict 中的取值返回空串。
+    assert get_audio_strategy_prompt_hint(AudioStrategy.silent_with_tts) == silent_hint
+    assert get_audio_strategy_prompt_hint(AudioStrategy.keep_native) == native_hint
+
+
+@pytest.mark.asyncio
+async def test_build_run_args_injects_silent_with_tts_hint_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """默认 ``audio_strategy=silent_with_tts``：
+
+    - final_prompt 末尾追加 silent_with_tts 文案；
+    - 不出现 keep_native 文案；
+    - run_args["meta"]["audio_strategy"] == "silent_with_tts"。
+    """
+
+    from app.models.types import AudioStrategy
+    from app.services.studio.generation.video.build_context import (
+        _AUDIO_STRATEGY_PROMPT_HINTS,
+    )
+
+    silent_hint = _AUDIO_STRATEGY_PROMPT_HINTS[AudioStrategy.silent_with_tts]
+    native_hint = _AUDIO_STRATEGY_PROMPT_HINTS[AudioStrategy.keep_native]
+
+    db, engine = await _build_session()
+    async with db:
+        await _seed_shot_graph(db)
+        # _seed_shot_graph 不显式设置 audio_strategy，依赖 ORM 默认值
+        # AudioStrategy.silent_with_tts。
+        provider = Provider(id="p1", name="OpenAI", base_url="https://api.openai.com/v1", api_key="k")
+        model = Model(id="m_video", name="sora-mini", category=ModelCategoryKey.video, provider_id="p1")
+        settings = ModelSettings(id=1, default_video_model_id="m_video")
+        db.add_all([provider, model, settings])
+        await db.commit()
+
+        async def _fake_file_id_to_data_url(_db: AsyncSession, *, file_id: str) -> str:
+            return f"data:image/png;base64,{file_id}"
+
+        monkeypatch.setattr(
+            "app.services.film.generated_video.file_id_to_data_url",
+            _fake_file_id_to_data_url,
+        )
+
+        run_args = await build_run_args(
+            db,
+            shot_id="s1",
+            reference_mode="text_only",
+            prompt="最终视频提示词",
+            images=[],
+            ratio="16:9",
+        )
+
+        prompt_in_input = run_args["input"]["prompt"]
+        assert silent_hint in prompt_in_input, (
+            "silent_with_tts 镜头必须把对应 hint 拼到 prompt 末尾"
+        )
+        assert native_hint not in prompt_in_input, (
+            "silent_with_tts 镜头不应混入 keep_native 文案"
+        )
+        # hint 不应破坏原 prompt 主体。
+        assert "最终视频提示词" in prompt_in_input
+
+        meta = run_args.get("meta") or {}
+        assert meta.get("audio_strategy") == AudioStrategy.silent_with_tts.value
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_build_run_args_injects_keep_native_hint_when_strategy_overridden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """显式把 ``Shot.audio_strategy`` 改成 ``keep_native``：
+
+    - final_prompt 末尾应是 keep_native 文案，而不是 silent_with_tts；
+    - meta.audio_strategy == "keep_native"。
+    """
+
+    from sqlalchemy import select as sa_select
+
+    from app.models.types import AudioStrategy
+    from app.services.studio.generation.video.build_context import (
+        _AUDIO_STRATEGY_PROMPT_HINTS,
+    )
+
+    silent_hint = _AUDIO_STRATEGY_PROMPT_HINTS[AudioStrategy.silent_with_tts]
+    native_hint = _AUDIO_STRATEGY_PROMPT_HINTS[AudioStrategy.keep_native]
+
+    db, engine = await _build_session()
+    async with db:
+        await _seed_shot_graph(db)
+        # 把镜头的 audio_strategy 翻成 keep_native。
+        shot_row = (
+            await db.execute(sa_select(Shot).where(Shot.id == "s1"))
+        ).scalar_one()
+        shot_row.audio_strategy = AudioStrategy.keep_native
+
+        provider = Provider(id="p1", name="OpenAI", base_url="https://api.openai.com/v1", api_key="k")
+        model = Model(id="m_video", name="sora-mini", category=ModelCategoryKey.video, provider_id="p1")
+        settings = ModelSettings(id=1, default_video_model_id="m_video")
+        db.add_all([provider, model, settings])
+        await db.commit()
+
+        async def _fake_file_id_to_data_url(_db: AsyncSession, *, file_id: str) -> str:
+            return f"data:image/png;base64,{file_id}"
+
+        monkeypatch.setattr(
+            "app.services.film.generated_video.file_id_to_data_url",
+            _fake_file_id_to_data_url,
+        )
+
+        run_args = await build_run_args(
+            db,
+            shot_id="s1",
+            reference_mode="text_only",
+            prompt="最终视频提示词",
+            images=[],
+            ratio="16:9",
+        )
+
+        prompt_in_input = run_args["input"]["prompt"]
+        assert native_hint in prompt_in_input, (
+            "keep_native 镜头必须把对应 hint 拼到 prompt 末尾"
+        )
+        assert silent_hint not in prompt_in_input, (
+            "keep_native 镜头不应混入 silent_with_tts 文案"
+        )
+        assert "最终视频提示词" in prompt_in_input
+
+        meta = run_args.get("meta") or {}
+        assert meta.get("audio_strategy") == AudioStrategy.keep_native.value
+    await engine.dispose()

@@ -47,7 +47,7 @@ from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Literal
 
 from app.models.studio_shots import ShotDialogLine
-from app.models.types import DialogueLineMode
+from app.models.types import AudioStrategy, DialogueLineMode
 from app.models.voice_pack import VoicePack
 
 # ---------------------------------------------------------------------------
@@ -77,8 +77,14 @@ ZH_CHARS_PER_SEC_NARRATION: float = 3.0
 EN_WORDS_PER_SEC: float = 2.0
 
 
-#: 决策动作枚举：accept / speed_adjust / llm_rewrite / hold。
-DecisionAction = Literal["accept", "speed_adjust", "llm_rewrite", "hold"]
+#: 决策动作枚举：accept / speed_adjust / llm_rewrite / hold / skip_native。
+#:
+#: - ``accept`` / ``speed_adjust`` / ``llm_rewrite`` / ``hold``：Decision F 决策树
+#:   常规四个落点，参见模块顶部 docstring。
+#: - ``skip_native``（P3 W17 收尾，Decision D 修订）：``Shot.audio_strategy ==
+#:   keep_native`` 时 planner 整树跳过；模型自带原音决定时长，planner 不做
+#:   text/speed reconcile，下游靠 paraformer-v2 ASR 反推时间戳生成字幕。
+DecisionAction = Literal["accept", "speed_adjust", "llm_rewrite", "hold", "skip_native"]
 
 
 #: ``rewriter_invoker`` 协议：(db, *, original_text, target_chars, line_mode) -> rewritten_text。
@@ -304,6 +310,7 @@ class ChapterAvPlanner:
         line: ShotDialogLine,
         shot_duration_ms: int,
         voice_pack: VoicePack,
+        audio_strategy: AudioStrategy = AudioStrategy.silent_with_tts,
     ) -> DurationDecision:
         """对单条 ``ShotDialogLine`` 执行完整 Decision F 决策。
 
@@ -312,10 +319,26 @@ class ChapterAvPlanner:
             line: 待规划的对白行；只读 ``text`` / ``line_mode`` / ``id``。
             shot_duration_ms: 镜头时长（毫秒），即决策目标。
             voice_pack: 用于估算的音色包；``default_speed`` 影响估算结果。
+            audio_strategy: 镜头音频策略（P3 W17 收尾，Decision D 修订）。
+                默认 ``silent_with_tts`` 走完整 Decision F；若为 ``keep_native``
+                则整树跳过，直接返回 ``action="skip_native"`` 决策——原文落库、
+                speed=1.0、estimated_ms=shot_duration_ms 占位（真实时长由
+                视频生成模型自带原音决定，下游 ASR 反推字幕时再校准）。
 
         返回:
             :class:`DurationDecision`，其中 ``action`` 表明落点分支。
         """
+
+        if audio_strategy == AudioStrategy.keep_native:
+            return DurationDecision(
+                dialog_line_id=int(line.id),
+                action="skip_native",
+                original_text=line.text,
+                final_text=line.text,
+                suggested_speed=1.0,
+                target_duration_ms=shot_duration_ms,
+                estimated_ms=shot_duration_ms,
+            )
 
         # Step 1: ESTIMATE。
         estimate = DurationEstimator.estimate(

@@ -26,7 +26,7 @@ from typing import Awaitable, Callable
 import pytest
 
 from app.models.studio_shots import ShotDialogLine
-from app.models.types import DialogueLineMode, VoiceGender, VoiceProvider
+from app.models.types import AudioStrategy, DialogueLineMode, VoiceGender, VoiceProvider
 from app.models.voice_pack import VoicePack
 from app.services.studio.chapter_av_planner import (
     MAX_REWRITE_ATTEMPTS,
@@ -374,3 +374,74 @@ def test_estimator_re_export_for_consumers() -> None:
         text="测试", line_mode=DialogueLineMode.dialogue, voice_pack=pack, speed=1.0
     )
     assert est.estimated_ms > 0
+
+
+# ---------------------------------------------------------------------------
+# 10. keep_native 分流：skip_native 早返回（P3 W17 收尾，Decision D 修订）
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_plan_skip_native_when_audio_strategy_is_keep_native() -> None:
+    """``audio_strategy == keep_native`` 时跳过 Decision F 决策树。
+
+    验证：
+    - ``action`` 必须是 ``skip_native``，而不是常规四个动作；
+    - ``original_text`` / ``final_text`` 与原文一致（不会触发 LLM 改写）；
+    - ``suggested_speed`` 固定 1.0（模型自带原音决定时长）；
+    - ``estimated_ms == shot_duration_ms``（占位，下游 ASR 反推时再校准）；
+    - ``rewriter`` 一次都不应被调用（避免误烧 LLM token）。
+    """
+
+    pack = _make_voice_pack()
+    long_text = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥风雨雷电山川河海"
+    line = _make_dialog_line(text=long_text)
+    rewriter = _FakeRewriter()
+    planner = _make_planner(rewriter)
+
+    decision = await planner.plan_dialog_line(
+        db=None,
+        line=line,
+        shot_duration_ms=2000,
+        voice_pack=pack,
+        audio_strategy=AudioStrategy.keep_native,
+    )
+
+    assert decision.action == "skip_native"
+    assert decision.original_text == long_text
+    assert decision.final_text == long_text
+    assert decision.suggested_speed == pytest.approx(1.0)
+    assert decision.target_duration_ms == 2000
+    assert decision.estimated_ms == 2000
+    assert decision.rewrite_attempts == 0
+    assert decision.warning is None
+    assert rewriter.calls == []
+
+
+@pytest.mark.asyncio
+async def test_plan_default_audio_strategy_is_silent_with_tts() -> None:
+    """``plan_dialog_line`` 不传 ``audio_strategy`` 时默认走 ``silent_with_tts``，
+
+    保持向后兼容：W17-Wave3 已有调用方（无 ``audio_strategy`` 关键字）继续走完整
+    Decision F 决策树，不被 keep_native 短路。
+    """
+
+    pack = _make_voice_pack()
+    line = _make_dialog_line(text="一二三四五六七八")  # 8 字 → est ≈ 2000ms
+    rewriter = _FakeRewriter()
+    planner = _make_planner(rewriter)
+
+    decision_default = await planner.plan_dialog_line(
+        db=None, line=line, shot_duration_ms=2000, voice_pack=pack
+    )
+    decision_explicit = await planner.plan_dialog_line(
+        db=None,
+        line=line,
+        shot_duration_ms=2000,
+        voice_pack=pack,
+        audio_strategy=AudioStrategy.silent_with_tts,
+    )
+
+    assert decision_default.action == decision_explicit.action == "accept"
+    assert decision_default.action != "skip_native"
+    assert rewriter.calls == []

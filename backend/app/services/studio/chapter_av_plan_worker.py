@@ -42,7 +42,7 @@ from app.core.db import async_session_maker
 from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.models.studio_shots import Shot, ShotDetail, ShotDialogLine
-from app.models.types import DialogueLineMode
+from app.models.types import AudioStrategy, DialogueLineMode
 from app.models.voice_pack import VoicePack
 from app.services.llm.runtime import build_default_text_llm_sync
 from app.services.studio.chapter_av_planner import (
@@ -129,11 +129,13 @@ def _default_rewriter_invoker(session: AsyncSession) -> RewriterInvoker:
 
 async def _load_chapter_shots_with_lines(
     session: AsyncSession, *, chapter_id: str
-) -> list[tuple[ShotDetail, list[ShotDialogLine]]]:
-    """加载章节内所有 ``(ShotDetail, dialog_lines)`` 二元组，按 ``Shot.index`` 排序。
+) -> list[tuple[Shot, ShotDetail, list[ShotDialogLine]]]:
+    """加载章节内所有 ``(Shot, ShotDetail, dialog_lines)`` 三元组，按 ``Shot.index`` 排序。
 
-    返回结构便于 worker 主循环按 “镜头优先 → 行优先” 的双层遍历，
-    同时保证只在内存里持有需要写回的行。
+    返回结构便于 worker 主循环按 "镜头优先 → 行优先" 的双层遍历，同时保证只在
+    内存里持有需要写回的行。三元组比 W17-Wave3 的二元组多了 ``Shot`` 自身：
+    ``audio_strategy`` 字段挂在 ``Shot`` 而非 ``ShotDetail``，必须把 ``Shot``
+    一并取出，让主循环按策略分流（keep_native 跳过 Decision F 决策树）。
     """
 
     shot_rows = (
@@ -142,7 +144,7 @@ async def _load_chapter_shots_with_lines(
         )
     ).scalars().all()
 
-    out: list[tuple[ShotDetail, list[ShotDialogLine]]] = []
+    out: list[tuple[Shot, ShotDetail, list[ShotDialogLine]]] = []
     for shot in shot_rows:
         detail = await session.get(ShotDetail, shot.id)
         if detail is None:
@@ -154,7 +156,7 @@ async def _load_chapter_shots_with_lines(
                 .order_by(ShotDialogLine.index)
             )
         ).scalars().all()
-        out.append((detail, list(lines)))
+        out.append((shot, detail, list(lines)))
     return out
 
 
@@ -276,10 +278,38 @@ async def run_chapter_av_plan_task(
             holds: list[int] = []
             warnings: list[dict[str, Any]] = []
 
-            for detail, lines in shots_and_lines:
+            for shot, detail, lines in shots_and_lines:
                 shot_duration_ms = max(0, int(detail.duration or 0)) * 1000
+                # SQLAlchemy String 列回读为 raw str，需 coerce 回 AudioStrategy
+                # 才能让下游 == 比较与 Literal 匹配稳定。
+                raw_strategy = shot.audio_strategy or AudioStrategy.silent_with_tts
+                audio_strategy = (
+                    raw_strategy
+                    if isinstance(raw_strategy, AudioStrategy)
+                    else AudioStrategy(raw_strategy)
+                )
                 cursor = 0
                 for line in lines:
+                    # keep_native：模型自带原音决定时长，planner 不做 text/speed
+                    # reconcile，跳过 voice_pack 解析与 Decision F 决策树。直接
+                    # inline 构造 skip_native 决策；下游 ASR 反推字幕时再校准时间戳。
+                    if audio_strategy == AudioStrategy.keep_native:
+                        skip_decision = DurationDecision(
+                            dialog_line_id=int(line.id),
+                            action="skip_native",
+                            original_text=line.text,
+                            final_text=line.text,
+                            suggested_speed=1.0,
+                            target_duration_ms=shot_duration_ms,
+                            estimated_ms=shot_duration_ms,
+                        )
+                        decisions.append(skip_decision)
+                        _apply_decision_to_line(
+                            line=line, decision=skip_decision, start_time_ms=cursor
+                        )
+                        cursor = (line.end_time_ms or 0)
+                        continue
+
                     voice_pack = await _resolve_voice_pack(session, line=line)
                     if voice_pack is None:
                         # 没有可用音色：标记为 hold，不进入决策树以避免误估。
@@ -309,6 +339,7 @@ async def run_chapter_av_plan_task(
                         line=line,
                         shot_duration_ms=shot_duration_ms,
                         voice_pack=voice_pack,
+                        audio_strategy=audio_strategy,
                     )
                     decisions.append(decision)
                     if decision.action == "hold":

@@ -29,6 +29,7 @@ from app.models.studio_projects import Chapter, Project
 from app.models.studio_shots import Shot, ShotDetail, ShotDialogLine
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus
 from app.models.types import (
+    AudioStrategy,
     CameraAngle,
     CameraMovement,
     CameraShotType,
@@ -104,8 +105,14 @@ async def _seed_project_chapter_shot(
     sm: async_sessionmaker[AsyncSession],
     *,
     duration_sec: int = 4,
+    audio_strategy: AudioStrategy = AudioStrategy.silent_with_tts,
 ) -> None:
-    """种入 Project / Chapter / Shot / ShotDetail / VoicePack 完整骨架。"""
+    """种入 Project / Chapter / Shot / ShotDetail / VoicePack 完整骨架。
+
+    ``audio_strategy`` 控制 ``Shot.audio_strategy`` 字段，缺省 ``silent_with_tts``
+    与生产 server_default 一致；keep_native 用例显式传参以触发 worker 的
+    skip_native 分流路径。
+    """
 
     async with sm() as db:
         db.add(
@@ -130,6 +137,7 @@ async def _seed_project_chapter_shot(
                 index=1,
                 title="测试镜头",
                 status=ShotStatus.ready,
+                audio_strategy=audio_strategy,
             )
         )
         db.add(
@@ -381,3 +389,86 @@ async def test_runner_records_holds_in_result_warnings(
         # 该行被列入 holds 列表，便于前端高亮。
         holds = result.get("holds") or []
         assert line_id in holds
+
+
+# ---------------------------------------------------------------------------
+# 5. keep_native 分流：worker 走 skip_native 分支（P3 W17 收尾，Decision D 修订）
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_runner_skips_native_path_when_audio_strategy_is_keep_native(
+    patched_session: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``Shot.audio_strategy=keep_native`` 时：
+
+    - decision.action 应为 ``skip_native``；
+    - 不调 rewriter（即便文本远超阈值也不应触发 LLM 改写）；
+    - line.text 保持原文；line.start_time_ms / end_time_ms 仍被写入；
+    - GenerationTask 正常落到 succeeded。
+    """
+
+    _install_no_cancel(monkeypatch)
+
+    # 即便注入"永远不收敛"的 rewriter，keep_native 也应跳过它。
+    rewrite_calls: list[str] = []
+
+    async def _track_rewriter(
+        _db: object,
+        *,
+        original_text: str,
+        target_chars: int,  # pylint: disable=unused-argument
+        line_mode: DialogueLineMode,  # pylint: disable=unused-argument
+    ) -> str:
+        rewrite_calls.append(original_text)
+        return original_text
+
+    monkeypatch.setattr(
+        worker_mod, "_default_rewriter_invoker", lambda _db: _track_rewriter
+    )
+
+    await _seed_project_chapter_shot(
+        patched_session,
+        duration_sec=2,
+        audio_strategy=AudioStrategy.keep_native,
+    )
+    long_text = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥风雨雷电山川河海"
+    line_id = await _seed_dialog_line(patched_session, text=long_text)
+
+    task_id = "task-keep-native"
+    await _seed_generation_task(patched_session, task_id=task_id)
+
+    await run_chapter_av_plan_task(
+        task_id, {"chapter_id": _CHAPTER_ID}
+    )
+
+    assert rewrite_calls == [], (
+        "keep_native 路径绝不应触发 LLM 改写，避免误烧 token"
+    )
+
+    async with patched_session() as db:
+        line = (
+            await db.execute(
+                select(ShotDialogLine).where(ShotDialogLine.id == line_id)
+            )
+        ).scalar_one()
+        assert line.text == long_text, "skip_native 必须保留原文"
+        assert line.start_time_ms == 0
+        assert line.end_time_ms == 2000, (
+            "estimated_ms == shot_duration_ms 占位，2000ms == duration_sec*1000"
+        )
+
+        task_row = await db.get(GenerationTask, task_id)
+        assert task_row is not None
+        assert task_row.status == GenerationTaskStatus.succeeded
+        assert isinstance(task_row.result, dict)
+        decisions = task_row.result.get("decisions") or []
+        assert len(decisions) == 1
+        assert decisions[0]["action"] == "skip_native"
+        assert decisions[0]["original_text"] == long_text
+        assert decisions[0]["final_text"] == long_text
+        assert decisions[0]["suggested_speed"] == pytest.approx(1.0)
+        # holds / warnings 列表均应为空（skip_native 不是 hold）。
+        assert task_row.result.get("holds") == []
+        assert task_row.result.get("warnings") == []

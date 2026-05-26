@@ -18,7 +18,7 @@ from app.core.tasks import VideoGenerationTask
 from app.models.llm import Model, ModelCategoryKey, ModelSettings
 from app.models.task_links import GenerationTaskLink
 from app.models.studio import FileItem, Shot, ShotDetail, ShotFrameImage, ShotFrameType
-from app.models.types import FileUsageKind
+from app.models.types import AudioStrategy, FileUsageKind
 from app.services.common import entity_not_found
 from app.services.llm.provider_resolver import resolve_provider_config_by_model
 from app.services.studio.file_usages import sync_usage_from_shot_context
@@ -29,6 +29,9 @@ from app.services.studio.generation.video import (
     build_video_context,
     build_video_submission_payload,
     validate_images_count,
+)
+from app.services.studio.generation.video.build_context import (
+    get_audio_strategy_prompt_hint,
 )
 from app.services.studio.shot_status import recompute_shot_status
 from app.services.worker.async_task_support import cancel_if_requested_async
@@ -179,12 +182,30 @@ async def build_run_args(
     ShotProductReferenceResolver 把镜头挂载的 ProductImage 解析成 file_id 列表，
     再走通用 frame_map 路径。reference_images_base64 在 input 中独立通道，与
     first/last/key_frame_b64 互斥；aliyun_bailian 兜底分支被跳过避免双发。
+
+    P3 W17 收尾（Decision D 修订）：按 ``Shot.audio_strategy`` 在拼装阶段：
+
+    - 把 Level 2 prompt hint 追加到 ``final_prompt`` 末尾，引导视频生成模型在画面里
+      呈现合适的口型/静音状态（参考 ``_AUDIO_STRATEGY_PROMPT_HINTS``）；
+    - 把 ``audio_strategy`` 写入 ``run_args["meta"]``，供下游 chapter_av_plan_worker /
+      字幕渲染 / 视频导出阶段决定走 TTS 合成还是 ASR 反推。
     """
     model = await resolve_default_video_model(db)
     provider_cfg = await load_provider_config_by_model(db, model)
     shot_detail = await validate_shot_and_duration(db, shot_id)
     resolved_ratio = await resolve_effective_video_options(requested_ratio=ratio)
     base = build_video_base_draft(shot_id=shot_id, prompt=prompt)
+
+    shot_row = await db.get(Shot, shot_id)
+    # ``Shot.audio_strategy`` 列底层是 ``String(32)``，SQLAlchemy 不会把回读值自动
+    # 转回 :class:`AudioStrategy` 枚举（Mapped 注解只是 typing hint，不触发 cast）。
+    # 这里显式 coerce 一次，让下游 ``audio_strategy.value`` / ``==`` 比较稳定。
+    raw_strategy = shot_row.audio_strategy if shot_row is not None else AudioStrategy.silent_with_tts
+    audio_strategy = (
+        raw_strategy
+        if isinstance(raw_strategy, AudioStrategy)
+        else AudioStrategy(raw_strategy)
+    )
 
     reference_warnings: list[str] = []
     resolved_images: list[str] = list(images or [])
@@ -224,6 +245,10 @@ async def build_run_args(
     if not final_prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
 
+    audio_strategy_hint = get_audio_strategy_prompt_hint(audio_strategy).strip()
+    if audio_strategy_hint:
+        final_prompt = f"{final_prompt}\n\n{audio_strategy_hint}"
+
     if reference_mode == "multi_ref":
         # multi_ref 通道：reference_images_base64 list；frame slots 全部 None；
         # aliyun_bailian 兜底分支跳过避免与 multi_ref payload 双发。
@@ -249,6 +274,7 @@ async def build_run_args(
                 "reference_mode": "multi_ref",
                 "reference_count": len(reference_images_base64),
                 "reference_warnings": reference_warnings,
+                "audio_strategy": audio_strategy.value,
             },
         }
         prompt_preview_payload = submission.extra.get("prompt_preview")
@@ -283,6 +309,9 @@ async def build_run_args(
             "model": model.name,
             "ratio": resolved_ratio,
             "seconds": shot_detail.duration,
+        },
+        "meta": {
+            "audio_strategy": audio_strategy.value,
         },
     }
     prompt_preview_payload = submission.extra.get("prompt_preview")
