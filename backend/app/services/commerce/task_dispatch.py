@@ -56,6 +56,12 @@ TASK_KIND_TTS_GENERATE = "tts_generate"
 #: 用 DashScope Paraformer-v2 对模型自带原音反推字级时间戳生成字幕。
 TASK_KIND_ASR_SUBTITLE_GENERATE = "asr_subtitle_generate"
 
+#: 字幕渲染任务 ``task_kind``，与
+#: ``app.services.studio.shot_subtitle_render_worker`` 注册表同步。
+#: P3 W18：把字级时间戳（来自 TTS synthesize 或 ASR Paraformer-v2 反推）渲染
+#: 成 ``.ass`` 字幕文件，落 minio + SubtitleTrack 表，供下游章节合成阶段烧录。
+TASK_KIND_SHOT_SUBTITLE_RENDER = "shot_subtitle_render"
+
 #: 章节级 AV plan 任务 ``task_kind``，与
 #: ``app.services.studio.chapter_av_plan_worker`` 注册表同步。
 #: P3 W17 T17-7：Decision F 决策树编排，slow 队列。
@@ -173,6 +179,26 @@ class CommerceTaskDispatchService:
 
         return await self._enqueue(
             task_kind=TASK_KIND_ASR_SUBTITLE_GENERATE,
+            run_args=body,
+        )
+
+    async def enqueue_shot_subtitle_render(self, body: dict[str, Any]) -> dict[str, Any]:
+        """创建 ``task_kind=shot_subtitle_render`` 的 :class:`GenerationTask` 并投递（fast 队列）。
+
+        W18 字幕渲染：把字级时间戳（``word_timestamps``）按 SubtitleStyle 渲染为
+        ``.ass`` 文件，落 minio + 写 SubtitleTrack 行。属秒级任务（纯计算 +
+        一次 minio 上传），走 ``fast`` 队列与 TTS / ASR 对齐。
+
+        Args:
+            body: 字幕渲染请求 dict（至少包含 ``shot_id`` / ``style_id`` /
+                ``word_timestamps``，可选 ``language_code`` / ``source``）。
+
+        Returns:
+            ``{"task_id", "task_kind", "status", "enqueued_at"}``。
+        """
+
+        return await self._enqueue(
+            task_kind=TASK_KIND_SHOT_SUBTITLE_RENDER,
             run_args=body,
         )
 
@@ -299,6 +325,7 @@ __all__ = [
     "TASK_KIND_CHAPTER_AV_PLAN",
     "TASK_KIND_COMPLIANCE_CHECK",
     "TASK_KIND_PRODUCT_INFO_EXTRACT",
+    "TASK_KIND_SHOT_SUBTITLE_RENDER",
     "TASK_KIND_STORY_SCRIPT_GENERATE",
     "TASK_KIND_STORY_VIDEO_BATCH_GENERATE",
     "TASK_KIND_TTS_GENERATE",

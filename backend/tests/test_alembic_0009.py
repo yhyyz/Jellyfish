@@ -53,6 +53,11 @@ import app.models.voice_pack  # noqa: F401  pylint: disable=unused-import
 # 0009 引入的新表
 NEW_TABLES_0009: tuple[str, ...] = ("voice_packs", "tts_cache")
 
+#: 0010 (W18) 引入的两张新表；本文件聚焦 0009，但 fixture 必须把
+#: 0010 表也排除在 ``Base.metadata.create_all`` 之外，否则 alembic
+#: 升级到 head（=0010）时会因表已存在而 OperationalError。
+_NEW_TABLES_0010: tuple[str, ...] = ("subtitle_styles", "subtitle_tracks")
+
 # 0009 在既有表上新增的 FK 列：表 -> 列名集合
 NEW_FK_COLUMNS: dict[str, tuple[str, ...]] = {
     "characters": ("voice_pack_id",),
@@ -92,7 +97,7 @@ def _setup_pre_0009_schema(engine: Engine) -> None:
 
     fresh = MetaData()
     for source in Base.metadata.sorted_tables:
-        if source.name in NEW_TABLES_0009:
+        if source.name in NEW_TABLES_0009 or source.name in _NEW_TABLES_0010:
             continue
         skip_cols = set(NEW_FK_COLUMNS.get(source.name, ()))
 
@@ -166,7 +171,7 @@ def _table_columns(engine: Engine, table: str) -> set[str]:
 
 
 def test_revision_chain_includes_0009() -> None:
-    """0009 必须接在 0008 之后，并且是当前唯一 head。"""
+    """0009 必须接在 0008 之后；当前 head 已被 0010（W18 字幕引擎）接管。"""
     cfg = _make_alembic_config("sqlite:///:memory:")
     script = ScriptDirectory.from_config(cfg)
 
@@ -175,7 +180,7 @@ def test_revision_chain_includes_0009() -> None:
     assert rev.down_revision == "0008"
 
     heads = script.get_heads()
-    assert list(heads) == ["0009"], f"expected single head 0009, got {heads!r}"
+    assert list(heads) == ["0010"], f"expected single head 0010, got {heads!r}"
 
 
 def test_upgrade_head_creates_new_tables(baseline_engine: Engine) -> None:
@@ -239,10 +244,15 @@ def test_upgrade_head_adds_fk_columns(baseline_engine: Engine) -> None:
 def test_downgrade_removes_new_tables_and_columns(
     baseline_engine: Engine,
 ) -> None:
-    """downgrade -1 后必须干净移除两张表与 5 个 FK 列。"""
+    """downgrade 到 0008 后必须干净移除 0009 引入的两张表与 5 个 FK 列。
+
+    注意：当前 alembic head 已是 0010（W18 字幕引擎），用 ``-1`` 只会回退一步
+    （回到 0009），因此本测试显式 downgrade 到 ``"0008"`` 才能验证 0009 的
+    回滚能力。
+    """
     cfg = _make_alembic_config(str(baseline_engine.url))
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, "0008")
 
     inspector = inspect(baseline_engine)
     tables = set(inspector.get_table_names())

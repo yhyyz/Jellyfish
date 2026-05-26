@@ -457,3 +457,58 @@ class ToneDimension(str, Enum):
     conciseness = "conciseness"       # Long-winded ↔ Concise
     conventionality = "conventionality"  # Conventional ↔ Irreverent
     safety = "safety"                 # Safe ↔ Provocative
+
+
+
+# === Subtitle Engine Enums (P3 W18) ===
+
+
+class SubtitleFormat(str, Enum):
+    """字幕文件格式（P3 W18）。
+
+    控制 ``shot_subtitle_render`` worker 的产物落地格式：
+
+    - ``ass``：Advanced SubStation Alpha v4+，支持 ``\\k`` / ``\\kf`` 逐词高亮，
+      为本系统默认格式（DOUYIN/TIKTOK/REELS 三套内置模板均输出 ass）。
+    - ``srt``：基础时间戳字幕，无样式信息，作为最大兼容性的 fallback。
+    - ``vtt``：HTML5 video 原生支持，前端预览（StoryWorkbench 的字幕样式预览）使用。
+    """
+
+    ass = "ass"
+    srt = "srt"
+    vtt = "vtt"
+
+
+class SubtitleSource(str, Enum):
+    """字幕字级时间戳来源（P3 W18，W17 收尾双路径产出对齐）。
+
+    与 ``Shot.audio_strategy`` 严格对应：
+
+    - ``tts_word_timestamps``：``silent_with_tts`` 路径产出，由 CosyVoice synthesize
+      返回的 ``TtsWordTimestamp[]`` 直接驱动。
+    - ``asr_paraformer_v2``：``keep_native`` 路径产出，由 ``asr_subtitle_generate_worker``
+      调 Paraformer-v2 反推得到的字级时间戳驱动。
+    - ``manual``：人工导入或编辑（W18 暂未启用编辑面板，预留枚举值）。
+    """
+
+    tts_word_timestamps = "tts_word_timestamps"
+    asr_paraformer_v2 = "asr_paraformer_v2"
+    manual = "manual"
+
+
+class SubtitleAlignment(str, Enum):
+    """ASS Style 行 Alignment 字段语义化枚举（numpad 1-9 布局）。
+
+    底/中/上 × 左/中/右 共 9 个落点；本系统短视频字幕以 ``bottom_center`` 为主流，
+    其它值供未来 lower-third / 顶部综艺贴纸等场景使用。
+    """
+
+    bottom_left = "bottom_left"      # ASS=1
+    bottom_center = "bottom_center"  # ASS=2
+    bottom_right = "bottom_right"    # ASS=3
+    middle_left = "middle_left"      # ASS=4
+    middle_center = "middle_center"  # ASS=5
+    middle_right = "middle_right"    # ASS=6
+    top_left = "top_left"            # ASS=7
+    top_center = "top_center"        # ASS=8
+    top_right = "top_right"          # ASS=9

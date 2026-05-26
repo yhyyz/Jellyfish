@@ -89,10 +89,11 @@ def _setup_pre_0008_schema(engine: Engine) -> None:
         ),
     }
     new_tables_0009 = ("voice_packs", "tts_cache")
+    new_tables_0010 = ("subtitle_styles", "subtitle_tracks")
 
     fresh = MetaData()
     for source in Base.metadata.sorted_tables:
-        if source.name in new_tables_0009:
+        if source.name in new_tables_0009 or source.name in new_tables_0010:
             continue
         skip_cols = set(fk_columns_0009.get(source.name, ()))
         copy_target = source.to_metadata(fresh)
@@ -167,7 +168,7 @@ def _shot_columns(engine: Engine) -> dict[str, dict[str, object]]:
 
 
 def test_revision_chain_includes_0008() -> None:
-    """0008 必须接在 0007 之后；当前 head 已被 0009 接管。"""
+    """0008 必须接在 0007 之后；当前 head 已被 0010（W18 字幕引擎）接管。"""
     cfg = _make_alembic_config("sqlite:///:memory:")
     script = ScriptDirectory.from_config(cfg)
 
@@ -176,7 +177,7 @@ def test_revision_chain_includes_0008() -> None:
     assert rev.down_revision == "0007"
 
     heads = script.get_heads()
-    assert list(heads) == ["0009"], f"expected single head 0009, got {heads!r}"
+    assert list(heads) == ["0010"], f"expected single head 0010, got {heads!r}"
 
 
 def test_upgrade_head_adds_new_columns(baseline_engine: Engine) -> None:

@@ -47,10 +47,11 @@ import app.models.story_formula  # noqa: F401  pylint: disable=unused-import
 import app.models.studio  # noqa: F401  pylint: disable=unused-import
 import app.models.task  # noqa: F401  pylint: disable=unused-import
 import app.models.task_links  # noqa: F401  pylint: disable=unused-import
+import app.models.subtitle  # noqa: F401  pylint: disable=unused-import
 import app.models.voice_pack  # noqa: F401  pylint: disable=unused-import
 
 
-# === 常量：W2/W11/W17 新增的 15 张表 ===
+# === 常量：W2/W11/W17/W18 新增的 17 张表 ===
 NEW_TABLES: frozenset[str] = frozenset(
     {
         "products",
@@ -70,6 +71,9 @@ NEW_TABLES: frozenset[str] = frozenset(
         # W17 T17-3 (revision 0009) — voice pack + TTS cache
         "voice_packs",
         "tts_cache",
+        # W18 T18-3 (revision 0010) — subtitle engine
+        "subtitle_styles",
+        "subtitle_tracks",
     }
 )
 
@@ -84,6 +88,7 @@ EXPECTED_CHAIN: tuple[tuple[str, str | None], ...] = (
     ("0007", "0006"),
     ("0008", "0007"),
     ("0009", "0008"),
+    ("0010", "0009"),
 )
 
 # 每条 revision 必须显式声明的关键索引（用于 test_upgrade 的 spot check）。
@@ -390,7 +395,7 @@ def test_revision_chain_is_linear() -> None:
             )
 
     heads = script.get_heads()
-    assert list(heads) == ["0009"], f"expected single head 0009, got {heads!r}"
+    assert list(heads) == ["0010"], f"expected single head 0010, got {heads!r}"
 
 
 # --------------------------------------------------------------------------- #

@@ -34,6 +34,9 @@ from app.services.studio.asr_subtitle_generate_worker import (
     build_asr_subtitle_generate_executor,
 )
 from app.services.studio.chapter_av_plan_worker import build_chapter_av_plan_executor
+from app.services.studio.shot_subtitle_render_worker import (
+    build_shot_subtitle_render_executor,
+)
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.studio.tts_generate_worker import build_tts_generate_executor
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
@@ -150,4 +153,9 @@ task_executor_registry.register("chapter_av_plan", build_chapter_av_plan_executo
 # 用 DashScope Paraformer-v2 对 keep_native 路径生成视频的原音反推字级时间戳。
 task_executor_registry.register(
     "asr_subtitle_generate", build_asr_subtitle_generate_executor()
+)
+# P3 W18: 字幕渲染 worker（fast 队列，120s 超时），把字级时间戳 + SubtitleStyle
+# 渲染为 .ass 文件，落 minio + 写 SubtitleTrack 行，供下游章节合成阶段烧录。
+task_executor_registry.register(
+    "shot_subtitle_render", build_shot_subtitle_render_executor()
 )
