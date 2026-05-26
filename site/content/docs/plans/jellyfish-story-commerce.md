@@ -126,14 +126,15 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 
 | 决策 | 内容 | 来源 |
 | ---- | ---- | ---- |
-| A | `happyhorse-1.0-t2v/i2v/r2v` 自带音轨**一律丢弃**：模型不接受指定台词文本、跨镜音色漂移、机械感明显，违反"剧本即真相"契约 | Oracle 评审 + 阿里官方 API 文档（无音频参数）+ 36kr 实测 |
-| B | 完全不做 lip-sync：带货短剧 90% 镜头演员不张嘴或不出现，旁白驱动 + 大字幕是工业默认 | tkfff 2026 攻略 + 字节小云雀官方建议 |
+| A | `happyhorse-1.0-t2v/i2v/r2v` 自带音轨**默认丢弃**（silent_with_tts 路径）：模型不接受指定台词文本、跨镜音色漂移、机械感明显，违反"剧本即真相"契约。**逃生口路径** `keep_native` 见 Decision D（W17 收尾启用） | Oracle 评审 + 阿里官方 API 文档（无音频参数）+ 36kr 实测 + W17 manual QA |
+| B | 完全不做 lip-sync：带货短剧 90% 镜头演员不张嘴或不出现，旁白驱动 + 大字幕是工业默认（仅 keep_native 路径鼓励演员自然口型，由 ASR 反推字幕） | tkfff 2026 攻略 + 字节小云雀官方建议 |
 | C | `r2v` **不拆 task_kind**：扩 `video_generation` 内部分支，按 capability（非 model name 字符串）走 `multi_ref` 路径 | explore agent 改动面分析 |
-| D | `Shot.audio_strategy: silent_with_tts \| keep_native`：默认 `silent_with_tts`，给极个别需要原音的镜头逃生口，**默认不开** | Oracle 修正项 |
+| D | `Shot.audio_strategy: silent_with_tts \| keep_native` **双路径并存（W17 收尾修订）**：默认 `silent_with_tts` → 静音 + CosyVoice TTS 覆盖；`keep_native` 保留模型原音 + Paraformer-v2 ASR 反推字幕，给"演员张嘴/口播"等需要原音对口型镜头使用。两条路径在 prompt hint / build_run_args / chapter_av_planner / 字幕渲染阶段全部对称 first-class | Oracle 修正项 + W17 manual QA 验证 |
 | E | 字幕默认 **hardsub + ASS 源文件存档**：抖音 / TikTok 算法对外挂字幕减分，但 ASS 源文件必须独立保留以便后续换语言 / 换字号免重生整段视频 | 路由通 2026 + Blitzcut |
-| F | `chapter_av_planner`（W17 内嵌子任务）：TTS 合成前先估时长（CosyVoice ≈ 3 字 / 秒），mismatch > 15% 回灌 LLM 改剧本；LLM prompt 一并加 "本镜头 N 秒，旁白 ≤ 3·N 个汉字" 硬约束 | Oracle 评审最被低估的硬骨头 |
+| F | `chapter_av_planner`（W17 内嵌子任务）：TTS 合成前先估时长（CosyVoice ≈ 3 字 / 秒），mismatch > 15% 回灌 LLM 改剧本；LLM prompt 一并加 "本镜头 N 秒，旁白 ≤ 3·N 个汉字" 硬约束。`keep_native` 镜头 W17 收尾后整树跳过 Decision F（产出 `skip_native` 决策），由模型自带原音决定时长 | Oracle 评审最被低估的硬骨头 + W17 收尾分流 |
 | G | 9 槽 `ReferenceImageBudget`：Product 3–5 / Character 2–3 / Scene 1–2，超出按优先级丢弃并 warning | Oracle 修正项 |
 | H | `product_focus_level` → `view_angle` 用**优先级序列**而非 1:1：hero=`[FRONT,THREE_QUARTER,DETAIL]` / functional=`[DETAIL,THREE_QUARTER,FRONT]` / subtle=`[THREE_QUARTER,FRONT]` | Oracle 修正项 |
+| I | **Level 2 prompt hint（W17 收尾新增）**：`build_run_args` 在调 DashScope 前根据 `Shot.audio_strategy` 把对应 hint 拼到 `final_prompt` 末尾。silent_with_tts 引导真人保持安静、规避对镜头说话特写；keep_native 鼓励自然口型与情绪表达。`run_args.meta.audio_strategy` 同步写入供下游分流 | W17 收尾用户拍板 |
 
 ### P3 Wave 16 — r2v 多图参考 + ProductImage 自动绑定（约 4 工作日）
 
@@ -152,35 +153,44 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 | T16-11  | `pnpm run openapi:update`；前端 generated types 同步                                                                                                                                          |
 | T16-12  | manual QA：用 P1+P2 已建项目跑一遍真实 r2v（hero 镜头 multi_ref 取 3 张 ProductImage），验证产出 mp4 商品与参考图视觉一致                                                                       |
 
-### P3 Wave 17 — TTS 与音色管理 + chapter_av_planner（约 5 工作日）
+### P3 Wave 17 — TTS 与音色管理 + chapter_av_planner（已完成）
+
+> **状态**：W17 主体 + W17 收尾（Decision D 修订）已 100% 落地，commit 序列：`dbcdab9` (Wave1) → `621a1ad` (Wave2) → `5ed5493` (Wave3) → `d427cad` (hotfix) → `6ce49ee` (W17 收尾)。
+>
+> manual QA 公网验证产出：[6 voice TTS 合成镜头](https://dxs9dnjebzm6y.cloudfront.net/tmp/W17-WITH-SUBS-douyin-1779782376.mp4) / [keep_native 路径 ASR 反推字幕镜头](https://dxs9dnjebzm6y.cloudfront.net/tmp/W17-keepnative-asr-subs-1779782614.mp4)。
 
 | 任务 ID | 内容                                                                                                                                                                                                       |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T17-1   | 新建 `models/voice_pack.py`：`VoicePack(id, name, provider, provider_voice_id, language_code, gender, archetype_hint, sample_file_id, is_system)`；`tts_cache(hash, file_id, created_at)`                  |
-| T17-2   | `models/types.py`：新增 `TtsClipStatus` (pending/generating/ready/failed)；`FileUsageKind` 加 `tts_audio` / `bgm_track` / `sfx_track`                                                                       |
-| T17-3   | alembic `0009_p3_voice_pack_tts.py`：`voice_packs` 表 + `tts_cache` 表 + `Character.voice_pack_id` (FK) + `StoryVariant.voice_pack_id` / `narration_voice_pack_id` + `ShotDialogLine.start_time_ms / end_time_ms / tts_voice_id / tts_audio_file_id` |
-| T17-4   | `services/studio/builtin_voice_packs.py`：bootstrap 内置 6 个 CosyVoice 音色（zh-CN：中性 / 男 / 女 / 少年 / 中年 / 老者），首次启动幂等 seed                                                              |
-| T17-5   | 新建 `services/studio/tts_generate_worker.py`：`tts_generate` task_kind（fast queue），输入 (text, voice_pack_id, speed)，输出 (audio_file_id, word_timestamps[])；按 hash 命中 `tts_cache` 直接返回       |
-| T17-6   | DashScope CosyVoice provider adapter：`core/integrations/aliyun/dashscope_tts.py`，调 `audio/tts/long-text`，输出 word-level alignment；失败 fallback 到 `paraformer-v2` 反推时间戳                       |
-| T17-7   | **W17 关键路径** 新建 `services/studio/chapter_av_planner.py`：TTS 合成前对每段 `(dialog/narration, voice_pack)` 估时长（按 voice_pack 默认语速）；mismatch > 15% 决策树：speed 0.95–1.15 微调 → 失败回灌 LLM 改剧本（缩字）→ 再失败 hold 等用户介入 |
-| T17-8   | LLM prompt 升级：`builtin_prompts.py` `_STORY_FORMULA_GENERATOR` 增加 "本镜头 {{ duration_sec }} 秒，dialog/narration 字符总数 ≤ 3 × duration_sec" 硬约束；snapshot 测试更新                          |
-| T17-9   | `commerce/task_dispatch.py`：`enqueue_tts_generate` + `enqueue_chapter_av_plan`（slow queue）                                                                                                                |
-| T17-10  | pytest 新增：tts_cache hash 命中、chapter_av_planner duration 决策、CosyVoice provider mock                                                                                                                  |
-| T17-11  | `pnpm run openapi:update`；前端 generated types 同步                                                                                                                                                       |
-| T17-12  | manual QA：champion 变体 1 跑完整 TTS 配音（6 镜头 ≈ 60s），验证音色跨镜头一致 + ShotDialogLine.tts_audio_file_id 全部落库                                                                                |
+| T17-1   | ✅ 新建 `models/voice_pack.py`：`VoicePack(id, name, provider, provider_voice_id, language_code, gender, archetype_hint, sample_file_id, is_system)`；`tts_cache(hash, file_id, created_at)`               |
+| T17-2   | ✅ `models/types.py`：新增 `TtsClipStatus` (pending/generating/ready/failed)；`FileUsageKind` 加 `tts_audio` / `bgm_track` / `sfx_track`                                                                    |
+| T17-3   | ✅ alembic `0009_p3_voice_pack_tts.py`：`voice_packs` 表 + `tts_cache` 表 + `Character.voice_pack_id` (FK) + `StoryVariant.voice_pack_id` / `narration_voice_pack_id` + `ShotDialogLine.start_time_ms / end_time_ms / tts_voice_id / tts_audio_file_id` |
+| T17-4   | ✅ `services/studio/builtin_voice_packs.py`：bootstrap 内置 6 个 CosyVoice 音色（zh-CN：中性 / 男 / 女 / 少年 / 中年 / 老者），首次启动幂等 seed                                                            |
+| T17-5   | ✅ 新建 `services/studio/tts_generate_worker.py`：`tts_generate` task_kind（fast queue），输入 (text, voice_pack_id, speed)，输出 (audio_file_id, word_timestamps[])；按 hash 命中 `tts_cache` 直接返回    |
+| T17-6   | ✅ DashScope CosyVoice + Paraformer-v2 双 adapter：`core/integrations/aliyun/dashscope_tts.py` 提供 `synthesize`（CosyVoice WebSocket）+ `estimate_audio_via_asr`（Paraformer-v2 异步 ASR 反推时间戳）   |
+| T17-7   | ✅ **W17 关键路径** `services/studio/chapter_av_planner.py`：Decision F 决策树（estimate → speed_adjust → llm_rewrite → hold）+ W17 收尾增量 `skip_native` 早返回（keep_native 整树跳过）              |
+| T17-8   | ✅ LLM prompt 升级：`builtin_prompts.py` `_STORY_FORMULA_GENERATOR` 增加 "本镜头 {{ duration_sec }} 秒，dialog/narration 字符总数 ≤ 3 × duration_sec" 硬约束                                          |
+| T17-9   | ✅ `commerce/task_dispatch.py`：`enqueue_tts_generate` (fast queue) + `enqueue_chapter_av_plan` (slow queue) + W17 收尾增量 `enqueue_asr_subtitle_generate` (fast queue)                                |
+| T17-10  | ✅ pytest 全套：tts_cache hash 命中、chapter_av_planner duration 决策（含 keep_native skip_native）、CosyVoice + Paraformer adapter mock                                                                |
+| T17-11  | ✅ `pnpm run openapi:update`；前端 generated types 同步                                                                                                                                                |
+| T17-12  | ✅ manual QA：champion 变体跑完整 TTS + keep_native ASR 双路径，公网 CloudFront URL 验证音色一致 + ShotDialogLine.tts_audio_file_id / start_time_ms 全部落库                                            |
+| **T17-13** | ✅ **W17 收尾**：`build_run_args` + `chapter_av_planner` 按 `Shot.audio_strategy` 分流（silent_with_tts 走 Decision F；keep_native 跳过整树并产出 `skip_native` 决策） |
+| **T17-14** | ✅ **W17 收尾**：新建 `services/studio/asr_subtitle_generate_worker.py`（fast queue, 600s, hotfix-4 模板）+ `task_registry` 注册，调 `DashScopeTtsApiAdapter.estimate_audio_via_asr` 反推视频原音字级时间戳 |
+| **T17-15** | ✅ **W17 收尾**：Level 2 prompt hint 注入 `_AUDIO_STRATEGY_PROMPT_HINTS` dict + `get_audio_strategy_prompt_hint`，`build_run_args` 拼到 `final_prompt` 末尾 + `run_args.meta.audio_strategy` 写入 |
 
 ### P3 Wave 18 — 字幕引擎（约 3 工作日）
+
+> **范围调整说明**：原 W18 任务清单中"keep_native ASR 反推 + audio_strategy 分流 + Level 2 prompt hint" 已经在 W17 收尾（commit `6ce49ee`）提前落地，本 Wave 专注字幕**渲染**与**模板**层。
 
 | 任务 ID | 内容                                                                                                                                                                                          |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | T18-1   | 新建 `models/subtitle.py`：`SubtitleStyle(id, name, font_family, font_size, primary_color, outline_color, position, margin_v, font_fallback_chain JSON, is_system)`；`SubtitleTrack(id, shot_id, language, format, file_id, style_id, source)` |
-| T18-2   | `models/types.py`：新增 `SubtitleFormat` (srt/ass/vtt) / `SubtitleSource` (manual/from_dialog/from_asr)                                                                                       |
+| T18-2   | `models/types.py`：新增 `SubtitleFormat` (srt/ass/vtt) / `SubtitleSource` (`tts_word_timestamps` / `asr_paraformer_v2` / `manual` 三态，对齐 W17 收尾双路径产出)                              |
 | T18-3   | alembic `0010_p3_subtitle.py`：`subtitle_styles` 表 + `subtitle_tracks` 表 + `shots.subtitle_track_file_id` + `StoryVariant.subtitle_style_id`                                                |
 | T18-4   | `services/studio/builtin_subtitle_styles.py`：bootstrap 内置 3 个平台模板（DOUYIN_DEFAULT 字号 80 / 黑描边 / MarginV=300、TIKTOK_VIRAL Bold + 黄高亮 + ASS karaoke、REELS_LOWER_THIRD 字号 60）|
-| T18-5   | 新建 `services/studio/shot_subtitle_render.py`：`shot_subtitle_render` task_kind，输入 ShotDialogLine 列表 + 风格 ID，输出 `.ass` 文件落 minio；ASS 模板支持 `\k` / `\kf` 逐词高亮            |
+| T18-5   | 新建 `services/studio/shot_subtitle_render.py`：`shot_subtitle_render` task_kind（fast queue），输入 ShotDialogLine 列表 / TTS word_timestamps / ASR word_timestamps + 风格 ID，输出 `.ass` 文件落 minio；ASS 模板支持 `\k` / `\kf` 逐词高亮 |
 | T18-6   | 安全区 lint：渲染前用 `services/studio/subtitle_safe_zone.py` 检查（抖音底部 ≥ 250–300px / TikTok 左右 ≥ 120px / WCAG 对比度 ≥ 4.5:1），违规返回 warning                                       |
 | T18-7   | 句子切分策略：单句 ≤ 15 字（中文）/ 单屏 ≤ 2 行 / 停留 1.8–3.0s / 4–7 cps；超出按标点重切                                                                                                       |
-| T18-8   | pytest 快照测试：3 个内置 SubtitleStyle × 5 段示例 dialog → ASS 输出 snapshot；安全区 lint 单测（含违规用例）                                                                                  |
+| T18-8   | pytest 快照测试：3 个内置 SubtitleStyle × 5 段示例 dialog → ASS 输出 snapshot；安全区 lint 单测（含违规用例）；`SubtitleSource.asr_paraformer_v2` 反推路径单测复用 W17 收尾 ASR worker 产出 fixture |
 | T18-9   | `pnpm run openapi:update`                                                                                                                                                                     |
 
 ### P3 Wave 19 — AV 合成升级（约 3 工作日）
@@ -335,8 +345,8 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 | D6  | `ComplianceProfile.rules` 用 JSON 字段，规则演化不触发 schema migration                                               |
 | D7  | `ApiKeyQuota` 表 P1 即建（避免 P3 二次迁移），但中间件与限流逻辑 P4 才启用                                            |
 | D8  | A/B 变体使用同一 `StoryVariant` 表 + `is_champion` 标记，不引入独立 `Champion` 实体                                   |
-| D9  | `happyhorse-1.0-t2v/i2v/r2v` 自带音轨**一律丢弃**：模型不接受指定台词文本、跨镜音色漂移、官方无控制开关；所有音频走独立 TTS pipeline |
-| D10 | 完全不做 lip-sync：剧本 prompt 偏向非张嘴构图；个别需要原音对口型的镜头通过 `Shot.audio_strategy=keep_native` 逃生口处理；数字人 / lip-sync 推迟 P5+ |
+| D9  | `happyhorse-1.0-t2v/i2v/r2v` 自带音轨**默认丢弃 + keep_native 逃生口（W17 收尾修订）**：`silent_with_tts` 默认路径走独立 TTS pipeline，`keep_native` 路径保留模型原音并由 Paraformer-v2 ASR 反推字级时间戳生成字幕。两条路径在 prompt hint / build_run_args / chapter_av_planner / 字幕渲染阶段全部对称 first-class |
+| D10 | 完全不做 lip-sync（仅 silent_with_tts 路径）：剧本 prompt 偏向非张嘴构图；演员张嘴 / 口播镜头通过 `Shot.audio_strategy=keep_native` 路径处理（W17 收尾启用），由 Level 2 prompt hint 引导自然口型 + ASR 反推字幕。数字人 / 真 lip-sync 推迟 P5+ |
 | D11 | r2v 不拆 task_kind：扩 `video_generation` 内部分支，按 capability 字段路由 multi_ref；按 model name 字符串判别仅作 fallback |
 | D12 | 字幕默认 hardsub + ASS 源文件作为 derivative 独立保留：抖音 / TikTok 算法对外挂字幕减分，但 ASS 源文件保留以便后续换语言 / 字号免重生整段视频 |
 | D13 | `chapter_av_export` 与老 `chapter_timeline_export` 并存（v0.6.0 标 deprecated，v0.7.0 删除）；不强行替代避免破坏既有前端 |

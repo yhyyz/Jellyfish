@@ -633,9 +633,9 @@ Project (kind=commerce_story)
 ApiKeyQuota (P1 建表, P3 启用 partner API 时使用)
 ```
 
-## Alembic 迁移链 (P1 + P2)
+## Alembic 迁移链 (P1 + P2 + P3)
 
-P1 阶段落库 6 个迁移，P2 阶段新增 1 个，共 7 个迁移按顺序执行：
+P1 阶段落库 6 个迁移，P2 阶段新增 1 个，P3 阶段已新增 2 个，共 9 个迁移按顺序执行：
 
 | Revision | 文件 | 说明 |
 | --- | --- | --- |
@@ -646,8 +646,10 @@ P1 阶段落库 6 个迁移，P2 阶段新增 1 个，共 7 个迁移按顺序�
 | `0005` | `0005_create_compliance.py` | `compliance_profiles` / `compliance_findings` |
 | `0006` | `0006_create_api_key_quotas.py` | `api_key_quotas` |
 | `0007` | `0007_create_pattern_libraries.py` | **P2**: `hook_patterns` / `cta_patterns` / `brand_archetypes` |
+| `0008` | `0008_p3_r2v_audio_strategy.py` | **P3 W16**: `shots.audio_strategy` (VARCHAR(32), default `silent_with_tts`) + `shots.product_focus_level` |
+| `0009` | `0009_p3_voice_pack_tts.py` | **P3 W17**: `voice_packs` / `tts_cache` 两表 + `Character.voice_pack_id` (FK) + `StoryVariant.voice_pack_id` / `narration_voice_pack_id` (FK) + `ShotDialogLine.start_time_ms` / `end_time_ms` / `tts_voice_id` (FK) / `tts_audio_file_id` (FK) |
 
-总迁移数：**7（baseline + 6 P1 + 1 P2）**。
+总迁移数：**9（baseline + 6 P1 + 1 P2 + 2 P3）**。
 
 迁移之外的"系统级数据"（提示词模板、剧情公式、合规 profile、模式库
 seed）通过应用启动时 `app.bootstrap` 调用的 `bootstrap_*` 幂等函数写
@@ -734,7 +736,106 @@ backend/
   `app/services/commerce/builtin_story_formulas.py` 与
   `app/services/compliance/builtin_rules.py`）。
 
-## 不在 P2 范围
+## Visual Production Layer (P3 W16 + W17 已落地)
+
+P3 阶段为剧情带货链路引入"画面 + 音轨 + 字幕"完整视听生成层。W16 落地 r2v 多图参考管线，W17 + W17 收尾落地 TTS / ASR 双音轨路径与字级时间戳基础设施。本章节覆盖**当前已生效**的实现，未落地的字幕渲染与 chapter_av_export 升级仍在计划文档（[plans/jellyfish-story-commerce.md](/docs/plans/jellyfish-story-commerce/) Wave 18-21）。
+
+### Shot 层新增字段
+
+| 字段 | 类型 | 默认值 | 用途 |
+| --- | --- | --- | --- |
+| `Shot.audio_strategy` | `String(32)` enum | `silent_with_tts` | 镜头音频策略双路径分流（详见下方 audio_strategy 章节） |
+| `Shot.product_focus_level` | `String(16)` enum | `none` | 商品视觉聚焦级别（hero / functional / subtle / none），决定 r2v multi_ref 取图角度优先级（Decision H） |
+| `Shot.generated_video_file_id` | `String(64)` FK | NULL | 生成视频对应 `FileItem.id`（type=video） |
+
+### 镜头音频策略（audio_strategy）双路径分流
+
+`Shot.audio_strategy` 是 W16 引入字段、W17 收尾接通业务消费链的核心枚举，控制单镜头从视频生成到字幕产出的整条链路：
+
+| 路径 | 枚举值 | 视频生成 prompt hint | chapter_av_planner 决策 | 字幕来源 |
+| --- | --- | --- | --- | --- |
+| **默认（旁白驱动）** | `silent_with_tts` | "若镜头出现真人，请保持安静（不张嘴说话），优先侧脸/背影/聚焦商品；避免对镜头连续说话的特写，画面音轨将由独立 TTS 替换。" | 完整跑 Decision F（estimate → speed_adjust → llm_rewrite → hold） | CosyVoice synthesize 输出的 `word_timestamps` |
+| **逃生口（演员对话）** | `keep_native` | "若需要演员对话，鼓励自然口型与情感表达；本镜头将保留生成的原音作为最终音轨。" | 整树跳过，产出 `skip_native` 决策（占位 estimated_ms == shot_duration_ms） | Paraformer-v2 异步 ASR 反推的字级 `word_timestamps` |
+
+两条路径在 W17 收尾后**完全对称 first-class**：
+
+- **prompt hint 注入点**：`backend/app/services/studio/generation/video/build_context.py` 维护 `_AUDIO_STRATEGY_PROMPT_HINTS` dict + `get_audio_strategy_prompt_hint()` 公共 API；`build_run_args` 在拼装 `final_prompt` 之后、调用 DashScope 之前把 hint 拼到末尾。
+- **路由元信息**：`build_run_args` 把 `audio_strategy` 写入 `run_args["meta"]["audio_strategy"]`，下游 chapter_av_export / 字幕渲染据此分流。
+- **planner 分流**：`chapter_av_planner.plan_dialog_line(audio_strategy=...)` 在 keep_native 时早返回 `DurationDecision(action="skip_native")`，跳过 voice_pack 解析与 LLM rewrite，避免误烧 token。
+- **DecisionAction 枚举**：`accept` / `speed_adjust` / `llm_rewrite` / `hold`（前 4 项 silent_with_tts 路径产出）/ `skip_native`（keep_native 路径专属）。
+
+### TTS / ASR 双引擎（DashScope）
+
+W17 抽象出统一的 `DashScopeTtsApiAdapter`（`backend/app/core/integrations/aliyun/dashscope_tts.py`），底层共用 `aliyun_bailian` Provider 的 api_key，对外暴露两条非对称能力：
+
+| 方法 | 输入 | 输出 | 用途 |
+| --- | --- | --- | --- |
+| `synthesize(cfg, input_, timeout_s)` | `TtsRequest(text, voice_pack_id, provider_voice_id, speed, audio_format, enable_word_timestamps)` | `(audio_bytes, list[TtsWordTimestamp])` | CosyVoice WebSocket，文本 → 音频 + 字级时间戳 |
+| `estimate_audio_via_asr(cfg, audio_url, timeout_s=600)` | 公网 HTTP/HTTPS audio/video URL | `list[TtsWordTimestamp]` | Paraformer-v2 异步 ASR（submit → poll → fetch transcription_url 三段式），音频 → 字级时间戳 |
+
+`TtsWordTimestamp` 是跨引擎共享的字级时间戳契约（`text` / `begin_ms` / `end_ms`），下游字幕渲染不需要区分来源。
+
+### 音色与缓存
+
+| 表 | 字段 | 说明 |
+| --- | --- | --- |
+| `voice_packs` | `id` / `name` / `provider` / `provider_voice_id` / `language_code` / `gender` / `archetype_hint` / `sample_file_id` / `default_speed` / `is_system` / `sort_order` | 音色包；W17 内置 6 个 CosyVoice zh-CN 音色（`cosyvoice_v2_longxiaochun` / `longanlang` / `longanwen` / `longniuniu` / `longsanshu` / `longlaobo`） |
+| `tts_cache` | `cache_key` (sha256 of `(text, voice_pack_id, speed)` 三元组) / `voice_pack_id` (FK) / `text_preview` / `speed` / `audio_file_id` (FK) / `duration_ms` / `word_timestamps` (JSON) / `hit_count` | 同 `(text, voice_pack_id, speed)` 重复合成时直接命中，避免重复计费（D15） |
+
+`Character.voice_pack_id` / `StoryVariant.voice_pack_id` / `StoryVariant.narration_voice_pack_id` / `ShotDialogLine.tts_voice_id` 全部 FK 到 `voice_packs.id`，确保跨章节同一项目内声纹一致（D9 + D15）。
+
+### Worker / 任务编排
+
+P3 已注册的 worker（`task_executor_registry`）：
+
+| `task_kind` | 队列 | 超时 | 输入 | 输出 |
+| --- | --- | --- | --- | --- |
+| `tts_generate` | fast | 300s | `text` / `voice_pack_id` / `speed` / `audio_format` / `enable_word_timestamps` | `TtsResult(audio_file_id, duration_ms, word_timestamps[], cache_hit)` |
+| `chapter_av_plan` | slow | 7200s | `chapter_id` | `{decisions[], holds[], warnings[]}`，按 audio_strategy 分流 silent_with_tts 走 Decision F、keep_native 产出 skip_native |
+| `asr_subtitle_generate` | fast | 600s | `video_file_id` / `language_hints?` | `{source_file_id, audio_url, language_hints, duration_ms, word_timestamps[]}` |
+
+dispatcher 入口在 `backend/app/services/commerce/task_dispatch.py`：
+
+- `enqueue_tts_generate(body)` → fast queue
+- `enqueue_chapter_av_plan(body)` → slow queue
+- `enqueue_asr_subtitle_generate(body)` → fast queue（W17 收尾新增）
+
+### W16 r2v 多图参考管线
+
+| 模块 | 内容 |
+| --- | --- |
+| `core/integrations/aliyun/video_capabilities.py` | happyhorse-1.0-t2v/i2v/r2v 三个模型的 `max_reference_images` (1/1/9) + `supports_r2v` + `supported_reference_modes` |
+| `core/contracts/video_generation.py` | `VideoGenerationInput.reference_images_base64: list[str] \| None`；`require_prompt_or_any_reference` validator 接受新字段 |
+| `core/integrations/aliyun/dashscope_videos.py` | `_build_dashscope_video_body` 在 multi_ref 模式发 `input.media: [{type:reference_image, url:...}]` |
+| `services/studio/generation/video/build_context.py` | `REQUIRED_FRAMES_BY_MODE['multi_ref'] = ()`（空 tuple，与 text_only 区分；参考图来源是 ProductImage 而非 ShotFrameImage） |
+| `services/studio/generation/video/shot_product_reference_resolver.py` | 按 `Shot.product_focus_level` 优先级序列从 ProductImage 中选择参考图（Decision H：hero/functional/subtle 各自对应不同 angle 优先级序列） |
+| `services/studio/reference_image_budget.py` | 9 槽预算管理（Product 3–5 / Character 2–3 / Scene 1–2，超出按优先级丢弃并 warning，Decision G） |
+
+### 模块边界增量（P3 W16 + W17 + W17 收尾）
+
+```text
+backend/app/
+├── models/
+│   ├── voice_pack.py                  # VoicePack + TtsCache (W17)
+│   ├── studio_shots.py                # Shot.audio_strategy + product_focus_level (W16)
+│   └── types.py                       # AudioStrategy + ProductFocusLevel + VoiceProvider + VoiceGender (W16/W17)
+├── core/
+│   ├── contracts/
+│   │   └── tts.py                     # TtsRequest / TtsResult / TtsCacheKey / TtsWordTimestamp (W17)
+│   └── integrations/aliyun/
+│       └── dashscope_tts.py           # DashScopeTtsApiAdapter: synthesize + estimate_audio_via_asr (W17)
+└── services/studio/
+    ├── builtin_voice_packs.py         # 6 个内置 CosyVoice 音色 seed (W17)
+    ├── tts_generate_worker.py         # task_kind=tts_generate (W17 T17-5)
+    ├── chapter_av_planner.py          # Decision F 决策树 + skip_native 早返回 (W17 T17-7 + W17 收尾)
+    ├── chapter_av_plan_worker.py      # task_kind=chapter_av_plan，加载 (Shot, ShotDetail, lines) 三元组 (W17 + W17 收尾)
+    ├── asr_subtitle_generate_worker.py  # task_kind=asr_subtitle_generate (W17 收尾新增)
+    └── generation/video/
+        ├── build_context.py           # _AUDIO_STRATEGY_PROMPT_HINTS + get_audio_strategy_prompt_hint (W17 收尾)
+        └── shot_product_reference_resolver.py  # Decision H multi_ref 取图 (W16)
+```
+
+
 
 P2 已经把下列原本"P1 未实现"项目全部落库（详见各章节注解）：
 
