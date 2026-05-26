@@ -33,6 +33,9 @@ from app.services.film.generated_video import run_video_generation_task
 from app.services.studio.asr_subtitle_generate_worker import (
     build_asr_subtitle_generate_executor,
 )
+from app.services.studio.chapter_av_export_task import (
+    build_chapter_av_export_executor,
+)
 from app.services.studio.chapter_av_plan_worker import build_chapter_av_plan_executor
 from app.services.studio.shot_subtitle_render_worker import (
     build_shot_subtitle_render_executor,
@@ -158,4 +161,10 @@ task_executor_registry.register(
 # 渲染为 .ass 文件，落 minio + 写 SubtitleTrack 行，供下游章节合成阶段烧录。
 task_executor_registry.register(
     "shot_subtitle_render", build_shot_subtitle_render_executor()
+)
+# P3 W19: 章节级 AV 合成 worker（slow 队列，1800s 超时），按 Shot.audio_strategy
+# 分流（amix TTS / 原音 pass-through）+ ASS 硬烧 + loudnorm 响度归一化，
+# 产出"配音 + 字幕"最终成片，与老 chapter_timeline_export 并存（后者标 deprecated）。
+task_executor_registry.register(
+    "chapter_av_export", build_chapter_av_export_executor()
 )

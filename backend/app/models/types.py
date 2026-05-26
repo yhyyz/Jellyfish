@@ -216,6 +216,30 @@ class FileUsageKind(str, Enum):
     tts_audio = "tts_audio"
     bgm_track = "bgm_track"
     sfx_track = "sfx_track"
+    # === P3 W19 章节级 AV 合成（chapter_av_export）扩展 ===
+    chapter_master_audio = "chapter_master_audio"
+    chapter_master_subtitle = "chapter_master_subtitle"
+    chapter_master_dubbed = "chapter_master_dubbed"
+
+
+class AudioMixMode(str, Enum):
+    """章节合成阶段音轨混合模式（P3 W19）。
+
+    控制 ``chapter_av_export`` worker ffmpeg filter_complex 的音轨链路构造：
+
+    - ``off``：完全静音输出（仅画面 + 字幕烧录），用于无声 demo 或排障。
+    - ``voice_only``：仅保留语音轨（silent_with_tts 路径产出的 TTS 或
+      keep_native 路径保留的原音），不混入 BGM / SFX；W19 默认值。
+    - ``voice_bgm``：语音 + 背景音乐（BGM）双轨 amix，BGM 自动 ducking 到
+      voice 之下；BGM 来源由 ``ChapterTimelineSegment`` 后续扩展提供。
+    - ``full``：语音 + BGM + 音效（SFX）三轨完全混合，预留给 P5 阶段
+      高品质成片导出。
+    """
+
+    off = "off"
+    voice_only = "voice_only"
+    voice_bgm = "voice_bgm"
+    full = "full"
 
 
 class TimelineClipType(str, Enum):

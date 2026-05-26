@@ -72,6 +72,26 @@ class ChapterTimelineSegment(Base, TimestampMixin):
     position: Mapped[int] = mapped_column(Integer, nullable=False, comment="从 0 起的播放顺序")
     trim_start_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="入点毫秒（可选）")
     trim_end_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="出点毫秒（可选）")
+    subtitle_track_file_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("files.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment=(
+            "P3 W19：本段渲染好的 .ass 字幕 FileItem（W18 shot_subtitle_render"
+            "_worker 产出），合成阶段用 ffmpeg subtitles= 滤镜硬烧"
+        ),
+    )
+    tts_audio_file_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("files.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment=(
+            "P3 W19：本段 TTS 合成音频 FileItem；audio_strategy=silent_with_tts "
+            "时合成阶段 amix 混入，keep_native 时为 NULL"
+        ),
+    )
     # 历史 SQL 已存在无默认值版本；这里补 ORM 侧默认，避免 INSERT 依赖 DB default。
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

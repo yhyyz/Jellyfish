@@ -18,7 +18,9 @@ from app.core.tasks import VideoGenerationTask
 from app.models.llm import Model, ModelCategoryKey, ModelSettings
 from app.models.task_links import GenerationTaskLink
 from app.models.studio import FileItem, Shot, ShotDetail, ShotFrameImage, ShotFrameType
+from app.models.studio_shots import ShotDialogLine
 from app.models.types import AudioStrategy, FileUsageKind
+from app.services.commerce.task_dispatch import CommerceTaskDispatchService
 from app.services.common import entity_not_found
 from app.services.llm.provider_resolver import resolve_provider_config_by_model
 from app.services.studio.file_usages import sync_usage_from_shot_context
@@ -435,6 +437,37 @@ async def run_video_generation_task(
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("video_generation", task_id, "cancelled", stage="after_persist")
                 return
+
+            # P3 W19: video 成功 → 按 audio_strategy chain dispatch 下游 worker。
+            # 走 silent_with_tts 路径时，遍历对白行（chapter_av_planner 已写好
+            # tts_voice_id / start_time_ms）逐行派发 tts_generate；走 keep_native
+            # 路径时，对刚落库的 video FileItem 派发 asr_subtitle_generate。
+            # dispatcher 共用 session，子任务行与 video succeeded 状态在同一事务
+            # 原子 commit；缺失 voice_id / 空文本的对白行 skip 不阻塞主链路。
+            audio_strategy_value = (run_args.get("meta") or {}).get("audio_strategy")
+            if audio_strategy_value:
+                dispatcher = CommerceTaskDispatchService(session)
+                if audio_strategy_value == AudioStrategy.silent_with_tts.value:
+                    dialog_rows = (
+                        await session.execute(
+                            select(ShotDialogLine)
+                            .where(ShotDialogLine.shot_detail_id == shot_id)
+                            .order_by(ShotDialogLine.index)
+                        )
+                    ).scalars().all()
+                    for line in dialog_rows:
+                        if not line.tts_voice_id or not (line.text or "").strip():
+                            continue
+                        await dispatcher.enqueue_tts_generate(body={
+                            "text": line.text,
+                            "voice_pack_id": line.tts_voice_id,
+                            "speed": 1.0,
+                        })
+                elif audio_strategy_value == AudioStrategy.keep_native.value:
+                    await dispatcher.enqueue_asr_subtitle_generate(body={
+                        "video_file_id": file_obj.id,
+                    })
+
             await store.set_progress(task_id, 100)
             await store.set_status(task_id, TaskStatus.succeeded)
             await recompute_shot_status(session, shot_id=shot_id)

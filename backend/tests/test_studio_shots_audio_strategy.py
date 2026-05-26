@@ -53,10 +53,16 @@ def test_product_focus_level_column_definition() -> None:
 
 
 def test_new_columns_appear_after_generated_video_file_id() -> None:
-    """新列应位于 generated_video_file_id 之后，保留 ORM 定义顺序的语义分组。"""
+    """新列应位于 generated_video_file_id 之后，保留 ORM 定义顺序的语义分组。
+
+    W19 在 generated_video_file_id 与 audio_strategy 之间插入了
+    dubbed_video_file_id（章节合成的"配音 + 字幕"成片指针），所以放宽相对
+    位置约束：audio_strategy 在 generated_video_file_id 之后即可，product_focus_level
+    紧跟 audio_strategy。
+    """
     column_names = [col.name for col in Shot.__table__.columns]
     idx_video = column_names.index("generated_video_file_id")
     idx_audio = column_names.index("audio_strategy")
     idx_focus = column_names.index("product_focus_level")
-    assert idx_audio == idx_video + 1
+    assert idx_audio > idx_video
     assert idx_focus == idx_audio + 1

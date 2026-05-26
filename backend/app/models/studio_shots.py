@@ -74,6 +74,16 @@ class Shot(Base,TimestampMixin):
         index=True,
         comment="已生成视频关联的文件 ID（FileItem，type=video）",
     )
+    dubbed_video_file_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("files.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment=(
+            "P3 W19 章节合成输出的成片 FileItem ID（配音+字幕烧录后的最终交付）；"
+            "与 generated_video_file_id 共存：前者指裸视频，本字段指最终成片"
+        ),
+    )
     audio_strategy: Mapped[AudioStrategy] = mapped_column(
         String(32),
         nullable=False,
@@ -92,6 +102,9 @@ class Shot(Base,TimestampMixin):
     chapter: Mapped["Chapter"] = relationship(back_populates="shots")
     generated_video_file: Mapped["FileItem | None"] = relationship(
         foreign_keys=[generated_video_file_id]
+    )
+    dubbed_video_file: Mapped["FileItem | None"] = relationship(
+        foreign_keys=[dubbed_video_file_id]
     )
     timeline_segment: Mapped["ChapterTimelineSegment | None"] = relationship(
         "ChapterTimelineSegment",

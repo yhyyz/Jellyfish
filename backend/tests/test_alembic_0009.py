@@ -70,6 +70,17 @@ NEW_FK_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+#: 0011 (W19) 在既有表上新增的 FK 列；本文件聚焦 0009 测试，但 fixture 必须把
+#: 0011 列也从 ``Base.metadata.create_all`` 排除掉，否则 alembic 升级到 head
+#: （= 0011）时会因列已存在而 OperationalError。
+_FK_COLUMNS_0011: dict[str, tuple[str, ...]] = {
+    "shots": ("dubbed_video_file_id",),
+    "chapter_timeline_segments": (
+        "subtitle_track_file_id",
+        "tts_audio_file_id",
+    ),
+}
+
 
 def _alembic_dir() -> Path:
     """返回 ``backend/alembic`` 的绝对路径。"""
@@ -99,7 +110,9 @@ def _setup_pre_0009_schema(engine: Engine) -> None:
     for source in Base.metadata.sorted_tables:
         if source.name in NEW_TABLES_0009 or source.name in _NEW_TABLES_0010:
             continue
-        skip_cols = set(NEW_FK_COLUMNS.get(source.name, ()))
+        skip_cols = set(NEW_FK_COLUMNS.get(source.name, ())) | set(
+            _FK_COLUMNS_0011.get(source.name, ())
+        )
 
         copy_target = source.to_metadata(
             fresh,
@@ -171,7 +184,7 @@ def _table_columns(engine: Engine, table: str) -> set[str]:
 
 
 def test_revision_chain_includes_0009() -> None:
-    """0009 必须接在 0008 之后；当前 head 已被 0010（W18 字幕引擎）接管。"""
+    """0009 必须接在 0008 之后；当前 head 已被 0011（W19 章节 AV 合成）接管。"""
     cfg = _make_alembic_config("sqlite:///:memory:")
     script = ScriptDirectory.from_config(cfg)
 
@@ -180,7 +193,7 @@ def test_revision_chain_includes_0009() -> None:
     assert rev.down_revision == "0008"
 
     heads = script.get_heads()
-    assert list(heads) == ["0010"], f"expected single head 0010, got {heads!r}"
+    assert list(heads) == ["0011"], f"expected single head 0011, got {heads!r}"
 
 
 def test_upgrade_head_creates_new_tables(baseline_engine: Engine) -> None:

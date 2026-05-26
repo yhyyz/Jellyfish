@@ -62,6 +62,12 @@ TASK_KIND_ASR_SUBTITLE_GENERATE = "asr_subtitle_generate"
 #: 成 ``.ass`` 字幕文件，落 minio + SubtitleTrack 表，供下游章节合成阶段烧录。
 TASK_KIND_SHOT_SUBTITLE_RENDER = "shot_subtitle_render"
 
+#: 章节级 AV 合成任务 ``task_kind``，与
+#: ``app.services.studio.chapter_av_export_task`` 注册表同步。
+#: P3 W19：跨路径合成——按 Shot.audio_strategy 分流（amix TTS / 原音 pass-through）
+#: + ASS 硬烧 + loudnorm 响度归一化，产出"配音 + 字幕"最终成片。slow 队列。
+TASK_KIND_CHAPTER_AV_EXPORT = "chapter_av_export"
+
 #: 章节级 AV plan 任务 ``task_kind``，与
 #: ``app.services.studio.chapter_av_plan_worker`` 注册表同步。
 #: P3 W17 T17-7：Decision F 决策树编排，slow 队列。
@@ -202,6 +208,28 @@ class CommerceTaskDispatchService:
             run_args=body,
         )
 
+    async def enqueue_chapter_av_export(self, body: dict[str, Any]) -> dict[str, Any]:
+        """创建 ``task_kind=chapter_av_export`` 的 :class:`GenerationTask` 并投递（slow 队列）。
+
+        W19 跨路径合成：按 ``Shot.audio_strategy`` 分流（silent_with_tts amix
+        TTS / keep_native 原音 pass-through）+ 字幕硬烧 + loudnorm 响度归一化，
+        产出"配音 + 字幕"成片。整章级任务通常 3-10 分钟，走 ``slow`` 队列避免
+        与 fast 队列上的分钟级 worker 争抢消费者。
+
+        Args:
+            body: 章节合成请求 dict（至少包含 ``chapter_id``，可选 ``aspect`` /
+                ``audio_strategy_override``）。
+
+        Returns:
+            ``{"task_id", "task_kind", "status", "enqueued_at"}``。
+        """
+
+        return await self._enqueue(
+            task_kind=TASK_KIND_CHAPTER_AV_EXPORT,
+            run_args=body,
+            queue=_STORY_BATCH_QUEUE,
+        )
+
     async def enqueue_chapter_av_plan(self, body: dict[str, Any]) -> dict[str, Any]:
         """创建 ``task_kind=chapter_av_plan`` 的 :class:`GenerationTask` 并投递（slow 队列）。
 
@@ -322,6 +350,7 @@ class CommerceTaskDispatchService:
 __all__ = [
     "CommerceTaskDispatchService",
     "TASK_KIND_ASR_SUBTITLE_GENERATE",
+    "TASK_KIND_CHAPTER_AV_EXPORT",
     "TASK_KIND_CHAPTER_AV_PLAN",
     "TASK_KIND_COMPLIANCE_CHECK",
     "TASK_KIND_PRODUCT_INFO_EXTRACT",
