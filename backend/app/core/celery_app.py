@@ -48,6 +48,19 @@ celery_app.conf.update(
 
 @worker_process_init.connect
 def _reset_async_db_runtime(**_: object) -> None:
-    """Celery prefork 子进程启动后，重建 async DB 运行时。"""
+    """Celery prefork 子进程启动后，重建 async DB 运行时 + 注册 provider/task 别名表。
+
+    为何同时调用 ``bootstrap_all_registries()``：
+        Celery 子进程不会经过 FastAPI ``lifespan``，因此进程内的 provider
+        别名表 (``_KEY_BY_ALIAS``) 与 task 适配器注册都是空的。
+        ``try_resolve_provider_key_from_name`` 依赖该表，否则即使 DB 中
+        存在 ``aliyun_bailian`` Provider 行也会被判定为 "Unsupported"，
+        导致 worker (如 ``tts_generate_worker``) 误抛
+        "requires an aliyun_bailian (DashScope) provider"。
+        本地注册全部为 in-memory + 幂等，可在 prefork 子进程多次调用。
+    """
+
+    from app.bootstrap import bootstrap_all_registries
 
     reset_db_runtime()
+    bootstrap_all_registries()
