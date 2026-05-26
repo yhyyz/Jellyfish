@@ -635,7 +635,7 @@ ApiKeyQuota (P1 建表, P3 启用 partner API 时使用)
 
 ## Alembic 迁移链 (P1 + P2 + P3)
 
-P1 阶段落库 6 个迁移，P2 阶段新增 1 个，P3 阶段已新增 2 个，共 9 个迁移按顺序执行：
+P1 阶段落库 6 个迁移，P2 阶段新增 1 个，P3 阶段已新增 3 个，共 10 个迁移按顺序执行：
 
 | Revision | 文件 | 说明 |
 | --- | --- | --- |
@@ -648,8 +648,9 @@ P1 阶段落库 6 个迁移，P2 阶段新增 1 个，P3 阶段已新增 2 个�
 | `0007` | `0007_create_pattern_libraries.py` | **P2**: `hook_patterns` / `cta_patterns` / `brand_archetypes` |
 | `0008` | `0008_p3_r2v_audio_strategy.py` | **P3 W16**: `shots.audio_strategy` (VARCHAR(32), default `silent_with_tts`) + `shots.product_focus_level` |
 | `0009` | `0009_p3_voice_pack_tts.py` | **P3 W17**: `voice_packs` / `tts_cache` 两表 + `Character.voice_pack_id` (FK) + `StoryVariant.voice_pack_id` / `narration_voice_pack_id` (FK) + `ShotDialogLine.start_time_ms` / `end_time_ms` / `tts_voice_id` (FK) / `tts_audio_file_id` (FK) |
+| `0010` | `0010_p3_subtitle_engine.py` | **P3 W18**: `subtitle_styles` 表（含 ASS Style 全字段 + font_fallback_chain JSON）+ `subtitle_tracks` 表（关联 shot_id CASCADE / style_id SET NULL / file_id SET NULL，记录 SubtitleSource 区分 TTS vs ASR 来源） |
 
-总迁移数：**9（baseline + 6 P1 + 1 P2 + 2 P3）**。
+总迁移数：**10（baseline + 6 P1 + 1 P2 + 3 P3）**。
 
 迁移之外的"系统级数据"（提示词模板、剧情公式、合规 profile、模式库
 seed）通过应用启动时 `app.bootstrap` 调用的 `bootstrap_*` 幂等函数写
@@ -793,12 +794,31 @@ P3 已注册的 worker（`task_executor_registry`）：
 | `tts_generate` | fast | 300s | `text` / `voice_pack_id` / `speed` / `audio_format` / `enable_word_timestamps` | `TtsResult(audio_file_id, duration_ms, word_timestamps[], cache_hit)` |
 | `chapter_av_plan` | slow | 7200s | `chapter_id` | `{decisions[], holds[], warnings[]}`，按 audio_strategy 分流 silent_with_tts 走 Decision F、keep_native 产出 skip_native |
 | `asr_subtitle_generate` | fast | 600s | `video_file_id` / `language_hints?` | `{source_file_id, audio_url, language_hints, duration_ms, word_timestamps[]}` |
+| `shot_subtitle_render` | fast | 120s | `shot_id` / `style_id` / `word_timestamps` / `language_code?` / `source?` | `{subtitle_track_id, file_id, style_id, language_code, source, cue_count, duration_ms, warnings[]}` |
 
 dispatcher 入口在 `backend/app/services/commerce/task_dispatch.py`：
 
 - `enqueue_tts_generate(body)` → fast queue
 - `enqueue_chapter_av_plan(body)` → slow queue
 - `enqueue_asr_subtitle_generate(body)` → fast queue（W17 收尾新增）
+- `enqueue_shot_subtitle_render(body)` → fast queue（W18 新增）
+
+### W18 字幕渲染层
+
+W18 把字级时间戳（来自 W17 双引擎之一）渲染为 `.ass` 字幕文件：
+
+| 表 | 字段 | 说明 |
+| --- | --- | --- |
+| `subtitle_styles` | `id` / `name` / `description` / `language_code` / `format` (ass/srt/vtt) / `font_family` / `font_fallback_chain` (JSON list[str]) / `font_size` / `primary/secondary/outline/back_colour` (`&HAABBGGRR`) / `bold` / `italic` / `border_style` / `outline` / `shadow` / `alignment` (numpad 1-9 语义化) / `margin_l/r/v` / `play_res_x/y` / `is_system` / `sort_order` | ASS Style 行的语义化 ORM 封装；W18 内置 3 套样式（`douyin_default` / `tiktok_viral` / `reels_lower_third`） |
+| `subtitle_tracks` | `id` (uuid hex) / `shot_id` (FK CASCADE) / `style_id` (FK SET NULL) / `file_id` (FK SET NULL) / `language_code` / `format` / `source` (SubtitleSource) / `duration_ms` | 单镜头级字幕实例，``source`` 与 W17 收尾双路径产出严格对应：silent_with_tts → `tts_word_timestamps`，keep_native → `asr_paraformer_v2` |
+
+核心模块：
+
+- `services/studio/subtitle_renderer.py` 纯函数：`format_ass_time(ms)` / `split_words_into_cues(words, language_code, max_chars/min_cue_ms/max_cue_ms)` / `render_ass(style, cues)`。中文按字数 + 强标点（`。！？…；：`）切分，英文按词数 + 强标点（`.!?;:`）切分；时长 > 3s 强制对半切，短 cue（< 500ms）前向合并到下一条以保留强标点切出的句界。
+- `services/studio/subtitle_safe_zone.py` 安全区 lint：4 类静态规则（字号下限 / `alignment=bottom_*` 时底部 `margin_v` / 左右 `margin_l/r` / WCAG 4.5:1 字芯-描边对比度），不阻塞渲染只产出 warning。平台前缀启发式（`douyin_*` / `tiktok_*` / `reels_*`）走分平台阈值，未匹配走通用 9:16 兜底。
+- `services/studio/shot_subtitle_render_worker.py` 执行层：完整复用 hotfix-4 canonical 模板；run_args 接收 word_timestamps + style_id + language_code + source，产出 `.ass` 文件落 minio（ACL=public-read，便于下游 chapter_av_export 烧录）+ 写 SubtitleTrack 行。
+
+ASS 文件输出固定包含 `[Script Info]` + `[V4+ Styles]` + `[Events]` 三段；每条 Dialogue 用 `{\kf<duration_centiseconds>}<word>` 渲染逐词 karaoke 高亮，配合 SubtitleStyle 的 `secondary_colour` (起始色) → `primary_colour` (终态色) 实现 TikTok / 抖音流行的扫光视觉。
 
 ### W16 r2v 多图参考管线
 
@@ -811,14 +831,15 @@ dispatcher 入口在 `backend/app/services/commerce/task_dispatch.py`：
 | `services/studio/generation/video/shot_product_reference_resolver.py` | 按 `Shot.product_focus_level` 优先级序列从 ProductImage 中选择参考图（Decision H：hero/functional/subtle 各自对应不同 angle 优先级序列） |
 | `services/studio/reference_image_budget.py` | 9 槽预算管理（Product 3–5 / Character 2–3 / Scene 1–2，超出按优先级丢弃并 warning，Decision G） |
 
-### 模块边界增量（P3 W16 + W17 + W17 收尾）
+### 模块边界增量（P3 W16 + W17 + W17 收尾 + W18）
 
 ```text
 backend/app/
 ├── models/
 │   ├── voice_pack.py                  # VoicePack + TtsCache (W17)
+│   ├── subtitle.py                    # SubtitleStyle + SubtitleTrack (W18)
 │   ├── studio_shots.py                # Shot.audio_strategy + product_focus_level (W16)
-│   └── types.py                       # AudioStrategy + ProductFocusLevel + VoiceProvider + VoiceGender (W16/W17)
+│   └── types.py                       # AudioStrategy + ProductFocusLevel + VoiceProvider + VoiceGender (W16/W17) + SubtitleFormat + SubtitleSource + SubtitleAlignment (W18)
 ├── core/
 │   ├── contracts/
 │   │   └── tts.py                     # TtsRequest / TtsResult / TtsCacheKey / TtsWordTimestamp (W17)
@@ -826,10 +847,14 @@ backend/app/
 │       └── dashscope_tts.py           # DashScopeTtsApiAdapter: synthesize + estimate_audio_via_asr (W17)
 └── services/studio/
     ├── builtin_voice_packs.py         # 6 个内置 CosyVoice 音色 seed (W17)
+    ├── builtin_subtitle_styles.py     # 3 个内置 SubtitleStyle seed (W18)
     ├── tts_generate_worker.py         # task_kind=tts_generate (W17 T17-5)
     ├── chapter_av_planner.py          # Decision F 决策树 + skip_native 早返回 (W17 T17-7 + W17 收尾)
     ├── chapter_av_plan_worker.py      # task_kind=chapter_av_plan，加载 (Shot, ShotDetail, lines) 三元组 (W17 + W17 收尾)
     ├── asr_subtitle_generate_worker.py  # task_kind=asr_subtitle_generate (W17 收尾新增)
+    ├── subtitle_renderer.py           # ASS 渲染纯函数 + 句子切分策略 (W18)
+    ├── subtitle_safe_zone.py          # 字幕安全区 lint (W18)
+    ├── shot_subtitle_render_worker.py  # task_kind=shot_subtitle_render (W18)
     └── generation/video/
         ├── build_context.py           # _AUDIO_STRATEGY_PROMPT_HINTS + get_audio_strategy_prompt_hint (W17 收尾)
         └── shot_product_reference_resolver.py  # Decision H multi_ref 取图 (W16)

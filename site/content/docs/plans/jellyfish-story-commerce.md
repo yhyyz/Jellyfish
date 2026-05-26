@@ -177,21 +177,23 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 | **T17-14** | ✅ **W17 收尾**：新建 `services/studio/asr_subtitle_generate_worker.py`（fast queue, 600s, hotfix-4 模板）+ `task_registry` 注册，调 `DashScopeTtsApiAdapter.estimate_audio_via_asr` 反推视频原音字级时间戳 |
 | **T17-15** | ✅ **W17 收尾**：Level 2 prompt hint 注入 `_AUDIO_STRATEGY_PROMPT_HINTS` dict + `get_audio_strategy_prompt_hint`，`build_run_args` 拼到 `final_prompt` 末尾 + `run_args.meta.audio_strategy` 写入 |
 
-### P3 Wave 18 — 字幕引擎（约 3 工作日）
+### P3 Wave 18 — 字幕引擎（已完成）
 
-> **范围调整说明**：原 W18 任务清单中"keep_native ASR 反推 + audio_strategy 分流 + Level 2 prompt hint" 已经在 W17 收尾（commit `6ce49ee`）提前落地，本 Wave 专注字幕**渲染**与**模板**层。
+> **状态**：W18 已 100% 落地，commit `6be871f`。
+>
+> **范围调整说明**：原 W18 任务清单中"keep_native ASR 反推 + audio_strategy 分流 + Level 2 prompt hint" 已经在 W17 收尾（commit `6ce49ee`）提前落地，本 Wave 专注字幕**渲染**与**模板**层；alembic 迁移链推进到 `0010`。
 
 | 任务 ID | 内容                                                                                                                                                                                          |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T18-1   | 新建 `models/subtitle.py`：`SubtitleStyle(id, name, font_family, font_size, primary_color, outline_color, position, margin_v, font_fallback_chain JSON, is_system)`；`SubtitleTrack(id, shot_id, language, format, file_id, style_id, source)` |
-| T18-2   | `models/types.py`：新增 `SubtitleFormat` (srt/ass/vtt) / `SubtitleSource` (`tts_word_timestamps` / `asr_paraformer_v2` / `manual` 三态，对齐 W17 收尾双路径产出)                              |
-| T18-3   | alembic `0010_p3_subtitle.py`：`subtitle_styles` 表 + `subtitle_tracks` 表 + `shots.subtitle_track_file_id` + `StoryVariant.subtitle_style_id`                                                |
-| T18-4   | `services/studio/builtin_subtitle_styles.py`：bootstrap 内置 3 个平台模板（DOUYIN_DEFAULT 字号 80 / 黑描边 / MarginV=300、TIKTOK_VIRAL Bold + 黄高亮 + ASS karaoke、REELS_LOWER_THIRD 字号 60）|
-| T18-5   | 新建 `services/studio/shot_subtitle_render.py`：`shot_subtitle_render` task_kind（fast queue），输入 ShotDialogLine 列表 / TTS word_timestamps / ASR word_timestamps + 风格 ID，输出 `.ass` 文件落 minio；ASS 模板支持 `\k` / `\kf` 逐词高亮 |
-| T18-6   | 安全区 lint：渲染前用 `services/studio/subtitle_safe_zone.py` 检查（抖音底部 ≥ 250–300px / TikTok 左右 ≥ 120px / WCAG 对比度 ≥ 4.5:1），违规返回 warning                                       |
-| T18-7   | 句子切分策略：单句 ≤ 15 字（中文）/ 单屏 ≤ 2 行 / 停留 1.8–3.0s / 4–7 cps；超出按标点重切                                                                                                       |
-| T18-8   | pytest 快照测试：3 个内置 SubtitleStyle × 5 段示例 dialog → ASS 输出 snapshot；安全区 lint 单测（含违规用例）；`SubtitleSource.asr_paraformer_v2` 反推路径单测复用 W17 收尾 ASR worker 产出 fixture |
-| T18-9   | `pnpm run openapi:update`                                                                                                                                                                     |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T18-1   | ✅ 新建 `models/subtitle.py`：`SubtitleStyle(id, name, font_family, font_size, primary/secondary/outline/back_colour, bold/italic/border_style/outline/shadow, alignment, margin_l/r/v, play_res_x/y, font_fallback_chain JSON, is_system, sort_order)` + `SubtitleTrack(id, shot_id CASCADE, style_id SET NULL, file_id SET NULL, language_code, format, source, duration_ms)` |
+| T18-2   | ✅ `models/types.py`：新增 `SubtitleFormat` (ass/srt/vtt) / `SubtitleSource` (`tts_word_timestamps` / `asr_paraformer_v2` / `manual`，与 W17 收尾双路径产出对齐) / `SubtitleAlignment` (numpad 1-9 语义化映射) |
+| T18-3   | ✅ alembic `0010_p3_subtitle_engine.py`：`subtitle_styles` 表 + `subtitle_tracks` 表 + 9 个索引；downgrade 反向干净；alembic head 推进到 0010 |
+| T18-4   | ✅ `services/studio/builtin_subtitle_styles.py`：bootstrap 内置 3 个平台模板（DOUYIN_DEFAULT 思源黑体 Heavy 64px / 白字青预高亮 + 黑描边 + 50% 黑阴影 / 底距 200px、TIKTOK_VIRAL Arial Black 84px / 金黄高亮 + 黑粗描边 6px + 25% 黑阴影 / 底距 400px、REELS_LOWER_THIRD Inter 52px / 黑描边白字 + 75% 黑阴影 / 底距 360px / 左右各 90px） |
+| T18-5   | ✅ 新建 `services/studio/shot_subtitle_render_worker.py`：`shot_subtitle_render` task_kind（fast queue, 120s 超时, hotfix-4 模板），输入 ShotDialogLine / TTS word_timestamps / ASR word_timestamps + 风格 ID，输出 `.ass` 文件落 minio + SubtitleTrack 行；ASS 模板支持 `\\kf` 逐词高亮 |
+| T18-6   | ✅ 安全区 lint：`services/studio/subtitle_safe_zone.py`（抖音底部 ≥ 180、TikTok 居中下 ≥ 380、Reels 底距 ≥ 350 / 左右 ≥ 90 / 字号下限分平台 / WCAG 4.5:1 字芯 vs 描边对比度），违规返回 warning 不阻塞渲染 |
+| T18-7   | ✅ 句子切分策略：`services/studio/subtitle_renderer.py` 中 `split_words_into_cues`（中文按字数 15 + 强标点 `。！？…；：` / 英文按词数 7 + 强标点 `.!?;:` / 时长强制切分 > 3s / 短 cue 前向合并 < 500ms） |
+| T18-8   | ✅ pytest 51 case：renderer 21 + safe_zone 13 + builtin_subtitle_styles 5 + worker 8 + dispatcher 3；alembic 17/17（含 W17 + W18 全链回归 + 0009 downgrade `-1 → 0008` 修复） |
+| T18-9   | ✅ 无 API 变更，本 Wave 不需要 `pnpm run openapi:update`；前端 generated types 同步推迟到 W20 工作室升级阶段 |
 
 ### P3 Wave 19 — AV 合成升级（约 3 工作日）
 
