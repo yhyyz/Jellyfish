@@ -44,6 +44,7 @@ import app.models.studio  # noqa: F401  pylint: disable=unused-import
 import app.models.task  # noqa: F401  pylint: disable=unused-import
 import app.models.task_links  # noqa: F401  pylint: disable=unused-import
 
+from app.models.story_formula import StoryFormula
 from app.models.task import GenerationTask, GenerationTaskStatus
 from app.services.commerce.story_video_batch_generate_worker import (
     CHILD_QUEUE,
@@ -162,6 +163,31 @@ async def _seed_batch_task(
                 error="",
             )
         )
+        await db.commit()
+
+
+async def _seed_formulas(
+    session_factory: Callable[[], AsyncSession],
+    formula_ids: list[str],
+) -> None:
+    """在测试 DB 中预置一批 ``StoryFormula`` 行供 batch worker 解析使用。
+
+    存在原因：
+        ``run_story_video_batch_generate_task`` 在派发子任务前会查 DB 把
+        ``formula_id`` 解析成 ``formula`` dict 注入 child run_args；测试
+        DB 是 in-memory SQLite，必须先 seed 对应行，否则 worker 抛
+        ``ValueError: formula_id 'xxx' not found``。
+    """
+
+    async with session_factory() as db:
+        for fid in formula_ids:
+            db.add(
+                StoryFormula(
+                    id=fid,
+                    name=f"测试公式 {fid}",
+                    prompt_template_id=f"tpl-{fid}",
+                )
+            )
         await db.commit()
 
 
@@ -336,6 +362,7 @@ async def test_runner_enqueues_n_child_tasks() -> None:
 
     session_factory, engine = await _build_session_factory()
     await _seed_batch_task(session_factory, task_id="batch-1", run_args={})
+    await _seed_formulas(session_factory, ["f1", "f2", "f3"])
     variants = [
         _make_variant_spec(formula_id="f1", label="v1"),
         _make_variant_spec(formula_id="f2", label="v2"),
@@ -366,6 +393,7 @@ async def test_runner_returns_child_task_ids_in_result() -> None:
 
     session_factory, engine = await _build_session_factory()
     await _seed_batch_task(session_factory, task_id="batch-1", run_args={})
+    await _seed_formulas(session_factory, ["f1", "f2"])
     variants = [
         _make_variant_spec(formula_id="f1"),
         _make_variant_spec(formula_id="f2"),
@@ -396,6 +424,7 @@ async def test_runner_persists_child_task_rows_in_db() -> None:
 
     session_factory, engine = await _build_session_factory()
     await _seed_batch_task(session_factory, task_id="batch-1", run_args={})
+    await _seed_formulas(session_factory, ["f1", "f2"])
     variants = [
         _make_variant_spec(formula_id="f1", archetype="sage"),
         _make_variant_spec(formula_id="f2", archetype="hero"),
@@ -431,6 +460,7 @@ async def test_runner_passes_parent_batch_id_to_children() -> None:
 
     session_factory, engine = await _build_session_factory()
     await _seed_batch_task(session_factory, task_id="batch-xyz", run_args={})
+    await _seed_formulas(session_factory, ["f1", "f2", "f3"])
     variants = [
         _make_variant_spec(formula_id="f1"),
         _make_variant_spec(formula_id="f2"),

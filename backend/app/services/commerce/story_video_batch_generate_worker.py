@@ -59,6 +59,7 @@ from app.core.contracts.story import BatchGenerationRequest
 from app.core.db import async_session_maker
 from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
+from app.models.story_formula import StoryFormula
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus
 from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor
 from app.services.worker.task_logging import log_task_event, log_task_failure
@@ -92,23 +93,48 @@ _SUCCEEDED_PROGRESS = 100
 """任务成功完成时的最终进度。"""
 
 
+def _formula_row_to_dict(row: StoryFormula) -> dict[str, Any]:
+    """把 ``StoryFormula`` ORM 行转换成下游 worker 期望的 dict 形态。
+
+    存在原因：
+        ``StoryGenerationVars.formula`` 期望的是包含完整公式结构（``structure``
+        beats 数组、``psychology``、``use_cases``、``avoid_cases`` 等）的 dict。
+        前端只传 ``formula_id``，需要在派发子任务前查 DB 把 ORM 行展开为
+        :class:`StoryScriptGeneratorAgent` prompt 真正需要的内容。
+
+    返回:
+        含公式核心字段的 dict，剔除 ORM 内部时间戳与不必要列，避免脚本生成
+        prompt 因 ``created_at`` 这种字段产生噪声。
+    """
+    excluded = {"created_at", "updated_at"}
+    return {
+        column.name: getattr(row, column.name)
+        for column in row.__table__.columns
+        if column.name not in excluded
+    }
+
+
 def _build_child_run_args(
     request: BatchGenerationRequest,
     variant_spec: Any,
+    formula_dict: dict[str, Any],
 ) -> dict[str, Any]:
     """根据批量请求与单条变体规格，组装 ``story_script_generate`` 子任务入参。
 
     存在原因：
-        每个子任务消费的是 :class:`ScriptGenerateRequest`-like 形态的 dict
-        （``project_id`` / ``chapter_id`` / ``formula_id`` / ``product`` /
-        ``audience`` / ``archetype`` / ``tone_grid`` / ``target_duration_sec``
-        / ``platform`` / 可选 ``hook_pattern_id`` / ``cta_pattern_id``），
-        把组装逻辑收拢到一个纯函数，便于单元测试断言「批量级共享字段
-        + 变体级覆盖字段」的合并语义。
+        每个子任务消费的是 :class:`StoryGenerationVars`-shaped 形态的 dict
+        （``formula`` / ``product`` / ``audience`` / ``archetype`` /
+        ``tone_grid`` / ``target_duration_sec`` / ``platform``，外加额外的
+        ``project_id`` / ``chapter_id`` / ``formula_id`` / 可选 ``hook_pattern_id``
+        / ``cta_pattern_id`` 这类用于持久化的辅助字段），把组装逻辑收拢到
+        一个纯函数，便于单元测试断言「批量级共享字段 + 变体级覆盖字段」
+        的合并语义。
 
     参数:
         request: 已经过 Pydantic 校验的批量生成请求。
         variant_spec: 变体规格行（:class:`BatchVariantSpec`）。
+        formula_dict: 已从 DB 解析出来的完整公式 dict（含 beats / 约束等
+            子字段），由调用方一次性查表得到，避免 worker 内重复查询。
 
     返回:
         子任务的 ``run_args`` dict；archetype 字段在变体未指定时回退为
@@ -119,7 +145,10 @@ def _build_child_run_args(
     run_args: dict[str, Any] = {
         "project_id": request.project_id,
         "chapter_id": request.chapter_id,
+        # formula_id 保留给 worker 持久化 StoryVariant.formula_id 字段
         "formula_id": variant_spec.formula_id,
+        # formula 是 LLM prompt 期望的完整公式结构 dict
+        "formula": formula_dict,
         "product": dict(request.product),
         "audience": dict(request.audience),
         "archetype": archetype,
@@ -174,9 +203,23 @@ async def _persist_and_dispatch_children(
         与 ``request.variants`` 顺序一致的子任务 ID 列表。
     """
     child_task_ids: list[str] = []
+    # 缓存 formula 行：同一批量中常出现 N 个变体共用同一 formula_id，
+    # 缓存可减少 DB 往返次数。
+    formula_cache: dict[str, dict[str, Any]] = {}
     for variant_spec in request.variants:
+        formula_id = variant_spec.formula_id
+        if formula_id not in formula_cache:
+            formula_row = await session.get(StoryFormula, formula_id)
+            if formula_row is None:
+                raise ValueError(
+                    f"story_video_batch_generate: formula_id '{formula_id}' "
+                    "not found in story_formulas table"
+                )
+            formula_cache[formula_id] = _formula_row_to_dict(formula_row)
+        formula_dict = formula_cache[formula_id]
+
         child_id = _new_child_task_id()
-        child_run_args = _build_child_run_args(request, variant_spec)
+        child_run_args = _build_child_run_args(request, variant_spec, formula_dict)
         child_payload: dict[str, Any] = {
             "task_kind": CHILD_TASK_KIND,
             "run_args": child_run_args,
