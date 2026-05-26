@@ -128,19 +128,36 @@ _PRODUCT_EXTRACTION = """\
 【目标字段】
 {{ target_fields }}
 
-【输出要求】
-- 严格输出符合 ProductExtractionResult schema 的 JSON 对象；
-- 缺失字段使用 null；列表字段保持原始顺序，不得编造；
-- selling_points 与 pain_points_solved 各不超过 5 条，挑最锐利的；
-- target_audience 必须是对象（含 age_range / gender / motivation 等可读字段）；
-- 若文本中出现医疗/保健/食品声明，将 health_disclaimer_required 设为 true；
-- 不要输出任何额外说明或 Markdown 代码块，只输出纯 JSON。
+【输出 JSON Schema（必须严格匹配）】
+仅输出以下 12 个字段，字段名必须完全一致，不得新增/重命名/嵌套到子对象中：
+{
+  "name": <string, 必填，商品名称（去掉店铺/活动前缀，仅保留品牌+型号+核心属性）>,
+  "brand": <string|null, 品牌名；缺失为 null>,
+  "category": <string, 必填，商品品类（食品/美妆/3C/服饰/家居/健康/其他）>,
+  "description": <string, 必填，商品描述（聚焦"为谁解决了什么"，不堆参数）>,
+  "price_anchor": <number|null, 价格锚点；缺失为 null>,
+  "sku": <string|null, SKU 标识；缺失为 null>,
+  "selling_points": <list[string], 必填，核心卖点列表，最多 5 条，去重，避免"高品质/超划算"空洞词>,
+  "pain_points_solved": <list[string], 必填，该商品解决的用户痛点列表，最多 5 条，必须是"场景—难处"视角>,
+  "target_audience": <object, 必填，目标受众画像，建议含 age_range / gender / motivation / scene 字段>,
+  "catchphrases": <list[string], 必填，可复用的口号/金句列表；无则给空列表 []>,
+  "competitor_names": <list[string], 必填，主要竞品名称列表，仅填明确出现的，不臆造；无则给空列表 []>,
+  "health_disclaimer_required": <bool, 必填，true=食品/保健/医美等需健康免责声明，false=普通品类>
+}
+
+【硬性禁止】
+- 严禁使用 product_name / specifications / price_info / care_instructions
+  / material_composition / weight 等字段名——这些不在 schema 中。
+- 严禁把字段嵌套到 specifications / price_info 这类子对象中。
+- 严禁输出 Markdown 代码块、解释文本、前后缀说明，只输出纯 JSON。
+- 缺失字段一律用 null（标量）或 [] / {}（容器），不得省略字段。
 
 【风格】
 - 商品名称去掉店铺/活动前缀，仅保留品牌+型号+核心属性；
-- 描述聚焦“为谁解决了什么”，不堆参数；
-- 卖点去重，避免“高品质/超划算”这类空洞词；
-- 痛点必须是用户视角的“场景—难处”，而非“产品功能”。
+- 描述聚焦"为谁解决了什么"，不堆参数；
+- 卖点去重，避免"高品质/超划算"这类空洞词；
+- 痛点必须是用户视角的"场景—难处"，而非"产品功能"；
+- 若文本中出现医疗/保健/食品声明，将 health_disclaimer_required 设为 true。
 """
 
 
@@ -166,6 +183,40 @@ schema 不符或硬约束违规都会触发自动重试。
 - target_duration_sec: {{ target_duration_sec }}
 - platform: {{ platform }}
 
+【输出 Schema（必须严格匹配，字段名一字不差）】
+
+外层 StoryScript（顶层对象）：
+{
+  "total_duration_sec": <number, 脚本总秒数>,
+  "total_shots": <int, 镜头总数>,
+  "formula_id": <string, 与上方"公式"的 id 字段一致>,
+  "shots": [Shot, ...],          // 数组长度 [3, 30]
+  "opening_hook": <string, 开场钩子文案>,
+  "cta_text": <string, 结尾 CTA 文案>,
+  "brand_mention_count": <int, 全脚本品牌口播次数>
+}
+
+内层 Shot（shots 数组每一项）：
+{
+  "id": <string, "shot_001" 这种零填充三位序号>,
+  "duration_sec": <number, [2, 20]>,
+  "function": <string, "hook"/"setup"/"conflict"/"twist"/"payoff"/"cta" 之一>,
+  "shot_type": <string, "close_up"/"medium"/"wide"/"extreme_close_up" 之一>,
+  "camera_angle": <string, "eye_level"/"high_angle"/"low_angle"/"dutch" 之一>,
+  "camera_movement": <string, "static"/"push_in"/"pull_out"/"pan"/"tilt"/"handheld"/"dolly" 之一>,
+  "dialog": <string|null, 角色对白；无对白填 null>,
+  "narration": <string|null, 旁白文本；无旁白填 null>,
+  "product_focus_level": <string, 必为 "subtle"/"functional"/"hero"/"none" 之一>,
+  "is_punchline": <bool, 是否情绪/反转 punchline 镜头>,
+  "is_brand_mention": <bool, 是否包含品牌口播>,
+  "notes": <string|null, 导演/制作备注，画面描述等放这里；无可填 null>
+}
+
+【硬性禁止字段名】
+不允许出现：visual_description / scene_description / camera / shot_no /
+description / actor / location / props / sfx / transition 等不在 Shot
+schema 中的字段。画面/场景/动作描述统一放进 notes 字段。
+
 【硬性约束】
 1. shots 数量 3~30，单镜 duration_sec ∈ [2, 20]；总时长须落在
    target_duration_sec 的 ±10% 漂移区间内。
@@ -187,17 +238,8 @@ schema 不符或硬约束违规都会触发自动重试。
 - 一切人名、地名保持中性，不得出现真实公众人物。
 
 【输出】
-仅输出 JSON，必须严格匹配 StoryScript schema：
-{
-  "total_duration_sec": <number>,
-  "total_shots": <int>,
-  "formula_id": "<string>",
-  "shots": [Shot, ...],
-  "opening_hook": "<string>",
-  "cta_text": "<string>",
-  "brand_mention_count": <int>
-}
-任何 schema 不符即视为失败：不要给出 Markdown，不要解释，不要前后缀。
+仅输出符合上述 StoryScript schema 的 JSON 对象。
+任何 schema 不符即视为失败：不要 Markdown，不要解释，不要前后缀。
 """
 
 
@@ -300,17 +342,36 @@ product_category: {{ product_category }}
 5. 性别、年龄、地域等冒犯性表达；
 6. 风险提示完整度（投资 / 美妆 / 健身等）。
 
-【输出】
-仅输出符合 ComplianceReport schema 的 JSON：
+【输出 Schema（必须严格匹配，字段名一字不差）】
+
+外层 ComplianceReport（顶层对象）：
 {
   "variant_id": null,
   "region": "{{ region }}",
   "product_category": "{{ product_category }}",
   "findings": [ComplianceFinding, ...],
-  "score": <0-100>,
-  "summary": "<= 120 字概述>"
+  "score": <int, 0-100，越高越合规>,
+  "summary": <string, ≤ 120 字概述>
 }
-不要输出 Markdown / 解释 / 代码块。
+
+内层 ComplianceFinding（findings 数组每一项）：
+{
+  "rule_id": <string, 规则唯一标识，如 "abs_word_zui_cha"、"missing_health_disclaimer"，自定义命名要语义清晰>,
+  "rule_kind": <string, 必为 "banned_phrase"/"required_label"/"required_disclaimer"/"brand_mention_cap" 之一>,
+  "severity": <string, 必为 "info"/"warning"/"blocker" 之一>,
+  "description": <string, 问题描述>,
+  "location": <string|null, 问题定位（如镜头 ID/字段路径）；无可填 null>,
+  "suggested_fix": <string|null, 建议修复方案；无可填 null>
+}
+
+【硬性禁止字段名】
+不允许在 ComplianceFinding 中出现：shot_id / type / category / message / severity_level
+等不在 schema 中的字段。镜头定位放进 location 字段（例如 "shot_005"），问题文本放进
+description 字段，规则标签放进 rule_id 字段。severity 必须是上面三个枚举值之一。
+
+【输出】
+仅输出符合上述 ComplianceReport schema 的 JSON 对象。
+不要 Markdown，不要解释，不要前后缀。
 """
 
 

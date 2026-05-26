@@ -10,16 +10,33 @@ DemoLab 纯净配方精华 30ml，敏肌可用，含烟酰胺与神经酰胺。
 【目标字段】
 [&#39;name&#39;, &#39;brand&#39;, &#39;category&#39;, &#39;selling_points&#39;, &#39;pain_points_solved&#39;, &#39;target_audience&#39;]
 
-【输出要求】
-- 严格输出符合 ProductExtractionResult schema 的 JSON 对象；
-- 缺失字段使用 null；列表字段保持原始顺序，不得编造；
-- selling_points 与 pain_points_solved 各不超过 5 条，挑最锐利的；
-- target_audience 必须是对象（含 age_range / gender / motivation 等可读字段）；
-- 若文本中出现医疗/保健/食品声明，将 health_disclaimer_required 设为 true；
-- 不要输出任何额外说明或 Markdown 代码块，只输出纯 JSON。
+【输出 JSON Schema（必须严格匹配）】
+仅输出以下 12 个字段，字段名必须完全一致，不得新增/重命名/嵌套到子对象中：
+{
+  "name": <string, 必填，商品名称（去掉店铺/活动前缀，仅保留品牌+型号+核心属性）>,
+  "brand": <string|null, 品牌名；缺失为 null>,
+  "category": <string, 必填，商品品类（食品/美妆/3C/服饰/家居/健康/其他）>,
+  "description": <string, 必填，商品描述（聚焦"为谁解决了什么"，不堆参数）>,
+  "price_anchor": <number|null, 价格锚点；缺失为 null>,
+  "sku": <string|null, SKU 标识；缺失为 null>,
+  "selling_points": <list[string], 必填，核心卖点列表，最多 5 条，去重，避免"高品质/超划算"空洞词>,
+  "pain_points_solved": <list[string], 必填，该商品解决的用户痛点列表，最多 5 条，必须是"场景—难处"视角>,
+  "target_audience": <object, 必填，目标受众画像，建议含 age_range / gender / motivation / scene 字段>,
+  "catchphrases": <list[string], 必填，可复用的口号/金句列表；无则给空列表 []>,
+  "competitor_names": <list[string], 必填，主要竞品名称列表，仅填明确出现的，不臆造；无则给空列表 []>,
+  "health_disclaimer_required": <bool, 必填，true=食品/保健/医美等需健康免责声明，false=普通品类>
+}
+
+【硬性禁止】
+- 严禁使用 product_name / specifications / price_info / care_instructions
+  / material_composition / weight 等字段名——这些不在 schema 中。
+- 严禁把字段嵌套到 specifications / price_info 这类子对象中。
+- 严禁输出 Markdown 代码块、解释文本、前后缀说明，只输出纯 JSON。
+- 缺失字段一律用 null（标量）或 [] / {}（容器），不得省略字段。
 
 【风格】
 - 商品名称去掉店铺/活动前缀，仅保留品牌+型号+核心属性；
-- 描述聚焦“为谁解决了什么”，不堆参数；
-- 卖点去重，避免“高品质/超划算”这类空洞词；
-- 痛点必须是用户视角的“场景—难处”，而非“产品功能”。
+- 描述聚焦"为谁解决了什么"，不堆参数；
+- 卖点去重，避免"高品质/超划算"这类空洞词；
+- 痛点必须是用户视角的"场景—难处"，而非"产品功能"；
+- 若文本中出现医疗/保健/食品声明，将 health_disclaimer_required 设为 true。

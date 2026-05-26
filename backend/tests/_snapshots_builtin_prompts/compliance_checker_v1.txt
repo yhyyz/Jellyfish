@@ -18,14 +18,33 @@ product_category: beauty
 5. 性别、年龄、地域等冒犯性表达；
 6. 风险提示完整度（投资 / 美妆 / 健身等）。
 
-【输出】
-仅输出符合 ComplianceReport schema 的 JSON：
+【输出 Schema（必须严格匹配，字段名一字不差）】
+
+外层 ComplianceReport（顶层对象）：
 {
   "variant_id": null,
   "region": "cn_mainland",
   "product_category": "beauty",
   "findings": [ComplianceFinding, ...],
-  "score": <0-100>,
-  "summary": "<= 120 字概述>"
+  "score": <int, 0-100，越高越合规>,
+  "summary": <string, ≤ 120 字概述>
 }
-不要输出 Markdown / 解释 / 代码块。
+
+内层 ComplianceFinding（findings 数组每一项）：
+{
+  "rule_id": <string, 规则唯一标识，如 "abs_word_zui_cha"、"missing_health_disclaimer"，自定义命名要语义清晰>,
+  "rule_kind": <string, 必为 "banned_phrase"/"required_label"/"required_disclaimer"/"brand_mention_cap" 之一>,
+  "severity": <string, 必为 "info"/"warning"/"blocker" 之一>,
+  "description": <string, 问题描述>,
+  "location": <string|null, 问题定位（如镜头 ID/字段路径）；无可填 null>,
+  "suggested_fix": <string|null, 建议修复方案；无可填 null>
+}
+
+【硬性禁止字段名】
+不允许在 ComplianceFinding 中出现：shot_id / type / category / message / severity_level
+等不在 schema 中的字段。镜头定位放进 location 字段（例如 "shot_005"），问题文本放进
+description 字段，规则标签放进 rule_id 字段。severity 必须是上面三个枚举值之一。
+
+【输出】
+仅输出符合上述 ComplianceReport schema 的 JSON 对象。
+不要 Markdown，不要解释，不要前后缀。
