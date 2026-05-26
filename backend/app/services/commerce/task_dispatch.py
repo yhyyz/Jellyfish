@@ -50,6 +50,11 @@ TASK_KIND_COMPLIANCE_CHECK = "compliance_check"
 #: TTS 合成任务 ``task_kind``，与 ``app.services.studio.tts_generate_worker`` 注册表同步。
 TASK_KIND_TTS_GENERATE = "tts_generate"
 
+#: 章节级 AV plan 任务 ``task_kind``，与
+#: ``app.services.studio.chapter_av_plan_worker`` 注册表同步。
+#: P3 W17 T17-7：Decision F 决策树编排，slow 队列。
+TASK_KIND_CHAPTER_AV_PLAN = "chapter_av_plan"
+
 #: 统一 Celery 入口 task name；所有 worker 通过 task_kind 二级路由。
 _CELERY_ENTRY_TASK = "task.execute"
 
@@ -143,6 +148,26 @@ class CommerceTaskDispatchService:
         return await self._enqueue(
             task_kind=TASK_KIND_TTS_GENERATE,
             run_args=body,
+        )
+
+    async def enqueue_chapter_av_plan(self, body: dict[str, Any]) -> dict[str, Any]:
+        """创建 ``task_kind=chapter_av_plan`` 的 :class:`GenerationTask` 并投递（slow 队列）。
+
+        Decision F 决策树要在 TTS 合成前 reconcile (text, voice_pack,
+        shot.duration) 三元组；遍历整个章节、可能反复调 LLM 改写，故走
+        ``slow`` 队列以避免与 fast 队列上的分钟级任务争抢消费者。
+
+        Args:
+            body: AV plan 请求 dict，至少包含 ``chapter_id``。
+
+        Returns:
+            ``{"task_id", "task_kind", "status", "enqueued_at"}``。
+        """
+
+        return await self._enqueue(
+            task_kind=TASK_KIND_CHAPTER_AV_PLAN,
+            run_args=body,
+            queue=_STORY_BATCH_QUEUE,
         )
 
     async def enqueue_story_batch(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -244,6 +269,7 @@ class CommerceTaskDispatchService:
 
 __all__ = [
     "CommerceTaskDispatchService",
+    "TASK_KIND_CHAPTER_AV_PLAN",
     "TASK_KIND_COMPLIANCE_CHECK",
     "TASK_KIND_PRODUCT_INFO_EXTRACT",
     "TASK_KIND_STORY_SCRIPT_GENERATE",

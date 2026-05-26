@@ -40,8 +40,8 @@ schema 不符或硬约束违规都会触发自动重试。
   "shot_type": <string, "close_up"/"medium"/"wide"/"extreme_close_up" 之一>,
   "camera_angle": <string, "eye_level"/"high_angle"/"low_angle"/"dutch" 之一>,
   "camera_movement": <string, "static"/"push_in"/"pull_out"/"pan"/"tilt"/"handheld"/"dolly" 之一>,
-  "dialog": <string|null, 角色对白；无对白填 null>,
-  "narration": <string|null, 旁白文本；无旁白填 null>,
+  "dialog": <string|null, 角色对白；无对白填 null。字数硬约束：≤ 4 × duration_sec 个汉字>,
+  "narration": <string|null, 旁白文本；无旁白填 null。字数硬约束：≤ 3 × duration_sec 个汉字>,
   "product_focus_level": <string, 必为 "subtle"/"functional"/"hero"/"none" 之一>,
   "is_punchline": <bool, 是否情绪/反转 punchline 镜头>,
   "is_brand_mention": <bool, 是否包含品牌口播>,
@@ -66,6 +66,11 @@ schema 中的字段。画面/场景/动作描述统一放进 notes 字段。
 6. shots[i].id 必须为 ``shot_001`` 这类零填充三位序号。
 7. punchline 镜头（is_punchline=true）至少出现一次，落在公式 beat 中
    被标记为转折/反转的位置。
+8. dialog / narration 字符数硬约束（防止下游 TTS mismatch 反复回灌）：
+   - 本镜头 N = duration_sec 秒，旁白（narration）字符数 ≤ 3 × duration_sec；
+   - 对白（dialog）字符数 ≤ 4 × duration_sec；
+   - 中英混排时按"任意一种语言上限"较严格者为准；
+   - 超出上限会在合成阶段被自动改写或挂起，请提前在脚本里就压缩到位。
 
 【风格指引】
 - 口语化、画面感强；避免机翻腔与广告腔；

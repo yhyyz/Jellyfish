@@ -30,6 +30,7 @@ from app.services.commerce.story_video_batch_generate_worker import (
     build_story_video_batch_generate_executor,
 )
 from app.services.film.generated_video import run_video_generation_task
+from app.services.studio.chapter_av_plan_worker import build_chapter_av_plan_executor
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.studio.tts_generate_worker import build_tts_generate_executor
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
@@ -139,3 +140,6 @@ task_executor_registry.register(
 # P3 W17 T17-5: TTS 合成 worker（fast 队列，300s 超时），cache 命中走快速分支，
 # miss 时调 DashScopeTtsApiAdapter.synthesize 并落 FileItem + TtsCache 行。
 task_executor_registry.register("tts_generate", build_tts_generate_executor())
+# P3 W17 T17-7: 章节级 AV plan worker（slow 队列，7200s 超时），
+# Decision F 决策树编排：estimate → speed_adjust → llm_rewrite → hold。
+task_executor_registry.register("chapter_av_plan", build_chapter_av_plan_executor())

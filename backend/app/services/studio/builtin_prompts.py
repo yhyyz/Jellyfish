@@ -204,8 +204,8 @@ schema 不符或硬约束违规都会触发自动重试。
   "shot_type": <string, "close_up"/"medium"/"wide"/"extreme_close_up" 之一>,
   "camera_angle": <string, "eye_level"/"high_angle"/"low_angle"/"dutch" 之一>,
   "camera_movement": <string, "static"/"push_in"/"pull_out"/"pan"/"tilt"/"handheld"/"dolly" 之一>,
-  "dialog": <string|null, 角色对白；无对白填 null>,
-  "narration": <string|null, 旁白文本；无旁白填 null>,
+  "dialog": <string|null, 角色对白；无对白填 null。字数硬约束：≤ 4 × duration_sec 个汉字>,
+  "narration": <string|null, 旁白文本；无旁白填 null。字数硬约束：≤ 3 × duration_sec 个汉字>,
   "product_focus_level": <string, 必为 "subtle"/"functional"/"hero"/"none" 之一>,
   "is_punchline": <bool, 是否情绪/反转 punchline 镜头>,
   "is_brand_mention": <bool, 是否包含品牌口播>,
@@ -230,6 +230,11 @@ schema 中的字段。画面/场景/动作描述统一放进 notes 字段。
 6. shots[i].id 必须为 ``shot_001`` 这类零填充三位序号。
 7. punchline 镜头（is_punchline=true）至少出现一次，落在公式 beat 中
    被标记为转折/反转的位置。
+8. dialog / narration 字符数硬约束（防止下游 TTS mismatch 反复回灌）：
+   - 本镜头 N = duration_sec 秒，旁白（narration）字符数 ≤ 3 × duration_sec；
+   - 对白（dialog）字符数 ≤ 4 × duration_sec；
+   - 中英混排时按"任意一种语言上限"较严格者为准；
+   - 超出上限会在合成阶段被自动改写或挂起，请提前在脚本里就压缩到位。
 
 【风格指引】
 - 口语化、画面感强；避免机翻腔与广告腔；
@@ -492,6 +497,43 @@ _BRAND_VOICE_PROFILE = """\
 4. 与竞品语气的差异化定位（即“我说话的方式如何和他们不一样”）；
 5. 提供 3 条 ≤ 30 字的样例口播，体现该 archetype 的真实落地感；
 6. tone_grid 各维度的“安全区间”：以 0-10 范围表达，超出则回到 archetype 中心。
+"""
+
+
+# ---------------------------------------------------------------------------
+# P3 W17 T17-7 / T17-8: DurationRewriter 模板（不进 BUILTIN_PROMPT_DEFINITIONS
+# 注册表，避免引入新的 PromptCategory 与既有 27 项契约冲突；由
+# ``DurationRewriterAgent`` 直接以模块级常量方式消费。）
+# ---------------------------------------------------------------------------
+
+
+_DURATION_REWRITER = """\
+你是“TTS 时长收敛改写器”。请把下面这段台词改写为 ≤ {{ target_chars }}
+个字符的版本，目的是让它在 CosyVoice 合成时的输出时长落入镜头时长的
+±15% 阈值内（避免下游 chapter_av_planner 反复回灌）。
+
+【原始台词】
+{{ original_text }}
+
+【模式】
+line_mode = {{ line_mode }}
+- DIALOGUE：对白，偏口语；保留说话人语气与情绪曲线；
+- VOICE_OVER：旁白，偏书面；保留信息密度与节奏；
+- OFF_SCREEN / PHONE：按 DIALOGUE 处理。
+
+【硬性约束】
+1. 输出字符数必须 ≤ {{ target_chars }}（含中英文标点；中文一字算一字符）；
+2. 必须保留原文的关键信息（卖点 / 数字 / 行动指令）与情绪走向；
+3. 不要新增原文未出现的事实、品牌名、价格或承诺；
+4. 不要使用绝对化用语（最 / 第一 / 唯一 / 国家级 等）；
+5. 输出仅一段连续文本，不允许添加 Markdown / 引号 / 注释。
+
+【输出 Schema（必须严格匹配，字段名一字不差）】
+{
+  "rewritten_text": <string, 改写后的台词，长度 ≤ {{ target_chars }}>,
+  "char_count": <int, rewritten_text 的字符数>
+}
+仅输出符合上述 schema 的 JSON 对象。
 """
 
 
