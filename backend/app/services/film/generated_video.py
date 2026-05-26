@@ -13,6 +13,7 @@ from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.core.contracts.provider import ProviderConfig
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
+from app.core.integrations.video_capabilities import resolve_video_capability
 from app.core.tasks import VideoGenerationTask
 from app.models.llm import Model, ModelCategoryKey, ModelSettings
 from app.models.task_links import GenerationTaskLink
@@ -23,6 +24,7 @@ from app.services.llm.provider_resolver import resolve_provider_config_by_model
 from app.services.studio.file_usages import sync_usage_from_shot_context
 from app.services.studio.generation.video import (
     REQUIRED_FRAMES_BY_MODE,
+    ShotProductReferenceResolver,
     build_video_base_draft,
     build_video_context,
     build_video_submission_payload,
@@ -171,16 +173,49 @@ async def build_run_args(
     images: list[str],
     ratio: str | None,
 ) -> dict:
+    """构建视频生成 worker 的 run_args。
+
+    multi_ref 模式（W16 T16-9，Decision H）：在调用 build_video_context 前先用
+    ShotProductReferenceResolver 把镜头挂载的 ProductImage 解析成 file_id 列表，
+    再走通用 frame_map 路径。reference_images_base64 在 input 中独立通道，与
+    first/last/key_frame_b64 互斥；aliyun_bailian 兜底分支被跳过避免双发。
+    """
     model = await resolve_default_video_model(db)
     provider_cfg = await load_provider_config_by_model(db, model)
     shot_detail = await validate_shot_and_duration(db, shot_id)
     resolved_ratio = await resolve_effective_video_options(requested_ratio=ratio)
     base = build_video_base_draft(shot_id=shot_id, prompt=prompt)
+
+    reference_warnings: list[str] = []
+    resolved_images: list[str] = list(images or [])
+    if reference_mode == "multi_ref":
+        capability = resolve_video_capability(provider=provider_cfg.provider, model=model.name)
+        max_refs = capability.max_reference_images or 9
+        if not resolved_images:
+            resolver = ShotProductReferenceResolver()
+            resolved_file_ids, resolver_warnings = await resolver.resolve(
+                db, shot_id=shot_id, max_total=max_refs
+            )
+            reference_warnings.extend(resolver_warnings)
+            resolved_images = list(resolved_file_ids)
+        if not resolved_images:
+            raise HTTPException(
+                status_code=400,
+                detail="multi_ref 模式无可用参考图：请检查镜头 product_focus_level 与挂载商品图",
+            )
+        if len(resolved_images) > max_refs:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"multi_ref 模式参考图数量超出模型上限：{len(resolved_images)} > {max_refs}"
+                ),
+            )
+
     context = await build_video_context(
         db,
         shot_id=shot_id,
         reference_mode=reference_mode,
-        images=images,
+        images=resolved_images,
     )
     submission = await build_video_submission_payload(db, base=base, context=context)
     validate_images_count(reference_mode, submission.images)
@@ -188,6 +223,38 @@ async def build_run_args(
     final_prompt = submission.prompt.strip()
     if not final_prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
+
+    if reference_mode == "multi_ref":
+        # multi_ref 通道：reference_images_base64 list；frame slots 全部 None；
+        # aliyun_bailian 兜底分支跳过避免与 multi_ref payload 双发。
+        reference_images_base64 = [
+            await file_id_to_data_url(db, file_id=fid) for fid in submission.images
+        ]
+        run_args = {
+            "shot_id": shot_id,
+            "provider": provider_cfg.provider,
+            "api_key": provider_cfg.api_key,
+            "base_url": provider_cfg.base_url,
+            "input": {
+                "prompt": final_prompt,
+                "first_frame_base64": None,
+                "last_frame_base64": None,
+                "key_frame_base64": None,
+                "reference_images_base64": reference_images_base64,
+                "model": model.name,
+                "ratio": resolved_ratio,
+                "seconds": shot_detail.duration,
+            },
+            "meta": {
+                "reference_mode": "multi_ref",
+                "reference_count": len(reference_images_base64),
+                "reference_warnings": reference_warnings,
+            },
+        }
+        prompt_preview_payload = submission.extra.get("prompt_preview")
+        if isinstance(prompt_preview_payload, dict):
+            run_args["prompt_preview"] = prompt_preview_payload
+        return run_args
 
     required_frames = tuple(ShotFrameType(item) for item in REQUIRED_FRAMES_BY_MODE[reference_mode])
     frame_data_urls = [await file_id_to_data_url(db, file_id=file_id) for file_id in submission.images]

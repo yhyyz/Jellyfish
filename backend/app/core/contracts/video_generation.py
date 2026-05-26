@@ -29,6 +29,10 @@ class VideoGenerationInput(BaseModel):
     first_frame_base64: Optional[str] = Field(None, description="首帧图：纯 base64 或 data:image/...;base64,...")
     last_frame_base64: Optional[str] = Field(None, description="尾帧图：纯 base64 或 data URL")
     key_frame_base64: Optional[str] = Field(None, description="关键帧图：纯 base64 或 data URL")
+    reference_images_base64: Optional[list[str]] = Field(
+        None,
+        description="多图参考列表（用于 happyhorse-1.0-r2v 等 r2v 模型，每项为纯 base64 或 data URL，1-9 张）",
+    )
 
     model: Optional[str] = Field(None, description="视频模型名称（可选，供应商透传）")
     ratio: VideoRatio = Field(..., description="视频宽高比，业务层唯一主参数")
@@ -43,12 +47,14 @@ class VideoGenerationInput(BaseModel):
 
     @model_validator(mode="after")
     def require_prompt_or_any_reference(self) -> "VideoGenerationInput":
+        """要求 prompt 或任意参考图（首帧/尾帧/关键帧/多图参考）至少存在一种。"""
         has_prompt = bool((self.prompt or "").strip())
         has_ref = any(
             [
                 _strip_optional_b64(self.first_frame_base64),
                 _strip_optional_b64(self.last_frame_base64),
                 _strip_optional_b64(self.key_frame_base64),
+                *(_strip_optional_b64(item) for item in (self.reference_images_base64 or [])),
             ]
         )
         if not has_prompt and not has_ref:

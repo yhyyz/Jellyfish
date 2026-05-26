@@ -9,9 +9,11 @@ class VideoGenerationTaskRequest(BaseModel):
     """视频生成任务请求。"""
 
     shot_id: str = Field(..., description="镜头 ID")
-    reference_mode: Literal["first", "last", "key", "first_last", "first_last_key", "text_only"] = Field(
+    reference_mode: Literal[
+        "first", "last", "key", "first_last", "first_last_key", "text_only", "multi_ref"
+    ] = Field(
         ...,
-        description="参考模式：first | last | key | first_last | first_last_key | text_only",
+        description="参考模式：first | last | key | first_last | first_last_key | text_only | multi_ref",
     )
     # 文本模式必填；非文本模式可选作为补充描述
     prompt: str | None = Field(None, description="视频提示词（text_only 必填）")

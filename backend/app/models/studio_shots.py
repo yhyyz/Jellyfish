@@ -9,10 +9,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.db import Base
 from app.models.base import TimestampMixin
 from app.models.types import (
+    AudioStrategy,
     CameraAngle,
     CameraMovement,
     CameraShotType,
     DialogueLineMode,
+    ProductFocusLevel,
     ShotCandidateStatus,
     ShotCandidateType,
     ShotDialogueCandidateStatus,
@@ -71,6 +73,20 @@ class Shot(Base,TimestampMixin):
         nullable=True,
         index=True,
         comment="已生成视频关联的文件 ID（FileItem，type=video）",
+    )
+    audio_strategy: Mapped[AudioStrategy] = mapped_column(
+        String(32),
+        nullable=False,
+        default=AudioStrategy.silent_with_tts,
+        server_default=AudioStrategy.silent_with_tts.value,
+        comment="镜头音频策略：silent_with_tts（默认，静音+TTS）/ keep_native（保留原音逃生口）",
+    )
+    product_focus_level: Mapped[ProductFocusLevel] = mapped_column(
+        String(16),
+        nullable=False,
+        default=ProductFocusLevel.none,
+        server_default=ProductFocusLevel.none.value,
+        comment="商品视觉聚焦级别：subtle/functional/hero/none，决定 r2v multi_ref 取图优先级（Decision H）",
     )
 
     chapter: Mapped["Chapter"] = relationship(back_populates="shots")

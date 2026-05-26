@@ -53,16 +53,23 @@ def _dashscope_video_mode(
     model: str | None,
     *,
     has_image_refs: bool,
-) -> Literal["t2v", "i2v", "ref_video"]:
+) -> Literal["t2v", "i2v", "ref_video", "r2v"]:
     """按模型名称推断 DashScope 视频任务形态，决定 input.media 是否携带图片/视频。
 
     说明：不同模型对 input.media 的要求差异很大。百炼 HTTP 接口中，帧图需使用
     type=first_frame / last_frame（见模型文档），禁止使用旧字段 reference_image。
+    多图参考（r2v）使用 type=reference_image 列表（happyhorse-1.0-r2v 等模型）。
     """
     m = (model or "").strip().lower()
     if not m:
         # 未带模型名时不可猜测为图生视频，否则易与上游「仅接受文生 / 需视频参考」的校验冲突。
         return "t2v"
+
+    # r2v 检测必须排在 ref_video / i2v 之前：
+    # 旧 ref_video matcher 含 "ref2video" 等关键词，会误捕 "happyhorse-1.0-r2v"。
+    # 因此用严格的 "-r2v" 词缀或 "r2v" 结尾匹配，避免 false-positive。
+    if "-r2v" in m or m.endswith("r2v"):
+        return "r2v"
 
     # 参考视频 / 视频续写等：media 中需要 reference_video（公网 URL），不能仅用图片冒充。
     if any(
@@ -130,6 +137,26 @@ def _build_dashscope_video_body(input_: VideoGenerationInput) -> dict[str, Any]:
             media_items.append({"type": "first_frame", "url": to_image_data_url(key_frame)})
         if media_items:
             input_payload["media"] = media_items
+
+    # r2v 多图参考：input.media 是 type=reference_image 的列表，1-9 张。
+    # 9 张上限与 VideoModelCapability.max_reference_images 对齐（aliyun/video_capabilities.py
+    # 中 happyhorse-1.0-r2v 配置）。空列表静默回退到 prompt-only（contract validator 已确保 prompt 存在）。
+    if mode == "r2v":
+        ref_images = [item for item in (input_.reference_images_base64 or []) if _strip_optional_b64(item)]
+        if not ref_images:
+            logger.debug(
+                "DashScope video: model %r resolved to r2v but reference_images_base64 is empty; falling back to prompt-only.",
+                (input_.model or "").strip() or None,
+            )
+        else:
+            if len(ref_images) > 9:
+                raise RuntimeError(
+                    f"happyhorse r2v 模型最多支持 9 张参考图，当前请求传入 {len(ref_images)} 张。"
+                )
+            input_payload["media"] = [
+                {"type": "reference_image", "url": to_image_data_url(item)}
+                for item in ref_images
+            ]
 
     parameters: dict[str, Any] = {
         "size": _ratio_to_dashscope_size(input_.ratio),

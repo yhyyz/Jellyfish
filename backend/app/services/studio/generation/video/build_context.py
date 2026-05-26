@@ -14,7 +14,14 @@ REQUIRED_FRAMES_BY_MODE: dict[str, tuple[ShotFrameType, ...]] = {
     "first_last": (ShotFrameType.first, ShotFrameType.last),
     "first_last_key": (ShotFrameType.first, ShotFrameType.last, ShotFrameType.key),
     "text_only": (),
+    # multi_ref: 商品多图参考模式。空 tuple 含义与 text_only 不同——参考图来源于
+    # ProductImage（由 build_run_args 调用 ShotProductReferenceResolver 提前解析），
+    # 而非 ShotFrameImage。校验路径需特判。
+    "multi_ref": (),
 }
+
+MULTI_REF_MIN_COUNT = 1
+MULTI_REF_DEFAULT_CAP = 9
 
 
 def required_image_count(reference_mode: str) -> int:
@@ -22,8 +29,22 @@ def required_image_count(reference_mode: str) -> int:
 
 
 def validate_images_count(reference_mode: str, images: list[str]) -> None:
-    expected = required_image_count(reference_mode)
+    """校验 reference_mode 与 images 数量是否匹配。
+
+    multi_ref 特判：要求 1..MULTI_REF_DEFAULT_CAP（9）张；其它模式按 frame_map 严格相等。
+    """
     actual = len(images or [])
+    if reference_mode == "multi_ref":
+        if actual < MULTI_REF_MIN_COUNT or actual > MULTI_REF_DEFAULT_CAP:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"reference_mode=multi_ref requires {MULTI_REF_MIN_COUNT}..{MULTI_REF_DEFAULT_CAP} "
+                    f"images, got {actual}"
+                ),
+            )
+        return
+    expected = required_image_count(reference_mode)
     if actual != expected:
         raise HTTPException(
             status_code=400,
@@ -38,7 +59,15 @@ async def resolve_video_reference_images(
     reference_mode: str,
     images: list[str] | None = None,
 ) -> list[str]:
+    """解析视频生成参考图。
+
+    multi_ref 由 build_run_args 提前调用 ShotProductReferenceResolver 解析，
+    本函数只负责直通已解析的列表（保持 build_context 层无 commerce 域依赖）。
+    """
     normalized = [str(item).strip() for item in (images or []) if str(item).strip()]
+    if reference_mode == "multi_ref":
+        return normalized
+
     if normalized:
         validate_images_count(reference_mode, normalized)
         return normalized

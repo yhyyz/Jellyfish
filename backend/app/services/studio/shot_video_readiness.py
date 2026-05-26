@@ -18,9 +18,11 @@ from app.models.studio import (
 )
 from app.models.task import GenerationTask, GenerationTaskStatus
 from app.models.task_links import GenerationTaskLink
+from app.models.types import ProductFocusLevel
 from app.schemas.studio.shots import ShotVideoReadinessCheck, ShotVideoReadinessRead
 from app.services.common import entity_not_found
 from app.services.studio.generation.video import (
+    ShotProductReferenceResolver,
     build_video_base_draft,
     build_video_context,
     derive_video_preview,
@@ -34,6 +36,7 @@ REQUIRED_FRAMES_BY_MODE: dict[str, tuple[ShotFrameType, ...]] = {
     "first_last": (ShotFrameType.first, ShotFrameType.last),
     "first_last_key": (ShotFrameType.first, ShotFrameType.last, ShotFrameType.key),
     "text_only": (),
+    "multi_ref": (),
 }
 
 _ACTIVE_TASK_STATUSES = (
@@ -96,6 +99,32 @@ async def _reference_frames_ready(
     if missing:
         return _check("reference_frames_ready", False, f"缺少参考帧：{', '.join(missing)}")
     return _check("reference_frames_ready", True, "参考帧已就绪")
+
+
+async def _multi_ref_reference_ready(
+    db: AsyncSession,
+    *,
+    shot: Shot,
+) -> ShotVideoReadinessCheck:
+    """multi_ref 模式参考图准备度：依赖 shot.product_focus_level 与挂载商品图。"""
+    if shot.product_focus_level == ProductFocusLevel.none:
+        return _check(
+            "reference_frames_ready",
+            False,
+            "镜头未设置 product_focus_level（none），无法走多图参考",
+        )
+    resolver = ShotProductReferenceResolver()
+    try:
+        file_ids, _warnings = await resolver.resolve(db, shot_id=shot.id)
+    except Exception as exc:  # noqa: BLE001
+        return _check("reference_frames_ready", False, f"参考图解析失败：{exc}")
+    if not file_ids:
+        return _check(
+            "reference_frames_ready",
+            False,
+            "已关联商品但缺少符合优先级的图片（或未关联任何商品）",
+        )
+    return _check("reference_frames_ready", True, f"已就绪 {len(file_ids)} 张商品参考图")
 
 
 async def _video_model_and_provider_ready(db: AsyncSession) -> tuple[ShotVideoReadinessCheck, ShotVideoReadinessCheck]:
@@ -184,11 +213,15 @@ async def get_shot_video_readiness(
 
     active_video_task = await _has_active_video_task(db, shot_id=shot_id)
     model_check, provider_check = await _video_model_and_provider_ready(db)
+    if reference_mode == "multi_ref":
+        reference_check = await _multi_ref_reference_ready(db, shot=shot)
+    else:
+        reference_check = await _reference_frames_ready(db, shot_id=shot_id, reference_mode=reference_mode)
     checks = [
         _check("extraction_ready", extraction_ok, extraction_msg),
         duration_check,
         _check("prompt_ready", prompt_ok, prompt_message),
-        await _reference_frames_ready(db, shot_id=shot_id, reference_mode=reference_mode),
+        reference_check,
         model_check,
         provider_check,
         _check(

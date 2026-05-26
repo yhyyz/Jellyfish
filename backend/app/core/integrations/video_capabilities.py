@@ -20,7 +20,14 @@ DEFAULT_RATIO_TO_SIZE_MAPPING: dict[str, str] = {
 
 @dataclass(frozen=True, slots=True)
 class VideoModelCapability:
-    """供应商/模型能力约束。"""
+    """供应商/模型能力约束。
+
+    新增字段（P3 W16 引入，用于 happyhorse-1.0-r2v 等多图参考视频模型）：
+
+    - max_reference_images: 单次请求支持的最大参考图数量（0 表示不支持图片参考）。
+    - supports_r2v: 是否支持 reference-to-video（多图参考一体化合成）模式。
+    - supported_reference_modes: API 层 reference_mode 字段的合法取值集合。
+    """
 
     supports_seed: bool = True
     supports_watermark: bool = True
@@ -29,6 +36,9 @@ class VideoModelCapability:
     ratio_to_size_mapping: dict[str, str] | None = None
     min_seconds: int | None = 1
     max_seconds: int | None = None
+    max_reference_images: int = 0
+    supports_r2v: bool = False
+    supported_reference_modes: tuple[str, ...] = ()
 
 
 def register_video_model_capability(
@@ -43,6 +53,11 @@ def register_video_model_capability(
 
         register_openai_video_capability(model_prefix=model_prefix, capability=capability)
         return
+    if provider == "aliyun_bailian":
+        from app.core.integrations.aliyun.video_capabilities import register_aliyun_bailian_video_capability
+
+        register_aliyun_bailian_video_capability(model_prefix=model_prefix, capability=capability)
+        return
     from app.core.integrations.volcengine.video_capabilities import register_volcengine_video_capability
 
     register_volcengine_video_capability(model_prefix=model_prefix, capability=capability)
@@ -50,24 +65,34 @@ def register_video_model_capability(
 
 def clear_video_model_capability_overrides(*, provider: ProviderKey | None = None) -> None:
     """兼容入口：清空能力覆盖；供测试或重置场景使用。"""
+    from app.core.integrations.aliyun.video_capabilities import clear_aliyun_bailian_video_capability_overrides
     from app.core.integrations.openai.video_capabilities import clear_openai_video_capability_overrides
     from app.core.integrations.volcengine.video_capabilities import clear_volcengine_video_capability_overrides
 
     if provider is None:
         clear_openai_video_capability_overrides()
+        clear_aliyun_bailian_video_capability_overrides()
         clear_volcengine_video_capability_overrides()
         return
     if provider == "openai":
         clear_openai_video_capability_overrides()
         return
+    if provider == "aliyun_bailian":
+        clear_aliyun_bailian_video_capability_overrides()
+        return
     clear_volcengine_video_capability_overrides()
 
 
 def resolve_video_capability(*, provider: ProviderKey, model: str | None) -> VideoModelCapability:
+    """按 provider 路由到具体的能力解析器。"""
     if provider == "openai":
         from app.core.integrations.openai.video_capabilities import resolve_openai_video_capability
 
         return resolve_openai_video_capability(model)
+    if provider == "aliyun_bailian":
+        from app.core.integrations.aliyun.video_capabilities import resolve_aliyun_bailian_video_capability
+
+        return resolve_aliyun_bailian_video_capability(model)
     from app.core.integrations.volcengine.video_capabilities import resolve_volcengine_video_capability
 
     return resolve_volcengine_video_capability(model)
