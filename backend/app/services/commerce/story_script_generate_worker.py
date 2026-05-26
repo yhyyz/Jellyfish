@@ -38,10 +38,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.chains.agents.commerce.story_script_generator_agent import StoryScriptGeneratorAgent
 from app.core.contracts.story import StoryGenerationVars, StoryScript
 from app.core.db import async_session_maker
+from app.core.task_manager import SqlAlchemyTaskStore
+from app.core.task_manager.types import TaskStatus
 from app.models.story_formula import StoryVariant
 from app.models.types import StoryVariantStatus
 from app.services.llm.runtime import build_default_text_llm_sync
 from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor
+from app.services.worker.task_logging import log_task_event
 
 
 logger = logging.getLogger(__name__)
@@ -224,44 +227,63 @@ async def run_story_script_generate_task(
     archetype: str | None = generation_vars.archetype or None
 
     async with factory() as session:
-        # 4) 在同步会话里构造 LLM（与 shot_frame_prompt_tasks 保持一致）。
-        llm = await session.run_sync(chosen_llm_factory)
-        agent = chosen_agent_factory(llm)
+        try:
+            store = SqlAlchemyTaskStore(session)
+            await store.set_status(task_id, TaskStatus.running)
+            await store.set_progress(task_id, 5)
+            await session.commit()
+            log_task_event(TASK_KIND, task_id, "running")
 
-        # 5) 调用 agent；让 ValueError / ValidationError 自然向上抛出。
-        script_result = await _invoke_agent(agent, generation_vars)
+            llm = await session.run_sync(chosen_llm_factory)
+            agent = chosen_agent_factory(llm)
 
-        # 6) 持久化 StoryVariant；compliance_score 留 0，由 W5-T3 写入。
-        variant_id = _new_variant_id()
-        script_dump = script_result.model_dump()
-        variant = StoryVariant(
-            id=variant_id,
-            project_id=project_id,
-            chapter_id=chapter_id,
-            formula_id=formula_id,
-            hook_pattern_id=run_args.get("hook_pattern_id"),
-            cta_pattern_id=run_args.get("cta_pattern_id"),
-            archetype=archetype,
-            script_full_text=json.dumps(script_dump, ensure_ascii=False),
-            script_breakdown=script_dump,
-            status=StoryVariantStatus.ready.value,
-            is_champion=False,
-            compliance_score=0,
-            generated_by_task_id=generated_by_task_id,
-        )
-        session.add(variant)
-        await session.commit()
-        await session.refresh(variant)
+            script_result = await _invoke_agent(agent, generation_vars)
 
-        logger.info(
-            "story_script_generate: persisted variant %s for project=%s chapter=%s formula=%s",
-            variant_id,
-            project_id,
-            chapter_id,
-            formula_id,
-        )
+            variant_id = _new_variant_id()
+            script_dump = script_result.model_dump()
+            variant = StoryVariant(
+                id=variant_id,
+                project_id=project_id,
+                chapter_id=chapter_id,
+                formula_id=formula_id,
+                hook_pattern_id=run_args.get("hook_pattern_id"),
+                cta_pattern_id=run_args.get("cta_pattern_id"),
+                archetype=archetype,
+                script_full_text=json.dumps(script_dump, ensure_ascii=False),
+                script_breakdown=script_dump,
+                status=StoryVariantStatus.ready.value,
+                is_champion=False,
+                compliance_score=0,
+                generated_by_task_id=task_id,
+            )
+            session.add(variant)
 
-        return {"variant_id": variant_id, "script": script_dump}
+            result_payload = {"variant_id": variant_id, "script": script_dump}
+            await store.set_result(task_id, result_payload)
+            await store.set_progress(task_id, 100)
+            await store.set_status(task_id, TaskStatus.succeeded)
+            await session.commit()
+            await session.refresh(variant)
+
+            logger.info(
+                "story_script_generate: persisted variant %s for project=%s chapter=%s formula=%s",
+                variant_id,
+                project_id,
+                chapter_id,
+                formula_id,
+            )
+            log_task_event(TASK_KIND, task_id, "succeeded", variant_id=variant_id)
+
+            return result_payload
+        except Exception as exc:  # noqa: BLE001
+            await session.rollback()
+            async with async_session_maker() as failure_session:
+                fail_store = SqlAlchemyTaskStore(failure_session)
+                await fail_store.set_error(task_id, str(exc))
+                await fail_store.set_status(task_id, TaskStatus.failed)
+                await failure_session.commit()
+            log_task_event(TASK_KIND, task_id, "failed", error=str(exc))
+            raise
 
 
 async def _invoke_agent(
