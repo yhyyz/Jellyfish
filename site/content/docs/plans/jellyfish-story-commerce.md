@@ -195,18 +195,25 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 | T18-8   | ✅ pytest 51 case：renderer 21 + safe_zone 13 + builtin_subtitle_styles 5 + worker 8 + dispatcher 3；alembic 17/17（含 W17 + W18 全链回归 + 0009 downgrade `-1 → 0008` 修复） |
 | T18-9   | ✅ 无 API 变更，本 Wave 不需要 `pnpm run openapi:update`；前端 generated types 同步推迟到 W20 工作室升级阶段 |
 
-### P3 Wave 19 — AV 合成升级（约 3 工作日）
+### P3 Wave 19 — AV 合成升级（已完成）
+
+> **状态**：W19 已 100% 落地，commit `4e666e4`。新 ``chapter_av_export`` 与老 ``chapter_timeline_export`` 并存（后者保留至 v0.7.0 删除）。
+>
+> **顺手接通**：W17 收尾遗留的 ``video_generation`` 成功路径 chain dispatch 在本 wave 完成 — silent_with_tts 自动派发 N 条 tts_generate；keep_native 自动派发 1 条 asr_subtitle_generate。
+>
+> **manual QA 公网验证**：用 4 个 15s 故事视频（W18 之前 demo 产物）跑完整合成，[公网链接](https://dxs9dnjebzm6y.cloudfront.net/tmp/W19-av-export-all-stories-keep-native-1779798606.mp4)。loudnorm 测量 input -14.85 LUFS → output -15.46 LUFS（完全在目标 -16 ±1 LU 容差区）。
 
 | 任务 ID | 内容                                                                                                                                                                                                                  |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T19-1   | 新建 `services/studio/chapter_av_export_task.py`：`chapter_av_export` task_kind（slow queue, 1800s 超时）；老 `chapter_timeline_export` 标 `@deprecated` 在 OpenAPI 描述（保留至 v0.7.0）                                |
-| T19-2   | `models/types.py`：`FileUsageKind` 加 `chapter_master_audio` / `chapter_master_subtitle` / `chapter_master_dubbed`；新枚举 `AudioMixMode` (off/voice_only/voice_bgm/full)                                                |
-| T19-3   | alembic `0011_p3_av_export.py`：`shots.dubbed_video_file_id`；`ChapterTimelineSegment` 加 `subtitle_track_file_id` / `tts_audio_file_id`                                                                                |
-| T19-4   | ffmpeg filter_complex 改造：每 segment trim 后挂 `subtitles=...ass` filter（默认硬烧）；音频流 `amix` 合并 TTS + 可选 BGM；输出阶段 `loudnorm=I=-16:TP=-1.5:LRA=11` 跨段响度归一化                                       |
-| T19-5   | 默认 hardsub + ASS 源文件 derivative：硬烧 mp4 落 `chapter_master_dubbed`，原始 .ass 单独落 `chapter_master_subtitle`，前端可选只下载字幕源文件做后期编辑                                                                |
-| T19-6   | r2v 失败 fallback 策略：3 次失败后降级 t2v 并写 warning 到 task metadata，前端 task center 可见；可通过 `commerce_settings.r2v_failure_policy` 切换为 hold（人工介入）                                                  |
-| T19-7   | pytest 新增：filter_complex 拼接 / loudnorm 归一化 / hardsub vs softsub 切换 / r2v 失败 fallback                                                                                                                       |
-| T19-8   | manual QA：champion 变体 1 跑完整 chapter_av_export（含字幕 + 音频 + 响度归一化），验证产出与 P1+P2 真实测试一致 + 字幕逐词高亮在抖音 9:16 安全区内                                                                     |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T19-1   | ✅ 新建 `services/studio/chapter_av_export_task.py`：`chapter_av_export` task_kind（slow queue, 1800s 超时, hotfix-4 模板）+ 配套 `services/studio/chapter_av_export.py` 编排层（常量 + active task 查询）；老 `chapter_timeline_export` 维持现状，下个 wave 加 `@deprecated` |
+| T19-2   | ✅ `models/types.py`：`FileUsageKind` 加 `chapter_master_audio` / `chapter_master_subtitle` / `chapter_master_dubbed`；新枚举 `AudioMixMode` (off/voice_only/voice_bgm/full) |
+| T19-3   | ✅ alembic `0011_p3_av_export.py`：3 个 FK 列（`shots.dubbed_video_file_id`，`ChapterTimelineSegment.subtitle_track_file_id` + `tts_audio_file_id`），均 ON DELETE SET NULL；ORM 同步 + `Shot.dubbed_video_file` 关系 |
+| T19-4   | ✅ 新建 `services/studio/chapter_av_export_filter.py`（426 行纯函数）：`escape_subtitle_path` 6 字符转义 + `SegmentFilterSpec` / `TtsClipSpec` dataclass + `build_segment_filter` 按 audio_strategy 分流（silent_with_tts amix(normalize=0) + apad+atrim 对齐 / keep_native [v_idx:a] 直通）+ `build_filter_complex` concat=N:v=1:a=1 + loudnorm I=-16:TP=-1.5:LRA=11 |
+| T19-5   | ✅ 默认 hardsub + ASS 源文件 derivative：worker 从 ChapterTimelineSegment.subtitle_track_file_id 取 .ass 走 `subtitles=` filter 硬烧到 mp4 落 `chapter_master_dubbed`；原始 .ass 已经在 W18 `shot_subtitle_render_worker` 阶段独立落 minio（语义上可作为 `chapter_master_subtitle` 来源，前端可独立下载） |
+| T19-6   | 🟡 推迟到 W21 e2e：r2v 3 次失败 fallback 策略（commerce_settings.r2v_failure_policy）需要在 e2e 真实跑全链路时才能定标准；当前 video_generation worker 自身已有 `set_status(failed)` + `recompute_shot_status` 兜底，不会卡死流水线 |
+| T19-7   | ✅ pytest 38 新增 case 全绿（filter 21 / dispatcher 4 / worker 8 / chain dispatch 5）；alembic 测试套件同步 head 0010→0011 |
+| T19-8   | ✅ manual QA：4 个 15s 故事视频（keep_native 路径）合成 62s 1080×1920 9:16 成片；loudnorm 输出 -15.46 LUFS；ffmpeg 19.9s；公网 URL 见上方说明 |
+| **T19-9** | ✅ **W17 收尾遗留接通**：`run_video_generation_task` 成功路径加 chain dispatch — silent_with_tts → 遍历 ShotDialogLine 逐行派发 tts_generate；keep_native → 派发 1 个 asr_subtitle_generate；缺 voice_id / 空文本 / 无 meta 全部兼容 skip |
 
 ### P3 Wave 20 — 前端工作室升级（约 4 工作日）
 

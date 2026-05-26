@@ -635,7 +635,7 @@ ApiKeyQuota (P1 建表, P3 启用 partner API 时使用)
 
 ## Alembic 迁移链 (P1 + P2 + P3)
 
-P1 阶段落库 6 个迁移，P2 阶段新增 1 个，P3 阶段已新增 3 个，共 10 个迁移按顺序执行：
+P1 阶段落库 6 个迁移，P2 阶段新增 1 个，P3 阶段已新增 4 个，共 11 个迁移按顺序执行：
 
 | Revision | 文件 | 说明 |
 | --- | --- | --- |
@@ -649,8 +649,9 @@ P1 阶段落库 6 个迁移，P2 阶段新增 1 个，P3 阶段已新增 3 个�
 | `0008` | `0008_p3_r2v_audio_strategy.py` | **P3 W16**: `shots.audio_strategy` (VARCHAR(32), default `silent_with_tts`) + `shots.product_focus_level` |
 | `0009` | `0009_p3_voice_pack_tts.py` | **P3 W17**: `voice_packs` / `tts_cache` 两表 + `Character.voice_pack_id` (FK) + `StoryVariant.voice_pack_id` / `narration_voice_pack_id` (FK) + `ShotDialogLine.start_time_ms` / `end_time_ms` / `tts_voice_id` (FK) / `tts_audio_file_id` (FK) |
 | `0010` | `0010_p3_subtitle_engine.py` | **P3 W18**: `subtitle_styles` 表（含 ASS Style 全字段 + font_fallback_chain JSON）+ `subtitle_tracks` 表（关联 shot_id CASCADE / style_id SET NULL / file_id SET NULL，记录 SubtitleSource 区分 TTS vs ASR 来源） |
+| `0011` | `0011_p3_av_export.py` | **P3 W19**: `shots.dubbed_video_file_id`（章节合成"配音+字幕"成片指针）+ `chapter_timeline_segments.subtitle_track_file_id` / `tts_audio_file_id`（合成阶段 filter_complex 输入），3 个 FK 均 ON DELETE SET NULL |
 
-总迁移数：**10（baseline + 6 P1 + 1 P2 + 3 P3）**。
+总迁移数：**11（baseline + 6 P1 + 1 P2 + 4 P3）**。
 
 迁移之外的"系统级数据"（提示词模板、剧情公式、合规 profile、模式库
 seed）通过应用启动时 `app.bootstrap` 调用的 `bootstrap_*` 幂等函数写
@@ -795,6 +796,7 @@ P3 已注册的 worker（`task_executor_registry`）：
 | `chapter_av_plan` | slow | 7200s | `chapter_id` | `{decisions[], holds[], warnings[]}`，按 audio_strategy 分流 silent_with_tts 走 Decision F、keep_native 产出 skip_native |
 | `asr_subtitle_generate` | fast | 600s | `video_file_id` / `language_hints?` | `{source_file_id, audio_url, language_hints, duration_ms, word_timestamps[]}` |
 | `shot_subtitle_render` | fast | 120s | `shot_id` / `style_id` / `word_timestamps` / `language_code?` / `source?` | `{subtitle_track_id, file_id, style_id, language_code, source, cue_count, duration_ms, warnings[]}` |
+| `chapter_av_export` | slow | 1800s | `chapter_id` / `aspect?` / `audio_strategy_override?` | `{file_id, chapter_id, segment_count, aspect, fps, lufs_target}` |
 
 dispatcher 入口在 `backend/app/services/commerce/task_dispatch.py`：
 
@@ -802,6 +804,45 @@ dispatcher 入口在 `backend/app/services/commerce/task_dispatch.py`：
 - `enqueue_chapter_av_plan(body)` → slow queue
 - `enqueue_asr_subtitle_generate(body)` → fast queue（W17 收尾新增）
 - `enqueue_shot_subtitle_render(body)` → fast queue（W18 新增）
+- `enqueue_chapter_av_export(body)` → slow queue（W19 新增）
+
+### Video 成功路径自动 chain dispatch（W19）
+
+`run_video_generation_task` 成功路径在 `set_status(succeeded)` 之前根据 `run_args["meta"]["audio_strategy"]` 自动派发下游 worker，把 W17 收尾建立的 dispatcher 入口与生产链路真正接通：
+
+| 视频生成 audio_strategy | 自动派发 |
+| --- | --- |
+| `silent_with_tts` | 遍历 `ShotDialogLine`（chapter_av_planner 已写好 `tts_voice_id` / `start_time_ms`），逐行派发 1 个 `tts_generate`；缺 `tts_voice_id` 或空文本的对白行 skip 不阻塞主链路 |
+| `keep_native` | 派发 1 个 `asr_subtitle_generate` 指向刚生成的 video FileItem |
+| `meta.audio_strategy` 缺失 | 不派发任何子任务（向后兼容老调用方） |
+
+dispatcher 共用 video worker 的 session：子任务行与 `video_generation` `succeeded` 状态在同一事务原子 commit，确保链路一致性。
+
+### W19 章节级 AV 合成
+
+W19 把 W17 双引擎产出（CosyVoice TTS / Paraformer-v2 ASR）+ W18 字幕（`.ass`）+ 各 segment raw 视频，一次 ffmpeg `filter_complex` 合成最终"配音 + 字幕"成片，与老 `chapter_timeline_export` 并存（后者保留至 v0.7.0 删除）：
+
+| 表 / 列 | 用途 |
+| --- | --- |
+| `Shot.dubbed_video_file_id` | 章节合成成片 FileItem 指针；与 `generated_video_file_id`（裸视频）共存，前端工作室预览时优先取 dubbed 版本 |
+| `ChapterTimelineSegment.subtitle_track_file_id` | 本段渲染好的 `.ass` 文件 FileItem，合成阶段用 `subtitles=` filter 硬烧 |
+| `ChapterTimelineSegment.tts_audio_file_id` | 本段 TTS 音频 FileItem，`silent_with_tts` 路径合成阶段 amix 混入；`keep_native` 路径为 NULL |
+| `FileUsageKind.chapter_master_dubbed` | 章节合成产物的 file_usages 标记，区分 timeline_export 的 `chapter_master_video` |
+| `FileUsageKind.chapter_master_audio` / `chapter_master_subtitle` | 预留：分别记录章节级混合音轨与字幕轨道独立产出（W19 当前不强制写入） |
+| `AudioMixMode` 枚举 | `off` / `voice_only` / `voice_bgm` / `full`，控制 ffmpeg 音轨链路（当前 W19 实现 `voice_only`，BGM/SFX 推迟到 P5+） |
+
+核心模块：
+
+- `services/studio/chapter_av_export_filter.py` 纯函数：`escape_subtitle_path`（6 类特殊字符转义 + Windows 反斜杠归一化）/ `SegmentFilterSpec` / `TtsClipSpec` dataclass / `build_segment_filter`（按 `audio_strategy` 分流）/ `build_filter_complex`（concat + loudnorm 收尾）。
+- `services/studio/chapter_av_export.py` 编排层：`EXPORT_TASK_KIND` 等常量 + `find_active_chapter_av_export_task_id`（防并发重复入队）。
+- `services/studio/chapter_av_export_task.py` 执行层：完整复用 hotfix-4 模板，`slow` 队列 1800s 超时；流程为下载所有依赖到临时目录 → 调 `build_filter_complex` 拼出 filter graph → ffmpeg subprocess（>8KB 时落 `-filter_complex_script`）→ 上传 minio → 落 FileItem + 反查回写 `GenerationTaskLink.file_id` + `upsert FileUsage` + 更新每段 `Shot.dubbed_video_file_id`。
+
+ffmpeg 关键参数（与 W19 librarian 调研报告一致）：
+- 视频归一化四件套（concat filter 强制要求各段一致）：`setsar=1, fps=30, format=yuv420p, scale+pad`
+- 音轨：`silent_with_tts` 走 `[i:a]` 自动丢弃 + TTS `adelay → amix(normalize=0) → apad+atrim` 对齐到 segment 视频时长；`keep_native` 走 `[i:a] atrim` 直通保留原音
+- 字幕：`subtitles=filename='...'` 单引号 + 6 字符转义
+- 响度归一化：`loudnorm I=-16:TP=-1.5:LRA=11` single-pass（短视频场景偏差 ±1 LU 内）
+- 输出编码：`libx264 preset medium crf 20 pix_fmt yuv420p high@4.1 + faststart` + `aac 192k 48kHz stereo`
 
 ### W18 字幕渲染层
 
@@ -831,33 +872,40 @@ ASS 文件输出固定包含 `[Script Info]` + `[V4+ Styles]` + `[Events]` 三�
 | `services/studio/generation/video/shot_product_reference_resolver.py` | 按 `Shot.product_focus_level` 优先级序列从 ProductImage 中选择参考图（Decision H：hero/functional/subtle 各自对应不同 angle 优先级序列） |
 | `services/studio/reference_image_budget.py` | 9 槽预算管理（Product 3–5 / Character 2–3 / Scene 1–2，超出按优先级丢弃并 warning，Decision G） |
 
-### 模块边界增量（P3 W16 + W17 + W17 收尾 + W18）
+### 模块边界增量（P3 W16 + W17 + W17 收尾 + W18 + W19）
 
 ```text
 backend/app/
 ├── models/
 │   ├── voice_pack.py                  # VoicePack + TtsCache (W17)
 │   ├── subtitle.py                    # SubtitleStyle + SubtitleTrack (W18)
-│   ├── studio_shots.py                # Shot.audio_strategy + product_focus_level (W16)
-│   └── types.py                       # AudioStrategy + ProductFocusLevel + VoiceProvider + VoiceGender (W16/W17) + SubtitleFormat + SubtitleSource + SubtitleAlignment (W18)
+│   ├── studio_shots.py                # Shot.audio_strategy + product_focus_level (W16) + dubbed_video_file_id (W19)
+│   ├── studio_timeline_chapter.py     # ChapterTimelineSegment.subtitle_track_file_id + tts_audio_file_id (W19)
+│   └── types.py                       # AudioStrategy + ProductFocusLevel + VoiceProvider + VoiceGender (W16/W17) + SubtitleFormat + SubtitleSource + SubtitleAlignment (W18) + AudioMixMode + FileUsageKind chapter_master_audio/subtitle/dubbed (W19)
 ├── core/
 │   ├── contracts/
 │   │   └── tts.py                     # TtsRequest / TtsResult / TtsCacheKey / TtsWordTimestamp (W17)
 │   └── integrations/aliyun/
 │       └── dashscope_tts.py           # DashScopeTtsApiAdapter: synthesize + estimate_audio_via_asr (W17)
-└── services/studio/
-    ├── builtin_voice_packs.py         # 6 个内置 CosyVoice 音色 seed (W17)
-    ├── builtin_subtitle_styles.py     # 3 个内置 SubtitleStyle seed (W18)
-    ├── tts_generate_worker.py         # task_kind=tts_generate (W17 T17-5)
-    ├── chapter_av_planner.py          # Decision F 决策树 + skip_native 早返回 (W17 T17-7 + W17 收尾)
-    ├── chapter_av_plan_worker.py      # task_kind=chapter_av_plan，加载 (Shot, ShotDetail, lines) 三元组 (W17 + W17 收尾)
-    ├── asr_subtitle_generate_worker.py  # task_kind=asr_subtitle_generate (W17 收尾新增)
-    ├── subtitle_renderer.py           # ASS 渲染纯函数 + 句子切分策略 (W18)
-    ├── subtitle_safe_zone.py          # 字幕安全区 lint (W18)
-    ├── shot_subtitle_render_worker.py  # task_kind=shot_subtitle_render (W18)
-    └── generation/video/
-        ├── build_context.py           # _AUDIO_STRATEGY_PROMPT_HINTS + get_audio_strategy_prompt_hint (W17 收尾)
-        └── shot_product_reference_resolver.py  # Decision H multi_ref 取图 (W16)
+└── services/
+    ├── film/
+    │   └── generated_video.py          # run_video_generation_task 成功路径 chain dispatch (W19)
+    └── studio/
+        ├── builtin_voice_packs.py         # 6 个内置 CosyVoice 音色 seed (W17)
+        ├── builtin_subtitle_styles.py     # 3 个内置 SubtitleStyle seed (W18)
+        ├── tts_generate_worker.py         # task_kind=tts_generate (W17 T17-5)
+        ├── chapter_av_planner.py          # Decision F 决策树 + skip_native 早返回 (W17 T17-7 + W17 收尾)
+        ├── chapter_av_plan_worker.py      # task_kind=chapter_av_plan，加载 (Shot, ShotDetail, lines) 三元组 (W17 + W17 收尾)
+        ├── asr_subtitle_generate_worker.py  # task_kind=asr_subtitle_generate (W17 收尾新增)
+        ├── subtitle_renderer.py           # ASS 渲染纯函数 + 句子切分策略 (W18)
+        ├── subtitle_safe_zone.py          # 字幕安全区 lint (W18)
+        ├── shot_subtitle_render_worker.py  # task_kind=shot_subtitle_render (W18)
+        ├── chapter_av_export.py           # task_kind=chapter_av_export 编排层（常量 + 防并发查询）(W19)
+        ├── chapter_av_export_filter.py    # ffmpeg filter_complex 纯函数构造器（按 audio_strategy 分流 + amix + loudnorm）(W19)
+        ├── chapter_av_export_task.py      # task_kind=chapter_av_export 执行层（slow queue 1800s）(W19)
+        └── generation/video/
+            ├── build_context.py           # _AUDIO_STRATEGY_PROMPT_HINTS + get_audio_strategy_prompt_hint (W17 收尾)
+            └── shot_product_reference_resolver.py  # Decision H multi_ref 取图 (W16)
 ```
 
 
