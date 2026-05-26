@@ -11,9 +11,9 @@ export type VideoGenerationTaskRequest = {
      */
     shot_id: string;
     /**
-     * 参考模式：first | last | key | first_last | first_last_key | text_only
+     * 参考模式：first | last | key | first_last | first_last_key | text_only | multi_ref
      */
-    reference_mode: 'first' | 'last' | 'key' | 'first_last' | 'first_last_key' | 'text_only';
+    reference_mode: 'first' | 'last' | 'key' | 'first_last' | 'first_last_key' | 'text_only' | 'multi_ref';
     /**
      * 视频提示词（text_only 必填）
      */
