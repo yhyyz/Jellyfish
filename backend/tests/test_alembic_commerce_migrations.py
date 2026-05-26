@@ -78,6 +78,7 @@ EXPECTED_CHAIN: tuple[tuple[str, str | None], ...] = (
     ("0005", "0004"),
     ("0006", "0005"),
     ("0007", "0006"),
+    ("0008", "0007"),
 )
 
 # 每条 revision 必须显式声明的关键索引（用于 test_upgrade 的 spot check）。
@@ -133,6 +134,14 @@ def _setup_pre_0002_schema(engine: Engine) -> None:
         # its pre-0002 shape without rebuilding it manually.
         conn.execute(text("DROP INDEX IF EXISTS ix_projects_kind"))
         conn.execute(text("ALTER TABLE projects DROP COLUMN kind"))
+        # Cross-revision invariant: ``Base.metadata.create_all`` materialises
+        # every column declared on ORM models, including columns added by
+        # later migrations (0008+: shots.audio_strategy / product_focus_level).
+        # We must drop them here so the subsequent ``upgrade head`` doesn't
+        # collide with "duplicate column" errors. Future migrations adding
+        # new shots columns must extend this drop list.
+        conn.execute(text("ALTER TABLE shots DROP COLUMN audio_strategy"))
+        conn.execute(text("ALTER TABLE shots DROP COLUMN product_focus_level"))
 
 
 def _stamp_version(engine: Engine, version: str) -> None:
@@ -341,7 +350,7 @@ def test_revision_chain_is_linear() -> None:
             )
 
     heads = script.get_heads()
-    assert list(heads) == ["0007"], f"expected single head 0007, got {heads!r}"
+    assert list(heads) == ["0008"], f"expected single head 0008, got {heads!r}"
 
 
 # --------------------------------------------------------------------------- #
