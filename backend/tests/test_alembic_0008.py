@@ -29,7 +29,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Index, create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
 from app.config import settings
@@ -68,8 +68,52 @@ def _make_alembic_config(db_url: str) -> Config:
 
 
 def _setup_pre_0008_schema(engine: Engine) -> None:
-    """搭建 "pre-0008" 状态：完整 schema 但 ``shots`` 表无新列。"""
-    Base.metadata.create_all(bind=engine)
+    """搭建 "pre-0008" 状态：完整 schema 但 ``shots`` 表无新列。
+
+    ``Base.metadata.create_all`` 同样会物化 0009 引入的两张新表
+    （voice_packs / tts_cache）与 5 个 FK 列；为了让后续 0008 upgrade
+    在 0007 baseline 上执行而不撞库，我们把 ORM 表复制到独立 MetaData
+    上，并在复制时丢弃 0009 的新表与新列。这样不会污染共享的全局
+    ``Base.metadata`` mapper 配置。
+    """
+    from sqlalchemy import MetaData
+
+    fk_columns_0009: dict[str, tuple[str, ...]] = {
+        "characters": ("voice_pack_id",),
+        "story_variants": ("voice_pack_id", "narration_voice_pack_id"),
+        "shot_dialog_lines": (
+            "start_time_ms",
+            "end_time_ms",
+            "tts_voice_id",
+            "tts_audio_file_id",
+        ),
+    }
+    new_tables_0009 = ("voice_packs", "tts_cache")
+
+    fresh = MetaData()
+    for source in Base.metadata.sorted_tables:
+        if source.name in new_tables_0009:
+            continue
+        skip_cols = set(fk_columns_0009.get(source.name, ()))
+        copy_target = source.to_metadata(fresh)
+        for col_name in skip_cols:
+            if col_name in copy_target.columns:
+                col = copy_target.columns[col_name]
+                for fk in list(col.foreign_keys):
+                    if fk.constraint is not None:
+                        copy_target.constraints.discard(fk.constraint)
+                    copy_target.foreign_keys.discard(fk)
+                copy_target._columns.remove(col)  # type: ignore[attr-defined]
+        if skip_cols:
+            kept: set[Index] = set()
+            for ix in list(copy_target.indexes):
+                referenced = {c.name for c in ix.columns}
+                if not (referenced & skip_cols):
+                    kept.add(ix)
+            copy_target.indexes = kept
+
+    fresh.create_all(bind=engine)
+
     with engine.begin() as conn:
         # SQLite 3.35+ 支持 ALTER TABLE DROP COLUMN，可直接回退到 0007 形态。
         for col in NEW_COLUMNS:
@@ -123,7 +167,7 @@ def _shot_columns(engine: Engine) -> dict[str, dict[str, object]]:
 
 
 def test_revision_chain_includes_0008() -> None:
-    """0008 必须接在 0007 之后，并且是当前唯一 head。"""
+    """0008 必须接在 0007 之后；当前 head 已被 0009 接管。"""
     cfg = _make_alembic_config("sqlite:///:memory:")
     script = ScriptDirectory.from_config(cfg)
 
@@ -132,13 +176,13 @@ def test_revision_chain_includes_0008() -> None:
     assert rev.down_revision == "0007"
 
     heads = script.get_heads()
-    assert list(heads) == ["0008"], f"expected single head 0008, got {heads!r}"
+    assert list(heads) == ["0009"], f"expected single head 0009, got {heads!r}"
 
 
 def test_upgrade_head_adds_new_columns(baseline_engine: Engine) -> None:
-    """upgrade head 后 shots 表必须带有两个新列且 NOT NULL + server_default。"""
+    """升级到 0008 后 shots 表必须带有两个新列且 NOT NULL + server_default。"""
     cfg = _make_alembic_config(str(baseline_engine.url))
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "0008")
 
     cols = _shot_columns(baseline_engine)
     for name in NEW_COLUMNS:
@@ -159,8 +203,8 @@ def test_upgrade_head_adds_new_columns(baseline_engine: Engine) -> None:
 def test_downgrade_removes_new_columns(baseline_engine: Engine) -> None:
     """downgrade -1 后 shots 表回到 0007 形态，两列被干净移除。"""
     cfg = _make_alembic_config(str(baseline_engine.url))
-    command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    command.upgrade(cfg, "0008")
+    command.downgrade(cfg, "0007")
 
     cols = _shot_columns(baseline_engine)
     for name in NEW_COLUMNS:
@@ -171,11 +215,11 @@ def test_roundtrip_preserves_shots_columns(baseline_engine: Engine) -> None:
     """upgrade → downgrade → upgrade 后 shots 列集合保持稳定。"""
     cfg = _make_alembic_config(str(baseline_engine.url))
 
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "0008")
     first = sorted(_shot_columns(baseline_engine).keys())
 
-    command.downgrade(cfg, "-1")
-    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "0007")
+    command.upgrade(cfg, "0008")
     second = sorted(_shot_columns(baseline_engine).keys())
 
     assert first == second, (
@@ -220,7 +264,7 @@ def test_existing_row_backfilled_on_upgrade(baseline_engine: Engine) -> None:
         )
 
     cfg = _make_alembic_config(str(baseline_engine.url))
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "0008")
 
     with baseline_engine.connect() as conn:
         row = conn.execute(

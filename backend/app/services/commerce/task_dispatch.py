@@ -47,6 +47,9 @@ TASK_KIND_STORY_SCRIPT_GENERATE = "story_script_generate"
 #: 合规检查任务 ``task_kind``，与 worker 注册表保持一致。
 TASK_KIND_COMPLIANCE_CHECK = "compliance_check"
 
+#: TTS 合成任务 ``task_kind``，与 ``app.services.studio.tts_generate_worker`` 注册表同步。
+TASK_KIND_TTS_GENERATE = "tts_generate"
+
 #: 统一 Celery 入口 task name；所有 worker 通过 task_kind 二级路由。
 _CELERY_ENTRY_TASK = "task.execute"
 
@@ -120,6 +123,25 @@ class CommerceTaskDispatchService:
 
         return await self._enqueue(
             task_kind=TASK_KIND_COMPLIANCE_CHECK,
+            run_args=body,
+        )
+
+    async def enqueue_tts_generate(self, body: dict[str, Any]) -> dict[str, Any]:
+        """创建 ``task_kind=tts_generate`` 的 :class:`GenerationTask` 并投递（fast 队列）。
+
+        与其它 commerce/* 任务一致，TTS 合成属分钟级，默认走 ``fast`` 队列；
+        Worker 端会先查 ``tts_cache`` 命中、未命中再调 DashScope CosyVoice。
+
+        Args:
+            body: TTS 合成请求 dict（含 ``text`` / ``voice_pack_id`` /
+                ``speed`` / ``audio_format`` / ``enable_word_timestamps``）。
+
+        Returns:
+            ``{"task_id", "task_kind", "status", "enqueued_at"}``。
+        """
+
+        return await self._enqueue(
+            task_kind=TASK_KIND_TTS_GENERATE,
             run_args=body,
         )
 
@@ -226,4 +248,5 @@ __all__ = [
     "TASK_KIND_PRODUCT_INFO_EXTRACT",
     "TASK_KIND_STORY_SCRIPT_GENERATE",
     "TASK_KIND_STORY_VIDEO_BATCH_GENERATE",
+    "TASK_KIND_TTS_GENERATE",
 ]

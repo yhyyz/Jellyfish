@@ -240,10 +240,18 @@ class Character(Base, TimestampMixin):
         index=True,
         comment="服装 ID（可空）；应用层需保证与角色同项目或全局",
     )
+    voice_pack_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("voice_packs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="角色默认音色（T17）。ShotDialogLine.tts_voice_id 为空时落到此值",
+    )
 
     project: Mapped["Project"] = relationship(back_populates="characters")
     actor: Mapped["Actor"] = relationship(back_populates="characters")
     costume: Mapped["Costume | None"] = relationship(back_populates="characters")
+    voice_pack: Mapped["VoicePack | None"] = relationship()
     prop_links: Mapped[list["CharacterPropLink"]] = relationship(
         back_populates="character",
         cascade="all, delete-orphan",

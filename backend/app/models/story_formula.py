@@ -246,6 +246,22 @@ class StoryVariant(Base, TimestampMixin):
         default=None,
         comment="品牌人格（P2 启用 BrandArchetype 枚举，本期保留为 String）",
     )
+    voice_pack_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("voice_packs.id", ondelete="SET NULL"),
+        nullable=True,
+        default=None,
+        index=True,
+        comment="变体级主角默认音色（T17，覆盖 Character.voice_pack_id）",
+    )
+    narration_voice_pack_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("voice_packs.id", ondelete="SET NULL"),
+        nullable=True,
+        default=None,
+        index=True,
+        comment="变体级旁白音色（T17，line_mode=VOICE_OVER 时使用）",
+    )
     script_full_text: Mapped[str] = mapped_column(
         Text,
         nullable=False,

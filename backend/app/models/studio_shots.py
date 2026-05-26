@@ -366,6 +366,31 @@ class ShotDialogLine(Base,TimestampMixin):
         comment="听者角色名称（用于从提取结果回填角色关联；可空）",
     )
 
+    start_time_ms: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="对白在镜头时间线内的起始毫秒；T17 chapter_av_planner 写入",
+    )
+    end_time_ms: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="对白结束毫秒；end - start = TTS 音频时长上限",
+    )
+    tts_voice_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("voice_packs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="本行强制使用的音色（覆盖角色默认）；空则按 speaker_character.voice_pack_id 解析",
+    )
+    tts_audio_file_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("files.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="本行 TTS 合成结果音频 FileItem ID；命中 tts_cache 时回填",
+    )
+
     shot_detail: Mapped["ShotDetail"] = relationship(back_populates="dialog_lines")
     speaker_character: Mapped["Character | None"] = relationship(foreign_keys=[speaker_character_id])
     target_character: Mapped["Character | None"] = relationship(foreign_keys=[target_character_id])

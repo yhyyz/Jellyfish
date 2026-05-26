@@ -44,6 +44,8 @@ async def _infer_file_type_from_content_type(content_type: str | None) -> FileTy
         return FileType.image
     if ct.startswith("video/"):
         return FileType.video
+    if ct.startswith("audio/"):
+        return FileType.audio
     return FileType.image
 
 

@@ -32,7 +32,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Index, create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
 from app.config import settings
@@ -47,9 +47,10 @@ import app.models.story_formula  # noqa: F401  pylint: disable=unused-import
 import app.models.studio  # noqa: F401  pylint: disable=unused-import
 import app.models.task  # noqa: F401  pylint: disable=unused-import
 import app.models.task_links  # noqa: F401  pylint: disable=unused-import
+import app.models.voice_pack  # noqa: F401  pylint: disable=unused-import
 
 
-# === 常量：W2/W11 新增的 13 张表 ===
+# === 常量：W2/W11/W17 新增的 15 张表 ===
 NEW_TABLES: frozenset[str] = frozenset(
     {
         "products",
@@ -66,6 +67,9 @@ NEW_TABLES: frozenset[str] = frozenset(
         "hook_patterns",
         "cta_patterns",
         "brand_archetypes",
+        # W17 T17-3 (revision 0009) — voice pack + TTS cache
+        "voice_packs",
+        "tts_cache",
     }
 )
 
@@ -79,6 +83,7 @@ EXPECTED_CHAIN: tuple[tuple[str, str | None], ...] = (
     ("0006", "0005"),
     ("0007", "0006"),
     ("0008", "0007"),
+    ("0009", "0008"),
 )
 
 # 每条 revision 必须显式声明的关键索引（用于 test_upgrade 的 spot check）。
@@ -115,18 +120,53 @@ def _setup_pre_0002_schema(engine: Engine) -> None:
     """Set up the 35 pre-existing tables minus ``projects.kind``.
 
     Steps:
-    1. Create all tables in ``Base.metadata`` *except* the 10 new ones.
+    1. Copy every Table in ``Base.metadata`` (except 0009's voice_packs /
+       tts_cache) onto a fresh ``MetaData``; while copying we also strip
+       out the 5 FK columns added by 0009 so that ``create_all`` doesn't
+       materialise them. This avoids polluting the shared ``Base.metadata``
+       mapper configuration that other tests rely on.
     2. Drop the ``ix_projects_kind`` index (created by ``create_all`` because
        the live ``Project`` model declares ``index=True`` on ``kind``).
     3. Drop the ``kind`` column itself, simulating the legacy schema that
        existed before revision 0002.
+    4. Drop the columns added by revision 0008 on ``shots``.
     """
-    pre_tables = [
-        t
-        for t in Base.metadata.sorted_tables
-        if t.name not in NEW_TABLES
-    ]
-    Base.metadata.create_all(bind=engine, tables=pre_tables)
+    from sqlalchemy import MetaData
+
+    fk_columns_0009: dict[str, tuple[str, ...]] = {
+        "characters": ("voice_pack_id",),
+        "story_variants": ("voice_pack_id", "narration_voice_pack_id"),
+        "shot_dialog_lines": (
+            "start_time_ms",
+            "end_time_ms",
+            "tts_voice_id",
+            "tts_audio_file_id",
+        ),
+    }
+
+    fresh = MetaData()
+    for source in Base.metadata.sorted_tables:
+        if source.name in NEW_TABLES:
+            continue
+        skip_cols = set(fk_columns_0009.get(source.name, ()))
+        copy_target = source.to_metadata(fresh)
+        for col_name in skip_cols:
+            if col_name in copy_target.columns:
+                col = copy_target.columns[col_name]
+                for fk in list(col.foreign_keys):
+                    if fk.constraint is not None:
+                        copy_target.constraints.discard(fk.constraint)
+                    copy_target.foreign_keys.discard(fk)
+                copy_target._columns.remove(col)  # type: ignore[attr-defined]
+        if skip_cols:
+            kept: set[Index] = set()
+            for ix in list(copy_target.indexes):
+                referenced = {c.name for c in ix.columns}
+                if not (referenced & skip_cols):
+                    kept.add(ix)
+            copy_target.indexes = kept
+
+    fresh.create_all(bind=engine)
 
     with engine.begin() as conn:
         # SQLite 3.35+ supports both DROP INDEX IF EXISTS and ALTER TABLE
@@ -350,7 +390,7 @@ def test_revision_chain_is_linear() -> None:
             )
 
     heads = script.get_heads()
-    assert list(heads) == ["0008"], f"expected single head 0008, got {heads!r}"
+    assert list(heads) == ["0009"], f"expected single head 0009, got {heads!r}"
 
 
 # --------------------------------------------------------------------------- #

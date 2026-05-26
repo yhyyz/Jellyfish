@@ -186,10 +186,15 @@ class ProductFocusLevel(str, Enum):
 
 
 class FileType(str, Enum):
-    """文件类型（用于素材库与时间线引用）。"""
+    """文件类型（用于素材库与时间线引用）。
+
+    P3 W17 引入 ``audio`` 用于 TTS 合成产物入库（FileItem.type）；
+    DB 列底层为 ``String(16)``，新增枚举值不需要 schema 迁移。
+    """
 
     image = "image"
     video = "video"
+    audio = "audio"
 
 
 class FileUsageKind(str, Enum):

@@ -31,6 +31,7 @@ from app.services.commerce.story_video_batch_generate_worker import (
 )
 from app.services.film.generated_video import run_video_generation_task
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
+from app.services.studio.tts_generate_worker import build_tts_generate_executor
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
 from app.services.script_processing_worker import (
     CharacterPortraitTaskExecutor,
@@ -135,3 +136,6 @@ task_executor_registry.register("cta_writer", build_cta_writer_executor())
 task_executor_registry.register(
     "archetype_rewrite", build_archetype_rewrite_executor()
 )
+# P3 W17 T17-5: TTS 合成 worker（fast 队列，300s 超时），cache 命中走快速分支，
+# miss 时调 DashScopeTtsApiAdapter.synthesize 并落 FileItem + TtsCache 行。
+task_executor_registry.register("tts_generate", build_tts_generate_executor())
