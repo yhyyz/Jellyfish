@@ -124,6 +124,29 @@ class AssetViewAngle(str, Enum):
     detail = "DETAIL"
 
 
+class VoiceGender(str, Enum):
+    """音色性别（P3 W17 引入，用于音色包筛选与角色匹配）。
+
+    neutral 表示中性/不区分，child 用于儿童音色专列。
+    """
+
+    male = "male"
+    female = "female"
+    neutral = "neutral"
+    child = "child"
+
+
+class VoiceProvider(str, Enum):
+    """TTS 供应商枚举（P3 W17 引入）。
+
+    起步仅支持阿里云 CosyVoice 与 OpenAI TTS；后续接入 ElevenLabs / Azure TTS
+    时在此枚举追加，并配合 dispatcher 路由。
+    """
+
+    aliyun_cosyvoice = "aliyun_cosyvoice"
+    openai_tts = "openai_tts"
+
+
 class ShotFrameType(str, Enum):
     """镜头分镜帧类型：首帧/尾帧/关键帧。"""
 
@@ -184,6 +207,10 @@ class FileUsageKind(str, Enum):
     product_image = "product_image"
     product_hero_shot = "product_hero_shot"
     commerce_reference = "commerce_reference"
+    # === P3 W17 TTS / 音轨 扩展 ===
+    tts_audio = "tts_audio"
+    bgm_track = "bgm_track"
+    sfx_track = "sfx_track"
 
 
 class TimelineClipType(str, Enum):
@@ -329,6 +356,19 @@ class StoryVariantStatus(str, Enum):
     """
 
     draft = "draft"
+    generating = "generating"
+    ready = "ready"
+    failed = "failed"
+
+
+class TtsClipStatus(str, Enum):
+    """TTS 音频片段生命周期状态（P3 W17 引入）。
+
+    用于 ShotDialogLine.tts_status 等字段，区分尚未合成 / 合成中 / 可用 / 失败。
+    与 ShotStatus 解耦：镜头确认状态与 TTS 合成状态独立演进。
+    """
+
+    pending = "pending"
     generating = "generating"
     ready = "ready"
     failed = "failed"

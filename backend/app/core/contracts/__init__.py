@@ -17,6 +17,13 @@ from app.core.contracts.story import (
     StoryGenerationVars,
     StoryScript,
 )
+from app.core.contracts.tts import (
+    TtsCacheKey,
+    TtsRequest,
+    TtsResult,
+    TtsVoiceCapability,
+    TtsWordTimestamp,
+)
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
 
 __all__ = [
@@ -36,4 +43,9 @@ __all__ = [
     "ComplianceFinding",
     "ComplianceReport",
     "BrandVoice",
+    "TtsRequest",
+    "TtsResult",
+    "TtsWordTimestamp",
+    "TtsCacheKey",
+    "TtsVoiceCapability",
 ]

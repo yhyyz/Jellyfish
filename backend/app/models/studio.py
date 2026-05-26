@@ -41,6 +41,7 @@ from app.models.studio_shots import (
     ShotFrameImage,
 )
 from app.models.studio_timeline_chapter import ChapterTimelineSegment, ChapterTimelineState
+from app.models.voice_pack import TtsCache, VoicePack
 from app.models.types import (
     AssetQualityLevel,
     AssetViewAngle,
@@ -120,4 +121,7 @@ __all__ = [
     "ProductImage",
     "ProjectProductLink",
     "CommerceStoryConfig",
+    # P3 W17 — Voice / TTS
+    "VoicePack",
+    "TtsCache",
 ]

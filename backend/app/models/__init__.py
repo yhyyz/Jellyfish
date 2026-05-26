@@ -12,6 +12,7 @@ from app.models.story_formula import StoryFormula, StoryOutcome, StoryVariant
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
 from app.models.types import FileUsageKind
+from app.models.voice_pack import TtsCache, VoicePack
 
 from app.models.studio import (
     Actor,
@@ -95,4 +96,6 @@ __all__ = [
     "ProductImage",
     "ProjectProductLink",
     "CommerceStoryConfig",
+    "VoicePack",
+    "TtsCache",
 ]

@@ -67,6 +67,7 @@ async def bootstrap_async_state(db: AsyncSession) -> dict[str, dict[str, int]]:
         bootstrap_builtin_compliance_profiles,
     )
     from app.services.studio.builtin_prompts import bootstrap_builtin_prompts
+    from app.services.studio.builtin_voice_packs import bootstrap_builtin_voice_packs
 
     stats: dict[str, dict[str, int]] = {}
     stats["prompts"] = await bootstrap_builtin_prompts(db)
@@ -75,4 +76,5 @@ async def bootstrap_async_state(db: AsyncSession) -> dict[str, dict[str, int]]:
     stats["hook_patterns"] = await bootstrap_builtin_hook_patterns(db)
     stats["cta_patterns"] = await bootstrap_builtin_cta_patterns(db)
     stats["brand_archetypes"] = await bootstrap_builtin_brand_archetypes(db)
+    stats["voice_packs"] = await bootstrap_builtin_voice_packs(db)
     return stats
