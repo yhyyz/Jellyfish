@@ -27,5 +27,14 @@
     "projectOverridesNotice": "Project-level subtitle overrides will be enabled in W21; only system templates are available now",
     "loadFailed": "Failed to load",
     "preview": "Sample subtitle preview"
+  },
+  "voicePackLibrary": {
+    "pageTitle": "Voice pack library",
+    "filterLanguage": "Language",
+    "uploadCustom": "Upload custom voice",
+    "uploadComingSoon": "Coming soon — custom voice training will be available in W21",
+    "loadFailed": "Failed to load",
+    "retry": "Retry",
+    "empty": "No voice packs match the current filter"
   }
 }

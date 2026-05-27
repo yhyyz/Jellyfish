@@ -27,5 +27,26 @@
     "projectOverridesNotice": "项目级字幕样式覆盖在 W21 启用，目前仅支持系统模板",
     "loadFailed": "加载失败",
     "preview": "示例字幕预览"
+  },
+  "voicePackLibrary": {
+    "pageTitle": "音色库",
+    "filterLanguage": "语言",
+    "uploadCustom": "上传定制音色",
+    "uploadComingSoon": "敬请期待 — 自定义音色训练能力将在 W21 开放",
+    "loadFailed": "加载失败",
+    "retry": "重试",
+    "empty": "暂无符合条件的音色"
+  },
+  "avPreview": {
+    "drawerTitle": "音视频预览",
+    "videoFallback": "您的浏览器不支持 video 标签",
+    "emptyHint": "等待 chapter_av_export 完成",
+    "triggerExport": "立即生成成片",
+    "viewTaskCenter": "查看任务中心",
+    "voicePanel": "音色",
+    "subtitlePanel": "字幕样式",
+    "exportEnqueued": "已加入生成队列",
+    "exportFailed": "触发失败",
+    "exportPending": "正在生成中…"
   }
 }
