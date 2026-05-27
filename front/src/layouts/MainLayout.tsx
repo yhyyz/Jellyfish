@@ -39,6 +39,8 @@ const MainLayout: React.FC = () => {
     if (location.pathname.startsWith('/commerce/projects')) return ['commerce-projects', 'commerce']
     if (location.pathname.startsWith('/commerce/compliance')) return ['commerce-compliance', 'commerce']
     if (location.pathname.startsWith('/commerce/formulas')) return ['commerce-formulas', 'commerce']
+    if (location.pathname.startsWith('/commerce/voice-packs')) return ['commerce-voice-packs', 'commerce']
+    if (location.pathname.startsWith('/commerce/subtitle-styles')) return ['commerce-subtitle-styles', 'commerce']
     if (location.pathname.startsWith('/files')) return ['files']
     if (location.pathname.startsWith('/agents')) return ['agents']
     if (location.pathname.startsWith('/models')) return ['models']
@@ -74,6 +76,8 @@ const MainLayout: React.FC = () => {
       formulas: '公式库',
       compliance: '合规中心',
       analytics: '效果分析',
+      'voice-packs': '音色库',
+      'subtitle-styles': '字幕样式库',
     }
     path.forEach((segment, i) => {
       // 特殊：/projects/:projectId/chapters/:chapterId/* 中的 chapterId 段不展示（避免出现“章节”这一层）
@@ -137,6 +141,9 @@ const MainLayout: React.FC = () => {
       children: [
         { key: 'commerce-products', label: <Link to="/commerce/products">商品库</Link> },
         { key: 'commerce-projects', label: <Link to="/commerce/projects">剧情项目</Link> },
+        { key: 'commerce-formulas', label: <Link to="/commerce/formulas">公式库</Link> },
+        { key: 'commerce-voice-packs', label: <Link to="/commerce/voice-packs">音色库</Link> },
+        { key: 'commerce-subtitle-styles', label: <Link to="/commerce/subtitle-styles">字幕样式库</Link> },
         { key: 'commerce-compliance', label: <Link to="/commerce/compliance">合规中心</Link> },
       ],
     },

@@ -30,6 +30,9 @@ const StoryProjectLobby = lazy(() => import('./pages/aiStudio/commerce/projects/
 const StoryWorkbench = lazy(() => import('./pages/aiStudio/commerce/projects/StoryWorkbench'))
 const ComplianceCenter = lazy(() => import('./pages/aiStudio/commerce/compliance/ComplianceCenter'))
 const FormulaLibrary = lazy(() => import('./pages/aiStudio/commerce/formulas/FormulaLibrary'))
+// W20 Wave C：音色库 / 字幕样式库（剧情带货模块的资源管理页）
+const VoicePackLibrary = lazy(() => import('./pages/aiStudio/commerce/voicePacks/VoicePackLibrary'))
+const SubtitleStyleLibrary = lazy(() => import('./pages/aiStudio/commerce/subtitleStyles/SubtitleStyleLibrary'))
 
 /** 兼容旧链接 `/projects/:projectId/chapters` → 工作台章节 Tab */
 function NavigateToWorkbenchChaptersTab() {
@@ -69,6 +72,8 @@ const App: React.FC = () => {
           <Route path="commerce/projects/:projectId" element={<Suspense fallback={<PageSkeleton />}><StoryWorkbench /></Suspense>} />
           <Route path="commerce/compliance" element={<Suspense fallback={<PageSkeleton />}><ComplianceCenter /></Suspense>} />
           <Route path="commerce/formulas" element={<Suspense fallback={<PageSkeleton />}><FormulaLibrary /></Suspense>} />
+          <Route path="commerce/voice-packs" element={<Suspense fallback={<PageSkeleton />}><VoicePackLibrary /></Suspense>} />
+          <Route path="commerce/subtitle-styles" element={<Suspense fallback={<PageSkeleton />}><SubtitleStyleLibrary /></Suspense>} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>
