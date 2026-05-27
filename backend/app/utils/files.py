@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import random
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 import httpx
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,22 +19,34 @@ from app.models.studio import FileItem, FileType
 from app.models.types import FileUsageKind
 
 
-_FILE_INSERT_RETRY_DELAYS_S = (0.2, 0.5, 1.0, 2.0, 4.0)
+_FILE_INSERT_MAX_ATTEMPTS = 30
+_FILE_INSERT_MAX_BACKOFF_S = 10.0
 
 
 async def _add_and_flush_with_retry(session: AsyncSession, file_obj: FileItem) -> None:
     """落库 FileItem 并 flush；遇到 SQLite "database is locked" 时使用嵌套
-    事务（SAVEPOINT）隔离失败，最多重试 5 次。
+    事务（SAVEPOINT）隔离失败并自动重试。
 
-    为什么必须重试：开发环境 SQLite WAL + 多 worker 进程同写同一文件时
-    偶发 SQLITE_BUSY；busy_timeout 在 aiosqlite 后台线程下并不总是稳定
-    生效（见 W19b-T1e 注释）。这里用 SAVEPOINT 把单条 INSERT 的失败
-    隔离开，retry 之后只补偿这一行，不影响外层事务的其他写入。
+    背景：W19b-T1e 把 connect_args timeout=60.0 装进 sqlite3.connect()，
+    本地 Check A 验证 PRAGMA busy_timeout=60000。但 celery worker 内
+    aiosqlite 后台线程模型下，busy_timeout 实测不可靠（INSERT 立即返回
+    SQLITE_BUSY，不等待）。修复策略：
+    1) SAVEPOINT 包住单条 INSERT，失败后只回滚这一行；
+    2) 每次重试前主动 PRAGMA busy_timeout=60000 强制刷写；
+    3) 指数退避 + 抖动，最多 30 次（封顶 10s）≈ 累计 ~3 min 的重试预算。
+
+    重试预算大于任何合理的"另一个 writer 持有事务"时间窗，足以兜底
+    所有 in-process / cross-process / WAL checkpoint 类竞态。
     """
     last_exc: OperationalError | None = None
-    for delay in (0.0,) + _FILE_INSERT_RETRY_DELAYS_S:
-        if delay > 0:
-            await asyncio.sleep(delay)
+    for attempt in range(_FILE_INSERT_MAX_ATTEMPTS):
+        if attempt > 0:
+            backoff = min(0.3 * (1.5 ** (attempt - 1)), _FILE_INSERT_MAX_BACKOFF_S)
+            await asyncio.sleep(backoff + random.uniform(0, 0.2))
+        try:
+            await session.execute(text("PRAGMA busy_timeout=60000"))
+        except OperationalError:
+            pass  # 极个别场景下连 PRAGMA 都被锁，让外层重试覆盖
         try:
             async with session.begin_nested():
                 session.add(file_obj)
