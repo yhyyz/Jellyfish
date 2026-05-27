@@ -2,17 +2,49 @@ from __future__ import annotations
 
 """文件相关工具：从 URL 或 base64 内容创建 FileItem，并上传到对象存储。"""
 
+import asyncio
 import base64
 import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 import httpx
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import storage
 from app.models.studio import FileItem, FileType
 from app.models.types import FileUsageKind
+
+
+_FILE_INSERT_RETRY_DELAYS_S = (0.2, 0.5, 1.0, 2.0, 4.0)
+
+
+async def _add_and_flush_with_retry(session: AsyncSession, file_obj: FileItem) -> None:
+    """落库 FileItem 并 flush；遇到 SQLite "database is locked" 时使用嵌套
+    事务（SAVEPOINT）隔离失败，最多重试 5 次。
+
+    为什么必须重试：开发环境 SQLite WAL + 多 worker 进程同写同一文件时
+    偶发 SQLITE_BUSY；busy_timeout 在 aiosqlite 后台线程下并不总是稳定
+    生效（见 W19b-T1e 注释）。这里用 SAVEPOINT 把单条 INSERT 的失败
+    隔离开，retry 之后只补偿这一行，不影响外层事务的其他写入。
+    """
+    last_exc: OperationalError | None = None
+    for delay in (0.0,) + _FILE_INSERT_RETRY_DELAYS_S:
+        if delay > 0:
+            await asyncio.sleep(delay)
+        try:
+            async with session.begin_nested():
+                session.add(file_obj)
+                await session.flush()
+            return
+        except OperationalError as exc:
+            msg = str(getattr(exc, "orig", exc) or exc).lower()
+            if "database is locked" not in msg and "database table is locked" not in msg:
+                raise
+            last_exc = exc
+    if last_exc is not None:
+        raise last_exc
 
 
 async def _infer_file_type_from_ext(ext: str) -> FileType:
@@ -128,8 +160,7 @@ async def create_file_from_url_or_b64(
         tags=[],
         storage_key=key,
     )
-    session.add(file_obj)
-    await session.flush()
+    await _add_and_flush_with_retry(session, file_obj)
     await session.refresh(file_obj)
 
     if usage is not None:
