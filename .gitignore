@@ -21,4 +21,11 @@ venv/
 htmlcov/
 .jellyfish.db
 jellyfish.db
+jellyfish_dev.db
+jellyfish_dev.db-shm
+jellyfish_dev.db-wal
+jellyfish_dev.db*.corrupt
+jellyfish_dev.db*.bak*
 .env
+.env.bak
+.omo/
