@@ -59,8 +59,33 @@ def _build_sync_engine() -> Engine:
     )
     if _is_sqlite_sync(sync_url):
         kwargs["connect_args"] = {"isolation_level": None, "timeout": 60.0}
+        # sync 引擎使用 NullPool —— 与 async 引擎对齐，规避 pysqlite legacy txn
+        # 模式下池化连接复用旧 WAL end mark 导致的 stale snapshot pin。
         kwargs["poolclass"] = NullPool
     else:
+        # ---------------------------------------------------------------
+        # ESCALATION GATE — 切回 QueuePool 的最小前置（未认证，禁止盲改）
+        # ---------------------------------------------------------------
+        # 详见 backend/app/core/db.py 同位置的 ESCALATION GATE 注释。
+        #
+        # T2a/T2b 阶段已实证：仅 engine-level READ COMMITTED + init_command
+        # 不足以消除 race。SA 的 `connect` 事件只在物理建连触发，pool
+        # checkout/return 不会再跑；驱动在事务收尾会污染 session 隔离级别
+        # 状态，下次 checkout 拿到被污染连接 → REPEATABLE READ 行为复发。
+        #
+        # NullPool 让 checkout 等同于建连，listener 每次都跑，race 消失。
+        # 代价：1-3ms/req 重连开销，Jellyfish 业务量级可忽略。
+        #
+        # 如要切回 QueuePool，最小配置（uncertified，必须重跑长跑验证）：
+        #   poolclass=QueuePool, pool_size=10, max_overflow=20,
+        #   pool_pre_ping=True, pool_recycle=3600
+        # 加 SA 的 `checkout` 事件（不是 `connect`）emit:
+        #   ROLLBACK; SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+        # 然后跑 10 分钟 T2a/T2b 长跑 + chain dispatch e2e，0 复发才放行。
+        #
+        # 触发评估的指标：sustained RPS > 100 OR 连接握手 P50 占比 > 5%。
+        # ---------------------------------------------------------------
+        kwargs["poolclass"] = NullPool
         kwargs["pool_pre_ping"] = True
 
     new_engine = create_engine(sync_url, **kwargs)

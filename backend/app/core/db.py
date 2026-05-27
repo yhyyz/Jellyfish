@@ -85,6 +85,27 @@ def _build_engine() -> AsyncEngine:
         # NullPool 的代价：每个 HTTP 请求都重连 MySQL，本地开发量级完全可承受
         # （实际开销 1~3ms/连接）；生产可改回 QueuePool 但必须配合
         # 显式 connect-event 强制 SET SESSION，并验证不复发。
+        #
+        # ---------------------------------------------------------------
+        # ESCALATION GATE — 切回 QueuePool 的最小前置（未认证，禁止盲改）
+        # ---------------------------------------------------------------
+        # T2a/T2b 阶段已实证：仅 engine-level READ COMMITTED + init_command
+        # 不足以消除 race。SA 的 `connect` 事件只在物理建连触发，pool
+        # checkout/return 不会再跑；aiomysql 0.3 在事务收尾会污染 session
+        # 状态，下次 checkout 拿到被污染连接 → REPEATABLE READ 行为复发。
+        #
+        # NullPool 让 checkout 等同于建连，listener 每次都跑，race 消失。
+        # 代价：1-3ms/req 重连开销，Jellyfish 业务量级可忽略。
+        #
+        # 如要切回 QueuePool，最小配置（uncertified，必须重跑长跑验证）：
+        #   poolclass=QueuePool, pool_size=10, max_overflow=20,
+        #   pool_pre_ping=True, pool_recycle=3600
+        # 加 SA 的 `checkout` 事件（不是 `connect`）emit:
+        #   ROLLBACK; SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+        # 然后跑 10 分钟 T2a/T2b 长跑 + chain dispatch e2e，0 复发才放行。
+        #
+        # 触发评估的指标：sustained RPS > 100 OR 连接握手 P50 占比 > 5%。
+        # ---------------------------------------------------------------
         kwargs["poolclass"] = NullPool
         kwargs["isolation_level"] = "READ COMMITTED"
         kwargs["connect_args"] = {

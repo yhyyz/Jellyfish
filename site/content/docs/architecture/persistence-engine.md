@@ -55,6 +55,48 @@ sync runtime (Celery worker / 一次性脚本)
 - service 层显式 commit
   - 见下一节"事务边界契约"。
 
+### 为什么 MySQL 路径必须 NullPool（不是临时方案）
+
+W19b T2a/T2b 阶段已实证：仅设 engine 级 `isolation_level=READ COMMITTED` +
+`connect_args.init_command` 时，新建连接 3/3 都是 READ COMMITTED；但
+uvicorn 长跑后，复用 pool 中连接做读，仍然观察到持续（>1s）的
+REPEATABLE READ 快照行为，跨请求 visibility race 复发。
+
+根因：SQLAlchemy 的 `connect` 事件只在物理连接首次建立时触发，
+pool checkout / return 时不再执行；aiomysql 0.3 + SA 2.0 在事务
+收尾路径会污染 session 隔离级别状态，下次 checkout 拿到的是被
+污染的连接。NullPool 把 checkout 等同于建连，listener 每次都
+触发，race 消失。
+
+代价：每次 HTTP 请求重建 MySQL 连接，开销 1-3ms。在当前业务
+量级（LLM 调用 / 视频生成秒~分钟级）这是噪声，可忽略。
+
+`crud.py` 的显式 `commit()` 是另一独立 fix（解 FastAPI
+yield-after-response timing race），不依赖 pool 选择，无论
+QueuePool/NullPool 都必须保留。
+
+#### 切回 QueuePool 的前置条件（未认证，未来需要时按此走）
+
+如需复用连接降低握手开销，最小配置为：
+
+- `pool_size=10`、`max_overflow=20`、`pool_pre_ping=True`、`pool_recycle=3600`
+- 注册 SA 的 `checkout` 事件（**不是 `connect`**），在每次借出时显式发：
+  ```sql
+  ROLLBACK;
+  SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+  ```
+- 完整跑 T2a/T2b 长跑验证 + chain dispatch e2e，10 分钟内 0 复发才允许合入。
+- 验证脚本套件：5 项，详见下文「验证套件」。
+
+未完成上述全部前置条件之前，不允许切回 QueuePool。
+
+#### 评估触发指标（什么情况下值得复评）
+
+- sustained RPS > 100（Jellyfish 当前是单创作者桌面工具量级，远未到）
+- 连接握手 P50 占比 > 5%（profiling 实测，不是想象）
+
+任一触发，开 issue 走「切回 QueuePool 评估」流程，按上述前置条件认证。
+
 ## 事务边界契约
 
 跨请求可见性的关键不在 SQLAlchemy，而在**何时 commit**。当前生效的契约是：
