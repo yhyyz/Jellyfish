@@ -225,21 +225,51 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 | T19-8   | ✅ manual QA：4 个 15s 故事视频（keep_native 路径）合成 62s 1080×1920 9:16 成片；loudnorm 输出 -15.46 LUFS；ffmpeg 19.9s；公网 URL 见上方说明 |
 | **T19-9** | ✅ **W17 收尾遗留接通**：`run_video_generation_task` 成功路径加 chain dispatch — silent_with_tts → 遍历 ShotDialogLine 逐行派发 tts_generate；keep_native → 派发 1 个 asr_subtitle_generate；缺 voice_id / 空文本 / 无 meta 全部兼容 skip |
 
-### P3 Wave 20 — 前端工作室升级（待启动，约 4 工作日）
+### P3 Wave 20 — 前端工作室升级（已完成）
 
-> **状态**：W17 / W18 / W19 / W19b 全部 ✅ 完成；后端流水线（r2v + TTS + ASR + 字幕渲染 + chapter_av_export + chain dispatch + 双引擎事务边界）已端到端跑通。W20 是下一阶段重点，承接前端工作室对新流水线的可视化与可操作性改造。
+> **状态**：W20 已 100% 落地，HEAD = `ddef114`，共 14 个 commit（含 3 条 W19b-followup 收尾），按 4 个子 wave 分组：
+>
+> **Wave 0 / 前置基建（4 commits）**：
+> - `a6542de`（W19b-followup item3）：取消 `backend/jellyfish_dev.db` git track
+> - `b8ce72f`（W19b-followup item4）：6 个 baseline pytest 失败修复（meta 信封 + `_FakeDB.execute()` 补齐）
+> - `2b4cd75`（W19b-followup item5）：NullPool 决策审计 + escalation gate
+> - `8bc5c81`（T0a）：`pnpm run openapi:update` 拉 W19/W19b schema
+> - `e2579ec`（T0c）：Vitest 2.1.9 + RTL + jsdom 测试基建落地
+> - `791291c`（T0b）：后端 `GET /commerce/voice-packs` + `GET /commerce/subtitle-styles` 只读 read APIs
+> - `a784d36`（T0a-rerun）：`openapi:gen` 拉取 T0b 新路由
+>
+> **Wave A / 三组件 TDD（3 commits, 15 cases）**：
+> - `b84c35d`（T1）：ProductImageGrid 组件（7 角度 × 4 质量）
+> - `abbe276`（T3）：SubtitleStylePicker + colorCodec helper（ASS `&HAABBGGRR` ↔ Hex 互转）
+> - `087641c`（T2）：VoicePackPicker（language_code 过滤 + provider 分组 + sample 试听）
+>
+> **Wave B / 三页面 TDD（3 commits, 14 cases）**：
+> - `664fb82`（T4）：StoryWorkbench AVPreviewPanel 抽屉（`dubbed_video_file_id` 优先播 + `chapter_av_export` 触发 + 嵌套音色/字幕选择）
+> - `7038869`（T5）：`/commerce/voice-packs` 音色库页面（系统级只读 + 上传定制 stub）
+> - `dd73301`（T6）：`/commerce/subtitle-styles` 字幕样式库页面（3 内置模板浏览 + 项目级覆盖占位）
+>
+> **Wave C / i18n + 路由（1 commit）**：
+> - `ddef114`（T7）：i18n `commerce` 命名空间（7 个子 ns）+ 2 个 lazy 路由 + MainLayout 侧栏菜单 + drive-by 补齐 `commerce-formulas`
+>
+> **测试结果**：Vitest 37/37 cases 全绿；`pnpm exec tsc --noEmit` 0 errors；`pnpm run build` 8.96s 成功。
+>
+> **关键风险解决记录**：
+> - `commerce.json` 三方 race（T5/T6/T7 并行写同一 i18n 文件）通过 T7 预创建 stub key 解决，避免合并冲突；
+> - NullPool 决策（W19b 遗留）固化到 architecture 持久化引擎文档，`2b4cd75` 加 escalation gate 保障双引擎事务边界。
+>
+> **release note**：W20 不独立发布 release note，所有发版条目并入 W21 `v0.6.0` 整体 release（按 W21-T5 计划）。
 
 | 任务 ID | 内容                                                                                                                                                                                                          |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T20-1   | 多角度 ProductImage 上传 / 选择 UI：`front/src/pages/aiStudio/commerce/products/ProductImageGrid.tsx`，按 7 种 view_angle 分组，支持每角度 LOW/MEDIUM/HIGH/ULTRA 四档质量                                       |
-| T20-2   | `VoicePackPicker` 组件：列出可用 VoicePack（按 language_code 过滤），点击试听 sample；放在 StoryWorkbench 右侧抽屉                                                                                              |
-| T20-3   | `SubtitleStylePicker` 组件：3 个内置预览 + 自定义编辑（字号 / 颜色 / 描边 / 位置）                                                                                                                              |
-| T20-4   | StoryWorkbench AV 预览：当 `dubbed_video_file_id` 存在时优先播放有字幕版本，否则显示"等待 chapter_av_export"提示 + 触发按钮                                                                                     |
-| T20-5   | 新页面 `/commerce/voice-packs`：音色包管理（系统级只读 + 用户上传 sample_file 训练定制音色入口，定制实现可推迟）                                                                                                |
-| T20-6   | 新页面 `/commerce/subtitle-styles`：字幕样式管理（3 个内置只读 + 项目级覆盖）                                                                                                                                  |
-| T20-7   | MainLayout 菜单 + i18n 翻译（commerce 命名空间硬编码 zh-CN，与 P1+P2 D4 决策一致）                                                                                                                              |
-| T20-8   | 新增 Vitest 单测覆盖 ProductImageGrid / VoicePackPicker / SubtitleStylePicker（每个组件 ≥ 5 用例）                                                                                                              |
-| T20-9   | `pnpm exec tsc --noEmit` 通过；`pnpm run openapi:update` 通过                                                                                                                                                   |
+| T20-1   | ✅ 多角度 ProductImage 上传 / 选择 UI：`front/src/pages/aiStudio/commerce/products/ProductImageGrid.tsx`，7 种 view_angle 分组 × LOW/MEDIUM/HIGH/ULTRA 四档质量；commit `b84c35d`，5 vitest cases               |
+| T20-2   | ✅ `VoicePackPicker` 组件：按 `language_code` 过滤 + provider 分组 + 点击试听 `sample_file`；commit `087641c`，文件 `front/src/pages/aiStudio/commerce/components/VoicePackPicker.tsx`，5 vitest cases          |
+| T20-3   | ✅ `SubtitleStylePicker` 组件：3 内置模板（DOUYIN_DEFAULT / TIKTOK_VIRAL / REELS_LOWER_THIRD）只读预览 + 自定义编辑（字号 / 颜色 / 描边 / 位置 / 阴影）+ `colorCodec` helper（ASS `&HAABBGGRR` ↔ Hex 互转）；commit `abbe276`，5 vitest cases |
+| T20-4   | ✅ StoryWorkbench AVPreviewPanel 抽屉：`dubbed_video_file_id` 存在优先播有字幕版本，否则显示「等待 chapter_av_export」提示 + 触发按钮；嵌套 VoicePackPicker / SubtitleStylePicker；commit `664fb82`              |
+| T20-5   | ✅ 新页面 `/commerce/voice-packs`：音色库（系统级只读 + 用户上传 `sample_file` 训练定制音色 stub 入口，定制实现 P5 推进）；commit `7038869`                                                                       |
+| T20-6   | ✅ 新页面 `/commerce/subtitle-styles`：字幕样式库（3 内置只读 + 项目级覆盖占位）；commit `dd73301`                                                                                                                |
+| T20-7   | ✅ MainLayout 菜单 + i18n `commerce` 命名空间（按 D4 决策仍硬编码 zh-CN，但已切到独立子 ns 拆分：`product-image-grid` / `voice-pack-picker` / `subtitle-style-picker` / `voice-packs` / `subtitle-styles` / `av-preview` / `nav` 7 个）+ 2 lazy 路由（`commerce.voice-packs` / `commerce.subtitle-styles`）；commit `ddef114` |
+| T20-8   | ✅ Vitest 37/37 cases 全绿（含三组件 15 + 三页面 14 + helpers 8）：`pnpm vitest run` 退出 0；测试基建 `e2579ec`（Vitest 2.1.9 + RTL + jsdom）                                                                    |
+| T20-9   | ✅ `pnpm exec tsc --noEmit` 0 errors；`pnpm run openapi:update` 拉 T0b 新路由（commit `a784d36`）；`pnpm run build` 8.96s 成功                                                                                  |
 
 ### P3 Wave 21 — 集成与发布 v0.6.0（约 3 工作日）
 

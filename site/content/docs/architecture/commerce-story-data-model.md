@@ -928,6 +928,119 @@ P2 已经把下列原本"P1 未实现"项目全部落库（详见各章节注解
 - 品牌资产保险柜（P3）
 - `hk_tw` 合规 profile（P3）
 
+## 前端工作室升级（W20）
+
+W20 把 W16/W17/W18/W19/W19b 后端 Visual Production Layer（r2v 多图参考 / TTS 双引擎 / 字幕渲染 / chapter_av_export / chain dispatch / 双引擎事务边界）的能力暴露到前端工作室，建立可视化与可操作性的最终触点。本章节描述 W20 落地后的**当前架构事实**。
+
+### 后端只读浏览路由（W20-T0b）
+
+W20 在 `backend/app/api/v1/routes/commerce/` 下新增两条 read-only HTTP 路由，作为 W17 内置 VoicePack（6 条 zh-CN CosyVoice 音色）+ W18 内置 SubtitleStyle（3 条平台模板）的浏览面：
+
+| Method | 路径 | 用途 |
+| --- | --- | --- |
+| `GET` | `/api/v1/commerce/voice-packs` | 列出全部 VoicePack（按 `is_system` 优先 + `sort_order` 排序），可选 `?language_code=` 过滤；返回 `provider` / `provider_voice_id` / `gender` / `archetype_hint` / `sample_file_id` 全字段 |
+| `GET` | `/api/v1/commerce/subtitle-styles` | 列出全部 SubtitleStyle（按 `is_system` 优先 + `sort_order` 排序），返回 ASS Style 行的语义化全字段（`primary_colour` 等以 `&HAABBGGRR` 形式给前端，由 `colorCodec` helper 在前端转 Hex） |
+
+两条路由均为只读，不暴露 POST / PATCH（系统级写入仍由 `bootstrap_builtin_voice_packs` / `bootstrap_builtin_subtitle_styles` 在应用启动时幂等 seed）。前端调用统一走 OpenAPI generated client（`front/src/services/generated/`）。
+
+### 三个核心组件
+
+W20 在 `front/src/pages/aiStudio/commerce/` 下落地三个核心组件，全部走 TDD 路径（vitest 5 cases / 组件，共 15 cases）：
+
+| 组件 | 文件 | 职责 |
+| --- | --- | --- |
+| `ProductImageGrid` | `commerce/products/ProductImageGrid.tsx` | 7 种 `view_angle`（FRONT / LEFT / RIGHT / BACK / THREE_QUARTER / TOP / DETAIL）× 4 档 `quality_level`（LOW / MEDIUM / HIGH / ULTRA）的二维网格；每格支持上传 / 替换 / 设主图 / 删除；按 `(view_angle, quality_level)` UNIQUE 约束触发幂等替换 |
+| `VoicePackPicker` | `commerce/components/VoicePackPicker.tsx` | 按 `language_code` 过滤 + 按 `provider` 分组渲染 VoicePack 列表；卡片点击触发 `sample_file` HTML5 audio 试听；选中后回写到 `Character.voice_pack_id` / `StoryVariant.voice_pack_id` / `StoryVariant.narration_voice_pack_id` |
+| `SubtitleStylePicker` | `commerce/components/SubtitleStylePicker.tsx` | 3 内置模板（DOUYIN_DEFAULT / TIKTOK_VIRAL / REELS_LOWER_THIRD）只读预览 + 自定义编辑（字号 / 主色 / 描边色 / 阴影色 / 描边宽度 / 阴影深度 / `alignment` numpad 1-9 选择 / `margin_l/r/v`）；配套 `helpers/colorCodec.ts`：ASS `&HAABBGGRR` ↔ Hex `#RRGGBB[AA]` 双向无损转换，5 cases |
+
+三个组件统一走 `services/generated/` OpenAPI client，不再封装手写 service。
+
+### StoryWorkbench AVPreviewPanel 抽屉（W20-T4）
+
+`StoryWorkbench` 右侧新增 `AVPreviewPanel` 抽屉，承接 W19 落地的章节级 AV 合成预览能力：
+
+- **优先播放规则**：当 `Shot.dubbed_video_file_id`（W19 引入，章节合成"配音 + 字幕"成片指针）存在时，前端预览 `<video>` 直接拉取 dubbed 版本；否则显示「等待 chapter_av_export」提示卡片 + 一键触发按钮。
+- **触发按钮**：调用 `enqueue_chapter_av_export` dispatcher 入口，前端不再重新封装请求体；任务进入后展示 task center 入口链接。
+- **嵌套选择器**：抽屉内嵌 `VoicePackPicker`（绑定到当前 chapter 默认 VoicePack 上下文）+ `SubtitleStylePicker`（绑定到当前 SubtitleTrack 渲染样式），两个选择器变更后写回 chapter 级配置，下次 chapter_av_export 派发时按新配置渲染。
+- **空态契约**：当镜头 `audio_strategy=keep_native` 且 ASR 反推字幕未就位时，预览面板显式展示「ASR 处理中」状态，避免误以为是 dubbed 缺失。
+
+### 两个独立浏览页
+
+W20 新增两条 lazy 路由（在 `front/src/router/` 注册），作为系统级资产的独立浏览面：
+
+| 路由 | 页面文件 | 用途 |
+| --- | --- | --- |
+| `/commerce/voice-packs` | `aiStudio/commerce/voice-packs/VoicePacksPage.tsx` | 系统级 6 条 CosyVoice 音色只读浏览（语言 / 性别 / archetype / 试听）+ 用户上传 `sample_file` 训练定制音色 stub 入口（实际定制实现 P5 推进） |
+| `/commerce/subtitle-styles` | `aiStudio/commerce/subtitle-styles/SubtitleStylesPage.tsx` | 系统级 3 条字幕模板只读浏览 + 项目级覆盖占位（覆盖实现 P5 推进） |
+
+两个页面均挂在 MainLayout 侧栏 commerce 分组下，与既有 `/commerce/products` / `/commerce/story-projects` / `/commerce/formulas` / `/commerce/compliance` 同级。
+
+### i18n commerce 命名空间
+
+W20 把 commerce 区相关翻译从单一 `commerce.json` 拆为 7 个子命名空间，避免后续多页面合并冲突（W20 实施过程中已实测三方 race），文件落 `front/public/locales/zh-CN/commerce/`：
+
+| 子 ns | 用途 |
+| --- | --- |
+| `nav` | 侧栏菜单标签 |
+| `product-image-grid` | ProductImageGrid 组件文案 |
+| `voice-pack-picker` | VoicePackPicker 组件文案 |
+| `subtitle-style-picker` | SubtitleStylePicker 组件文案 |
+| `voice-packs` | `/commerce/voice-packs` 页面文案 |
+| `subtitle-styles` | `/commerce/subtitle-styles` 页面文案 |
+| `av-preview` | AVPreviewPanel 抽屉文案 |
+
+按 D4 决策（commerce 页面在 P1/P2/P3 阶段 hardcoded zh-CN，i18n 完整化推迟到 P5），W20 仅落 zh-CN，未提供其他 locale 翻译。
+
+### Vitest + RTL 测试基建
+
+W20 顺手落地 P2-T15-1 长期空缺的「前端测试空白」：
+
+- **栈**：Vitest 2.1.9 + `@testing-library/react` + `@testing-library/user-event` + jsdom 环境 + `@testing-library/jest-dom` matcher 扩展。
+- **配置**：`front/vitest.config.ts` 与 `front/vite.config.ts` 共享 alias / plugin 链；测试 setup 文件 `front/src/test/setup.ts` 注入 jest-dom。
+- **覆盖范围**：W20 累计 37 个 cases 全绿，分布：
+  - 三组件 15 cases（ProductImageGrid 5 / VoicePackPicker 5 / SubtitleStylePicker 5）
+  - 三页面 14 cases（AVPreviewPanel + 两个浏览页）
+  - helpers 8 cases（`colorCodec` 5 + 其他 utility 3）
+
+执行命令：`pnpm vitest run`（CI）/ `pnpm vitest`（watch 开发模式）。
+
+### 模块边界增量（W20）
+
+```text
+front/src/
+├── pages/aiStudio/commerce/
+│   ├── components/
+│   │   ├── VoicePackPicker.tsx          # W20-T2，TDD 5 cases
+│   │   └── SubtitleStylePicker.tsx      # W20-T3，TDD 5 cases
+│   ├── helpers/
+│   │   └── colorCodec.ts                # ASS &HAABBGGRR ↔ Hex 互转，5 cases
+│   ├── products/
+│   │   └── ProductImageGrid.tsx         # W20-T1，TDD 5 cases
+│   ├── voice-packs/
+│   │   └── VoicePacksPage.tsx           # W20-T5，/commerce/voice-packs 路由
+│   ├── subtitle-styles/
+│   │   └── SubtitleStylesPage.tsx       # W20-T6，/commerce/subtitle-styles 路由
+│   └── workbench/
+│       └── AVPreviewPanel.tsx           # W20-T4，StoryWorkbench 抽屉
+├── public/locales/zh-CN/commerce/
+│   ├── nav.json
+│   ├── product-image-grid.json
+│   ├── voice-pack-picker.json
+│   ├── subtitle-style-picker.json
+│   ├── voice-packs.json
+│   ├── subtitle-styles.json
+│   └── av-preview.json
+├── router/                              # +2 lazy 路由（commerce.voice-packs / commerce.subtitle-styles）
+├── test/setup.ts                        # jsdom + jest-dom matcher
+└── vitest.config.ts                     # Vitest 2.1.9 配置
+
+backend/app/api/v1/routes/commerce/
+├── voice_packs_routes.py                # W20-T0b GET /commerce/voice-packs
+└── subtitle_styles_routes.py            # W20-T0b GET /commerce/subtitle-styles
+```
+
+W20 落地后，前端工作室与 commerce 页面对 W16-W19b 全部能力具备完整可视化触点；后续 W21 进入 e2e 集成与 v0.6.0 release 阶段。
+
 ## References
 
 - 计划文档：[剧情带货实施计划](/docs/plans/jellyfish-story-commerce/)
