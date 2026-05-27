@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 from app.core.db import Base
@@ -55,10 +56,12 @@ def _build_sync_engine() -> Engine:
     kwargs: dict[str, Any] = dict(
         echo=settings.debug,
         future=True,
-        pool_pre_ping=True,
     )
     if _is_sqlite_sync(sync_url):
-        kwargs["connect_args"] = {"isolation_level": None}
+        kwargs["connect_args"] = {"isolation_level": None, "timeout": 60.0}
+        kwargs["poolclass"] = NullPool
+    else:
+        kwargs["pool_pre_ping"] = True
 
     new_engine = create_engine(sync_url, **kwargs)
 

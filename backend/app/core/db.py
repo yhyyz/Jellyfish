@@ -64,7 +64,11 @@ def _build_engine() -> AsyncEngine:
     if _is_sqlite(settings.database_url):
         # SQLite 不需要也不支持 MySQL 那套连接池参数；最关键的是
         # 把事务控制权从 sqlite3 驱动收回到 SQLAlchemy。
-        kwargs["connect_args"] = {"isolation_level": None}
+        # ``timeout`` 参数会直接传到 ``sqlite3.connect(timeout=...)`` ——
+        # 在 C 层立即调用 sqlite3_busy_timeout(60000)，比 PRAGMA listener
+        # 更可靠（不依赖 cursor 路由 / 后台线程时序），是消除
+        # SQLITE_BUSY 21ms 瞬间失败的根因修复。
+        kwargs["connect_args"] = {"isolation_level": None, "timeout": 60.0}
     else:
         # 远端数据库（MySQL / PostgreSQL）保留原连接池策略。
         kwargs["pool_size"] = 10
