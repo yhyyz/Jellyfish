@@ -39,7 +39,9 @@ export type { ApiResponse_list_ShotRuntimeSummaryRead__ } from './models/ApiResp
 export type { ApiResponse_list_StoryFormulaRead__ } from './models/ApiResponse_list_StoryFormulaRead__';
 export type { ApiResponse_list_StoryProjectRead__ } from './models/ApiResponse_list_StoryProjectRead__';
 export type { ApiResponse_list_StoryVariantRead__ } from './models/ApiResponse_list_StoryVariantRead__';
+export type { ApiResponse_list_SubtitleStyleRead__ } from './models/ApiResponse_list_SubtitleStyleRead__';
 export type { ApiResponse_list_TimelineClipRead__ } from './models/ApiResponse_list_TimelineClipRead__';
+export type { ApiResponse_list_VoicePackRead__ } from './models/ApiResponse_list_VoicePackRead__';
 export type { ApiResponse_ModelChatTestRead_ } from './models/ApiResponse_ModelChatTestRead_';
 export type { ApiResponse_ModelRead_ } from './models/ApiResponse_ModelRead_';
 export type { ApiResponse_ModelSettingsRead_ } from './models/ApiResponse_ModelSettingsRead_';
@@ -304,6 +306,7 @@ export type { StudioScriptExtractionDraft } from './models/StudioScriptExtractio
 export type { StudioShotDraft } from './models/StudioShotDraft';
 export type { StudioShotDraftDialogueLine } from './models/StudioShotDraftDialogueLine';
 export type { StyleOption } from './models/StyleOption';
+export type { SubtitleStyleRead } from './models/SubtitleStyleRead';
 export type { TaskCancelRead } from './models/TaskCancelRead';
 export type { TaskCancelRequest } from './models/TaskCancelRequest';
 export type { TaskCreated } from './models/TaskCreated';
@@ -326,8 +329,11 @@ export type { VFXType } from './models/VFXType';
 export type { VideoGenerationOptionsRead } from './models/VideoGenerationOptionsRead';
 export type { VideoGenerationTaskRequest } from './models/VideoGenerationTaskRequest';
 export type { VideoPromptPreviewResponse } from './models/VideoPromptPreviewResponse';
+export type { VoicePackRead } from './models/VoicePackRead';
 
+export { CommerceSubtitleStylesService } from './services/CommerceSubtitleStylesService';
 export { CommerceTasksService } from './services/CommerceTasksService';
+export { CommerceVoicePacksService } from './services/CommerceVoicePacksService';
 export { DefaultService } from './services/DefaultService';
 export { FilmService } from './services/FilmService';
 export { HealthService } from './services/HealthService';
