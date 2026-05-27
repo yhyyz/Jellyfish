@@ -47,8 +47,9 @@ from app.models.studio_shots import (
     CameraMovement,
     CameraShotType,
 )
+from app.models.subtitle import SubtitleStyle
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus
-from app.models.types import AudioStrategy
+from app.models.types import AudioStrategy, SubtitleAlignment, SubtitleFormat
 from app.models.voice_pack import VoicePack
 from app.models.types import VoiceGender, VoiceProvider
 from app.services.film import generated_video as gen_mod
@@ -115,11 +116,16 @@ async def _seed_full_project(
     sm: async_sessionmaker[AsyncSession],
     *,
     dialog_lines: list[tuple[str, str | None]] | None = None,
+    seed_subtitle_style: bool = True,
 ) -> None:
     """种入 Project / Chapter / Shot / ShotDetail / VoicePack（可选）/ ShotDialogLine。
 
     ``dialog_lines`` 为 ``[(text, voice_pack_id_or_None), ...]``：voice_pack_id
     为 None 时不绑定音色（用于测试 skip 分支）。
+
+    ``seed_subtitle_style`` 默认 ``True``：keep_native 路径会在 chain dispatch
+    时调用 ``_resolve_default_subtitle_style_id``，缺这条 SubtitleStyle 会
+    抛 RuntimeError。silent_with_tts 不依赖该样式，但补一行也无副作用。
     """
 
     async with sm() as db:
@@ -181,6 +187,37 @@ async def _seed_full_project(
                     tts_voice_id=voice_pack_id,
                     start_time_ms=idx * 1000,
                     end_time_ms=(idx + 1) * 1000,
+                )
+            )
+
+        if seed_subtitle_style:
+            db.add(
+                SubtitleStyle(
+                    id="douyin_default",
+                    name="抖音默认",
+                    description="测试用默认字幕样式",
+                    language_code="zh-CN",
+                    format=SubtitleFormat.ass,
+                    font_family="Source Han Sans CN Heavy",
+                    font_fallback_chain=["Source Han Sans CN Heavy", "Arial"],
+                    font_size=72,
+                    primary_colour="&H00FFFFFF",
+                    secondary_colour="&H00FFFFFF",
+                    outline_colour="&H00000000",
+                    back_colour="&H80000000",
+                    bold=True,
+                    italic=False,
+                    border_style=1,
+                    outline=3.0,
+                    shadow=1.0,
+                    alignment=SubtitleAlignment.bottom_center,
+                    margin_l=60,
+                    margin_r=60,
+                    margin_v=200,
+                    play_res_x=1080,
+                    play_res_y=1920,
+                    is_system=True,
+                    sort_order=0,
                 )
             )
 
@@ -385,7 +422,14 @@ async def test_keep_native_dispatches_single_asr_subtitle_generate(
             )
         ).scalars().all()
         assert len(rows) == 1
-        assert rows[0].payload["run_args"]["video_file_id"] == fake_file_id
+        run_args = rows[0].payload["run_args"]
+        assert run_args["video_file_id"] == fake_file_id
+        assert run_args["shot_id"] == _SHOT_ID, (
+            "B3：keep_native chain dispatch 必须把 shot_id 写进 ASR run_args"
+        )
+        assert run_args["style_id"] == "douyin_default", (
+            "B3：keep_native chain dispatch 必须把默认 style_id 写进 ASR run_args"
+        )
 
     assert send_task.call_count == 1
 

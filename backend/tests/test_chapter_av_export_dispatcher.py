@@ -82,10 +82,13 @@ def test_enqueue_chapter_av_export_persists_row_and_publishes_to_slow_queue(
     session_local: async_sessionmaker[AsyncSession],
     mock_send_task: MagicMock,
 ) -> None:
-    """落 ``GenerationTask`` 行 + send_task(queue="slow")。
+    """落 ``GenerationTask`` 行 + commit 后 dispatch_after_commit(queue="slow")。
 
     与 chapter_av_plan 对齐：章节级合成属分钟级长任务，必须走 ``slow``
     队列避免与 fast 队列上的分钟级 worker 争抢消费者。
+
+    W19b 契约：``enqueue_*`` 仅落表，``dispatch_after_commit`` 必须在
+    ``await db.commit()`` 之后调用。
     """
 
     body: dict[str, Any] = {
@@ -93,30 +96,31 @@ def test_enqueue_chapter_av_export_persists_row_and_publishes_to_slow_queue(
         "aspect": "9:16",
     }
 
-    async def _run() -> dict[str, Any]:
+    async def _run():
         async with session_local() as db:
             service = CommerceTaskDispatchService(db)
-            payload = await service.enqueue_chapter_av_export(body)
+            descriptor = await service.enqueue_chapter_av_export(body)
             await db.commit()
-            return payload
+            service.dispatch_after_commit(descriptor)
+            return descriptor
 
-    payload = asyncio.run(_run())
+    descriptor = asyncio.run(_run())
 
-    assert payload["task_kind"] == TASK_KIND_CHAPTER_AV_EXPORT
-    assert payload["status"] == GenerationTaskStatus.pending.value
-    assert _UUID_HEX.match(payload["task_id"]), "task_id must be uuid4().hex"
+    assert descriptor.task_kind == TASK_KIND_CHAPTER_AV_EXPORT
+    assert descriptor.status == GenerationTaskStatus.pending.value
+    assert _UUID_HEX.match(descriptor.task_id), "task_id must be uuid4().hex"
 
     mock_send_task.assert_called_once()
     args, kwargs = mock_send_task.call_args
     assert args[0] == "task.execute"
-    assert kwargs["args"] == [payload["task_id"]]
+    assert kwargs["args"] == [descriptor.task_id]
     assert kwargs["queue"] == "slow", (
         "章节级 AV 合成必须走 slow 队列，与 chapter_av_plan 对齐"
     )
 
     async def _fetch() -> GenerationTask | None:
         async with session_local() as db:
-            return await db.get(GenerationTask, payload["task_id"])
+            return await db.get(GenerationTask, descriptor.task_id)
 
     row = asyncio.run(_fetch())
     assert row is not None
@@ -141,9 +145,10 @@ def test_enqueue_chapter_av_export_preserves_audio_strategy_override(
     async def _run() -> str:
         async with session_local() as db:
             service = CommerceTaskDispatchService(db)
-            payload = await service.enqueue_chapter_av_export(body)
+            descriptor = await service.enqueue_chapter_av_export(body)
             await db.commit()
-            return payload["task_id"]
+            service.dispatch_after_commit(descriptor)
+            return descriptor.task_id
 
     task_id = asyncio.run(_run())
     mock_send_task.assert_called_once()
@@ -168,9 +173,10 @@ def test_enqueue_chapter_av_export_minimal_body_only_chapter_id(
     async def _run() -> str:
         async with session_local() as db:
             service = CommerceTaskDispatchService(db)
-            payload = await service.enqueue_chapter_av_export(body)
+            descriptor = await service.enqueue_chapter_av_export(body)
             await db.commit()
-            return payload["task_id"]
+            service.dispatch_after_commit(descriptor)
+            return descriptor.task_id
 
     task_id = asyncio.run(_run())
     mock_send_task.assert_called_once()

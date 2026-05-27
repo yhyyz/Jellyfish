@@ -78,7 +78,11 @@ def test_enqueue_tts_generate_persists_row_and_publishes_to_fast_queue(
     session_local: async_sessionmaker[AsyncSession],
     mock_send_task: MagicMock,
 ) -> None:
-    """落 ``GenerationTask`` 行 + send_task(queue="fast")。"""
+    """落 ``GenerationTask`` 行 + commit 后 dispatch_after_commit(queue="fast")。
+
+    W19b 契约：``enqueue_*`` 仅落表，``dispatch_after_commit`` 必须在
+    ``await db.commit()`` 之后调用。
+    """
 
     body: dict[str, Any] = {
         "text": "你好世界",
@@ -86,30 +90,40 @@ def test_enqueue_tts_generate_persists_row_and_publishes_to_fast_queue(
         "speed": 1.0,
     }
 
-    async def _run() -> dict[str, Any]:
+    async def _run():
         async with session_local() as db:
             service = CommerceTaskDispatchService(db)
-            payload = await service.enqueue_tts_generate(body)
+            descriptor = await service.enqueue_tts_generate(body)
+            send_called_before_commit = mock_send_task.called
             await db.commit()
-            return payload
+            send_called_after_commit_before_dispatch = mock_send_task.called
+            service.dispatch_after_commit(descriptor)
+            return descriptor, [
+                send_called_before_commit,
+                send_called_after_commit_before_dispatch,
+            ]
 
-    payload = asyncio.run(_run())
+    descriptor, ordering_flags = asyncio.run(_run())
 
-    assert payload["task_kind"] == TASK_KIND_TTS_GENERATE
-    assert payload["status"] == GenerationTaskStatus.pending.value
-    assert _UUID_HEX.match(payload["task_id"]), "task_id must be uuid4().hex"
-    assert "enqueued_at" in payload
+    assert ordering_flags == [False, False], (
+        "enqueue_tts_generate / commit 都不应触发 send_task；"
+        "只有 dispatch_after_commit 才允许投递 broker。"
+    )
+    assert descriptor.task_kind == TASK_KIND_TTS_GENERATE
+    assert descriptor.status == GenerationTaskStatus.pending.value
+    assert _UUID_HEX.match(descriptor.task_id), "task_id must be uuid4().hex"
+    assert descriptor.enqueued_at is not None
 
     mock_send_task.assert_called_once()
     args, kwargs = mock_send_task.call_args
     assert args[0] == "task.execute"
-    assert kwargs["args"] == [payload["task_id"]]
+    assert kwargs["args"] == [descriptor.task_id]
     assert kwargs["queue"] == "fast"
 
     # 任务行已经落地，并保留原始 run_args。
     async def _fetch() -> GenerationTask | None:
         async with session_local() as db:
-            return await db.get(GenerationTask, payload["task_id"])
+            return await db.get(GenerationTask, descriptor.task_id)
 
     row = asyncio.run(_fetch())
     assert row is not None
@@ -136,9 +150,10 @@ def test_enqueue_tts_generate_preserves_optional_fields(
     async def _run() -> str:
         async with session_local() as db:
             service = CommerceTaskDispatchService(db)
-            payload = await service.enqueue_tts_generate(body)
+            descriptor = await service.enqueue_tts_generate(body)
             await db.commit()
-            return payload["task_id"]
+            service.dispatch_after_commit(descriptor)
+            return descriptor.task_id
 
     task_id = asyncio.run(_run())
     mock_send_task.assert_called_once()

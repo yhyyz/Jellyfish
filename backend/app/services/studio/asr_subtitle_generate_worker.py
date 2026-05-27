@@ -1,4 +1,4 @@
-"""ASR 字幕反推 worker（P3 W17 收尾，Decision D 修订）。
+"""ASR 字幕反推 worker（P3 W17 收尾，Decision D 修订；W19b 链式补齐）。
 
 为什么存在
 ----------
@@ -12,9 +12,31 @@ P3 剧情带货链路在 W17 引入两条音轨路径：
 
 本 worker 服务 ``keep_native`` 路径：把已落库的 video / audio FileItem
 对应的对象存储 public URL 送进 DashScope Paraformer-v2 异步 ASR，拿到
-``list[TtsWordTimestamp]`` 后写回 ``GenerationTask.result``，下游字幕渲染
-（W18 SubtitleTrack）或 ``ShotDialogLine.start_time_ms/end_time_ms``
-回填阶段消费这份时间戳。
+``list[TtsWordTimestamp]`` 后写回 ``GenerationTask.result``，并在 result
+中带上 ``shot_id``（B6）方便下游消费方按镜头维度做关联查询。
+
+链式派发（W19b 补齐 B3/B6）
+---------------------------
+
+历史实现到这里就结束（worker 是叶子节点）：``run_args`` 中只带
+``video_file_id`` / ``language_hints``，结果里只有 ``word_timestamps``，
+前端必须显式 POST ``/commerce/shot-subtitle-render`` 才能把字级时间戳
+渲染成 .ass。这与 ``silent_with_tts`` 路径有 ``chapter_av_planner`` 编排
+形成不对称的客户端工作流。
+
+本 worker 现在接收两个新参数：
+
+- ``shot_id``: 字幕所属镜头 ID。写入 ``GenerationTaskLink``（resource_type=
+  ``subtitle`` / relation_type=``shot``），让下游 SubtitleTrack 等查询
+  能反向回到 ASR 任务；同时写进 result 让前端任务详情可直接展示。
+- ``style_id``: 渲染字幕用的 SubtitleStyle ID。``run_video_generation_task``
+  在 keep_native 分支 :func:`_resolve_default_subtitle_style_id` 解析出来。
+
+ASR 主流程成功 commit 之后，本 worker 再开一个独立 session 调
+:py:meth:`CommerceTaskDispatchService.enqueue_shot_subtitle_render`
+落子任务行 + commit + dispatch_after_commit。链式派发任何异常都仅记录
+warning，不向上抛——ASR 主任务已 commit 成功，链式失败不应回滚 ASR 自身
+的 succeeded 状态。
 
 设计要点
 --------
@@ -26,7 +48,7 @@ P3 剧情带货链路在 W17 引入两条音轨路径：
 - 复用 :class:`DashScopeTtsApiAdapter`. ``estimate_audio_via_asr``，避免
   重复实现 Paraformer-v2 异步任务三段式（submit → poll → fetch）。
 - 默认超时 ``600s``：Paraformer-v2 异步 ASR 比 CosyVoice TTS 慢 1-2 倍，
-  与 adapter 默认 timeout 对齐。``fast`` 队列：单镜头视频通常 ≤ 6s 音频，
+  与 adapter 默认 timeout 对齐。``fast`` 队列：单镜头视频通常 ≤ 6s 音频,
   ASR 延迟在分钟级，不应挤占视频生成 worker 的 slow 队列。
 - 不做缓存命中分支：Paraformer-v2 计费按音频时长，复跑成本可控；并且
   ``keep_native`` 路径目前只对单视频生成结果做一次反推，复用价值低。
@@ -50,6 +72,8 @@ from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.models.llm import Provider
 from app.models.studio import FileItem
+from app.models.task_links import GenerationTaskLink
+from app.services.commerce.task_dispatch import CommerceTaskDispatchService
 from app.services.llm.provider_registry import try_resolve_provider_key_from_name
 from app.services.worker.async_task_support import cancel_if_requested_async
 from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor
@@ -73,6 +97,16 @@ _SUCCEEDED_PROGRESS = 100
 
 _DEFAULT_LANGUAGE_HINTS: tuple[str, ...] = ("zh", "en")
 """DashScope Paraformer-v2 默认 language_hints：中英混合，覆盖 jellyfish 主用例。"""
+
+_CHAIN_DISPATCH_SOURCE = "asr_paraformer_v2"
+"""链式派发 ``shot_subtitle_render`` 时写进 result 的 source 标记，
+与 ``SubtitleSource.asr_paraformer_v2`` 枚举值保持一致。"""
+
+_LINK_RESOURCE_TYPE_SUBTITLE = "subtitle"
+"""``GenerationTaskLink.resource_type`` 取值，标记关联资源是字幕。"""
+
+_LINK_RELATION_TYPE_SHOT = "shot"
+"""``GenerationTaskLink.relation_type`` 取值，标记关联业务实体是镜头。"""
 
 
 def _coerce_str(value: object, *, default: str = "") -> str:
@@ -178,6 +212,60 @@ async def _resolve_public_audio_url(
     return info.url
 
 
+async def _chain_dispatch_subtitle_render(
+    *,
+    shot_id: str,
+    style_id: str,
+    word_timestamps_payload: list[dict[str, Any]],
+) -> None:
+    """ASR 主任务 commit 之后链式派发 ``shot_subtitle_render``（B3/B6）。
+
+    存在原因：
+        让 ``keep_native`` 路径与 ``silent_with_tts`` 路径保持对称——前端
+        不再需要在 ASR 成功后手动 POST ``/commerce/shot-subtitle-render``。
+
+    实现要点：
+        - 独立开一个新 session 而非复用 ASR worker 的主 session：主 session
+          已经在外层 commit 关闭，且本步逻辑必须在 commit 之后执行（必须
+          先 ASR 自身落地、再触发下游）。
+        - 使用 :py:meth:`CommerceTaskDispatchService.dispatch_after_commit`
+          严格遵循 W19b commit-before-dispatch 契约。
+        - 异常吞 + warning：ASR 主任务已 commit 成功，下游链式派发失败
+          不应回滚已成功的 ASR 状态。
+
+    Args:
+        shot_id: 字幕所属镜头 ID。
+        style_id: 渲染字幕的 SubtitleStyle ID。
+        word_timestamps_payload: 已 ``model_dump()`` 过的字级时间戳 list[dict]，
+            字段 ``text`` / ``begin_ms`` / ``end_ms``。
+    """
+
+    if not (shot_id and style_id and word_timestamps_payload):
+        return
+
+    try:
+        async with async_session_maker() as chain_session:
+            chain_dispatcher = CommerceTaskDispatchService(chain_session)
+            render_descriptor = await chain_dispatcher.enqueue_shot_subtitle_render(
+                body={
+                    "shot_id": shot_id,
+                    "style_id": style_id,
+                    "word_timestamps": word_timestamps_payload,
+                    "source": _CHAIN_DISPATCH_SOURCE,
+                }
+            )
+            await chain_session.commit()
+            chain_dispatcher.dispatch_after_commit(render_descriptor)
+    except Exception as exc:  # noqa: BLE001 - 链式失败不应回滚已 commit 的 ASR 主任务
+        logger.warning(
+            "asr_subtitle_generate chain dispatch shot_subtitle_render failed: "
+            "shot_id=%s style_id=%s err=%s",
+            shot_id,
+            style_id,
+            exc,
+        )
+
+
 async def run_asr_subtitle_generate_task(
     task_id: str,
     run_args: dict[str, Any],
@@ -189,8 +277,15 @@ async def run_asr_subtitle_generate_task(
           是 ``video`` 或 ``audio``，且对应对象存储 key 必须可被解析为公网 URL。
         - ``language_hints`` (list[str], optional, default ``["zh", "en"]``):
           DashScope Paraformer language_hints；中英混合是 jellyfish 主用例。
+        - ``shot_id`` (str, optional): 字幕所属镜头 ID。提供时本 worker 会
+          额外写一行 :class:`GenerationTaskLink`（B6），并在 commit 后链式
+          派发 ``shot_subtitle_render``（B3）。Legacy 调用方可不传，行为
+          降级为旧的“仅返回 word_timestamps”叶子节点。
+        - ``style_id`` (str, optional): 链式派发 ``shot_subtitle_render``
+          所需的 SubtitleStyle ID；缺失时跳过链式派发但 ASR 仍成功返回。
 
     输出（写入 ``store.set_result`` 的 dict）:
+        - ``shot_id`` (str | None): 镜头 ID（B6）；旧调用方不传 shot_id 时为 None。
         - ``source_file_id``: 输入 video_file_id；
         - ``audio_url``: 实际送往 Paraformer 的公网 URL（便于排障）；
         - ``language_hints``: 实际生效的 language_hints；
@@ -200,6 +295,8 @@ async def run_asr_subtitle_generate_task(
     异常处理:
         与 ``tts_generate_worker`` 一致：try 中 rollback、独立会话写 failed、
         再向上抛由 ``AbstractAsyncDelegatingExecutor`` 转换为 Celery 失败状态。
+        链式派发的异常被 :func:`_chain_dispatch_subtitle_render` 内部吞掉，
+        不影响 ASR 自身已 commit 的成功状态。
     """
 
     video_file_id = _coerce_str(run_args.get("video_file_id"))
@@ -208,6 +305,10 @@ async def run_asr_subtitle_generate_task(
             "asr_subtitle_generate requires non-empty video_file_id in run_args"
         )
     language_hints = _coerce_language_hints(run_args.get("language_hints"))
+    shot_id = _coerce_str(run_args.get("shot_id"))
+    style_id = _coerce_str(run_args.get("style_id"))
+
+    word_timestamps_payload: list[dict[str, Any]] = []
 
     async with async_session_maker() as session:
         try:
@@ -245,15 +346,33 @@ async def run_asr_subtitle_generate_task(
             duration_ms = (
                 max(item.end_ms for item in word_timestamps) if word_timestamps else 0
             )
+            word_timestamps_payload = [ts.model_dump() for ts in word_timestamps]
 
+            # B6: result 中显式带 shot_id，避免前端任务详情/排障日志必须
+            # 回查 GenerationTaskLink 才能定位到镜头。
             payload: dict[str, Any] = {
+                "shot_id": shot_id or None,
                 "source_file_id": video_file_id,
                 "audio_url": audio_url,
                 "language_hints": language_hints,
                 "duration_ms": int(duration_ms),
-                "word_timestamps": [ts.model_dump() for ts in word_timestamps],
+                "word_timestamps": word_timestamps_payload,
             }
             await store.set_result(task_id, payload)
+
+            # B6: 写一行 GenerationTaskLink，让 SubtitleTrack 等下游查询
+            # 能按 shot_id 反向找到 ASR 任务。仅在 shot_id 提供时写入，
+            # 兼容仍走旧契约（无 shot_id）的 legacy 调用方。
+            if shot_id:
+                session.add(
+                    GenerationTaskLink(
+                        task_id=task_id,
+                        resource_type=_LINK_RESOURCE_TYPE_SUBTITLE,
+                        relation_type=_LINK_RELATION_TYPE_SHOT,
+                        relation_entity_id=shot_id,
+                    )
+                )
+
             await store.set_progress(task_id, _SUCCEEDED_PROGRESS)
             await store.set_status(task_id, TaskStatus.succeeded)
             await session.commit()
@@ -262,6 +381,7 @@ async def run_asr_subtitle_generate_task(
                 task_id,
                 "succeeded",
                 source_file_id=video_file_id,
+                shot_id=shot_id or None,
                 duration_ms=int(duration_ms),
                 word_count=len(word_timestamps),
             )
@@ -274,6 +394,15 @@ async def run_asr_subtitle_generate_task(
                 await failure_session.commit()
             log_task_failure(TASK_KIND, task_id, str(exc))
             raise
+
+    # B3: ASR 主任务 commit 完成后链式派发 shot_subtitle_render。必须放在
+    # async with 之外（主 session 已 commit 关闭），并通过新的 session 严格
+    # 按 W19b commit-before-dispatch 契约执行。
+    await _chain_dispatch_subtitle_render(
+        shot_id=shot_id,
+        style_id=style_id,
+        word_timestamps_payload=word_timestamps_payload,
+    )
 
 
 def build_asr_subtitle_generate_executor() -> AbstractAsyncDelegatingExecutor:

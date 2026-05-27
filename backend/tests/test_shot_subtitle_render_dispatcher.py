@@ -85,7 +85,11 @@ def test_enqueue_shot_subtitle_render_persists_row_and_publishes_to_fast_queue(
     session_local: async_sessionmaker[AsyncSession],
     mock_send_task: MagicMock,
 ) -> None:
-    """落 ``GenerationTask`` 行 + send_task(queue="fast")。"""
+    """落 ``GenerationTask`` 行 + commit 后 dispatch_after_commit(queue="fast")。
+
+    W19b 契约：``enqueue_*`` 仅落表，``dispatch_after_commit`` 必须在
+    ``await db.commit()`` 之后调用。
+    """
 
     body: dict[str, Any] = {
         "shot_id": "shot-w18-x",
@@ -98,31 +102,32 @@ def test_enqueue_shot_subtitle_render_persists_row_and_publishes_to_fast_queue(
         "source": "tts_word_timestamps",
     }
 
-    async def _run() -> dict[str, Any]:
+    async def _run():
         async with session_local() as db:
             service = CommerceTaskDispatchService(db)
-            payload = await service.enqueue_shot_subtitle_render(body)
+            descriptor = await service.enqueue_shot_subtitle_render(body)
             await db.commit()
-            return payload
+            service.dispatch_after_commit(descriptor)
+            return descriptor
 
-    payload = asyncio.run(_run())
+    descriptor = asyncio.run(_run())
 
-    assert payload["task_kind"] == TASK_KIND_SHOT_SUBTITLE_RENDER
-    assert payload["status"] == GenerationTaskStatus.pending.value
-    assert _UUID_HEX.match(payload["task_id"]), "task_id must be uuid4().hex"
-    assert "enqueued_at" in payload
+    assert descriptor.task_kind == TASK_KIND_SHOT_SUBTITLE_RENDER
+    assert descriptor.status == GenerationTaskStatus.pending.value
+    assert _UUID_HEX.match(descriptor.task_id), "task_id must be uuid4().hex"
+    assert descriptor.enqueued_at is not None
 
     mock_send_task.assert_called_once()
     args, kwargs = mock_send_task.call_args
     assert args[0] == "task.execute"
-    assert kwargs["args"] == [payload["task_id"]]
+    assert kwargs["args"] == [descriptor.task_id]
     assert kwargs["queue"] == "fast", (
         "字幕渲染必须走 fast 队列，与 TTS / ASR 对称"
     )
 
     async def _fetch() -> GenerationTask | None:
         async with session_local() as db:
-            return await db.get(GenerationTask, payload["task_id"])
+            return await db.get(GenerationTask, descriptor.task_id)
 
     row = asyncio.run(_fetch())
     assert row is not None
@@ -147,9 +152,10 @@ def test_enqueue_shot_subtitle_render_preserves_optional_fields(
     async def _run() -> str:
         async with session_local() as db:
             service = CommerceTaskDispatchService(db)
-            payload = await service.enqueue_shot_subtitle_render(body)
+            descriptor = await service.enqueue_shot_subtitle_render(body)
             await db.commit()
-            return payload["task_id"]
+            service.dispatch_after_commit(descriptor)
+            return descriptor.task_id
 
     task_id = asyncio.run(_run())
     mock_send_task.assert_called_once()

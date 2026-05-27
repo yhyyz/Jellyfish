@@ -19,8 +19,12 @@ from app.models.llm import Model, ModelCategoryKey, ModelSettings
 from app.models.task_links import GenerationTaskLink
 from app.models.studio import FileItem, Shot, ShotDetail, ShotFrameImage, ShotFrameType
 from app.models.studio_shots import ShotDialogLine
+from app.models.subtitle import SubtitleStyle
 from app.models.types import AudioStrategy, FileUsageKind
-from app.services.commerce.task_dispatch import CommerceTaskDispatchService
+from app.services.commerce.task_dispatch import (
+    CommerceTaskDispatchService,
+    _EnqueueDescriptor,
+)
 from app.services.common import entity_not_found
 from app.services.llm.provider_resolver import resolve_provider_config_by_model
 from app.services.studio.file_usages import sync_usage_from_shot_context
@@ -377,6 +381,49 @@ async def persist_generated_video_to_shot(
     return file_obj
 
 
+async def _resolve_default_subtitle_style_id(session: AsyncSession) -> str:
+    """解析 ``keep_native`` 链式派发 ``shot_subtitle_render`` 时使用的默认字幕样式 ID。
+
+    存在原因：
+        分镜工作室目前未对 ``keep_native`` 路径的 ASR → 字幕渲染暴露样式
+        选择 UI（W19b 修订仍由后端默认决定），需要在 video succeeded 后
+        派发 ASR 任务时把 ``style_id`` 写进 ``run_args``，否则 ASR worker
+        chain dispatch ``shot_subtitle_render`` 时会因缺 style_id 失败。
+
+    解析顺序：
+        1. 优先取 ``id == "douyin_default"`` 的样式（业务默认；启动期由
+           :mod:`app.services.studio.builtin_subtitle_styles` seed）；
+        2. 兜底返回排序后的第一条 SubtitleStyle（按 ``sort_order`` / ``id``
+           排序，避免不同测试 fixture 顺序漂移）；
+        3. 若一行 SubtitleStyle 都没有，抛 ``RuntimeError`` 说明根因，让
+           上游能在日志里直接看到“未 seed 系统级样式”的硬性前置缺失。
+
+    Args:
+        session: 用于查 SubtitleStyle 的 async session。
+
+    Returns:
+        可用的 SubtitleStyle ID 字符串。
+
+    Raises:
+        RuntimeError: 数据库内不存在任何 SubtitleStyle 行，无法决定默认。
+    """
+
+    stmt = (
+        select(SubtitleStyle)
+        .order_by(SubtitleStyle.sort_order.asc(), SubtitleStyle.id.asc())
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    if not rows:
+        raise RuntimeError(
+            "no SubtitleStyle row found; ensure builtin_subtitle_styles "
+            "has seeded douyin_default before running keep_native chain dispatch"
+        )
+    for row in rows:
+        if row.id == "douyin_default":
+            return row.id
+    return rows[0].id
+
+
 async def run_video_generation_task(
     task_id: str,
     run_args: dict,
@@ -438,40 +485,66 @@ async def run_video_generation_task(
                 log_task_event("video_generation", task_id, "cancelled", stage="after_persist")
                 return
 
-            # P3 W19: video 成功 → 按 audio_strategy chain dispatch 下游 worker。
+            # P3 W19 (W19b 修订): video 成功 → 按 audio_strategy 准备 chain dispatch。
             # 走 silent_with_tts 路径时，遍历对白行（chapter_av_planner 已写好
-            # tts_voice_id / start_time_ms）逐行派发 tts_generate；走 keep_native
-            # 路径时，对刚落库的 video FileItem 派发 asr_subtitle_generate。
-            # dispatcher 共用 session，子任务行与 video succeeded 状态在同一事务
-            # 原子 commit；缺失 voice_id / 空文本的对白行 skip 不阻塞主链路。
+            # tts_voice_id / start_time_ms）逐行准备 tts_generate；走 keep_native
+            # 路径时，对刚落库的 video FileItem 准备 asr_subtitle_generate，
+            # 并附带 shot_id + style_id（B3）以便 ASR worker 链式派发字幕渲染。
+            #
+            # B2 race fix：dispatcher 的 enqueue_* 现在仅落表（不发 broker 消息），
+            # 描述符收集到 pending_dispatches 中；待 video 主任务 + 子任务行
+            # 一起 commit 落地之后，再统一 dispatch_after_commit 投递给 broker。
+            # 这样 worker 拿到消息时一定能 db.get 到对应的 GenerationTask 行。
             audio_strategy_value = (run_args.get("meta") or {}).get("audio_strategy")
-            if audio_strategy_value:
-                dispatcher = CommerceTaskDispatchService(session)
-                if audio_strategy_value == AudioStrategy.silent_with_tts.value:
-                    dialog_rows = (
-                        await session.execute(
-                            select(ShotDialogLine)
-                            .where(ShotDialogLine.shot_detail_id == shot_id)
-                            .order_by(ShotDialogLine.index)
+            pending_dispatches: list[_EnqueueDescriptor] = []
+            dispatcher = CommerceTaskDispatchService(session)
+            if audio_strategy_value == AudioStrategy.silent_with_tts.value:
+                dialog_rows = (
+                    await session.execute(
+                        select(ShotDialogLine)
+                        .where(ShotDialogLine.shot_detail_id == shot_id)
+                        .order_by(ShotDialogLine.index)
+                    )
+                ).scalars().all()
+                for line in dialog_rows:
+                    if not line.tts_voice_id or not (line.text or "").strip():
+                        continue
+                    pending_dispatches.append(
+                        await dispatcher.enqueue_tts_generate(
+                            body={
+                                "text": line.text,
+                                "voice_pack_id": line.tts_voice_id,
+                                "speed": 1.0,
+                            }
                         )
-                    ).scalars().all()
-                    for line in dialog_rows:
-                        if not line.tts_voice_id or not (line.text or "").strip():
-                            continue
-                        await dispatcher.enqueue_tts_generate(body={
-                            "text": line.text,
-                            "voice_pack_id": line.tts_voice_id,
-                            "speed": 1.0,
-                        })
-                elif audio_strategy_value == AudioStrategy.keep_native.value:
-                    await dispatcher.enqueue_asr_subtitle_generate(body={
-                        "video_file_id": file_obj.id,
-                    })
+                    )
+            elif audio_strategy_value == AudioStrategy.keep_native.value:
+                # B3：把 shot_id + style_id 写进 ASR run_args，让 ASR worker
+                # 在成功后自己链式派发 shot_subtitle_render，避免前端必须
+                # 手动 POST /commerce/shot-subtitle-render 的非对称体验。
+                default_style_id = await _resolve_default_subtitle_style_id(session)
+                pending_dispatches.append(
+                    await dispatcher.enqueue_asr_subtitle_generate(
+                        body={
+                            "video_file_id": file_obj.id,
+                            "shot_id": shot_id,
+                            "style_id": default_style_id,
+                        }
+                    )
+                )
 
             await store.set_progress(task_id, 100)
             await store.set_status(task_id, TaskStatus.succeeded)
             await recompute_shot_status(session, shot_id=shot_id)
             await session.commit()
+
+            # B2：所有行（主任务 succeeded + 子任务 pending）都已 commit 落地，
+            # 此时再向 broker 发消息，worker 拿到 task_id 时 db.get 必能读到
+            # 已 commit 的子任务行。dispatch_after_commit 内部对 send_task
+            # 异常做 swallow + warning，保证 broker 临时不可用不会回滚已落
+            # 地的 video succeeded 状态。
+            for descriptor in pending_dispatches:
+                dispatcher.dispatch_after_commit(descriptor)
             log_task_event("video_generation", task_id, "succeeded")
         except Exception as exc:  # noqa: BLE001
             await session.rollback()
