@@ -17,7 +17,9 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  CommerceSubtitleStylesService,
   CommerceTasksService,
+  CommerceVoicePacksService,
   StudioComplianceService,
   StudioStoryVariantsService,
 } from '../../../../services/generated'
@@ -29,7 +31,9 @@ import type {
   StoryVariantCreate,
   StoryVariantRead,
   StoryVariantStatus,
+  SubtitleStyleRead,
   TaskEnqueueResponse,
+  VoicePackRead,
 } from '../../../../services/generated'
 
 // ---------- StoryVariant ----------
@@ -214,6 +218,98 @@ export function useComplianceFindings(variantId: string | null | undefined) {
       const res = await StudioComplianceService.listComplianceFindingsApiV1StudioComplianceFindingsGet({
         variantId,
       })
+      return res.data ?? []
+    },
+  })
+}
+
+// ---------- VoicePack ----------
+
+/**
+ * VoicePack query key factory（W20-T2）。
+ *
+ * key 携带 languageCode，使不同语言的列表彼此独立缓存。
+ */
+export const voicePackKeys = {
+  all: ['commerce', 'voice-packs'] as const,
+  list: (languageCode: string) =>
+    [...voicePackKeys.all, 'list', { languageCode }] as const,
+}
+
+/**
+ * 拉取指定语言下的 VoicePack 列表（W20-T2）。
+ *
+ * 直接调 OpenAPI 生成的 CommerceVoicePacksService（AGENTS.md 规则 #2）。
+ * 仅当 `languageCode` 非空时启用查询，避免空请求。data 兜底空数组。
+ */
+export function useVoicePacks(languageCode: string | null | undefined) {
+  return useQuery({
+    queryKey: voicePackKeys.list(languageCode ?? ''),
+    enabled: !!languageCode,
+    queryFn: async (): Promise<VoicePackRead[]> => {
+      if (!languageCode) return []
+      const res =
+        await CommerceVoicePacksService.listVoicePacksEndpointApiV1CommerceVoicePacksGet({
+          languageCode,
+        })
+      return res.data ?? []
+    },
+  })
+}
+
+// ---------- 字幕样式（W20-T3） ----------
+
+/**
+ * 字幕样式 query key factory。
+ *
+ * 列表 key 含 `isSystem` / `format` / `projectId` 三维度筛选，跟后端
+ * `GET /api/v1/commerce/subtitle-styles` 入参一一对应；
+ * 任意一项变化都会拿到独立缓存槽，避免 system / 自定义 / 不同格式之
+ * 间的列表互相串味。
+ */
+export const subtitleStyleKeys = {
+  all: ['commerce', 'subtitle-styles'] as const,
+  list: (
+    isSystem: boolean | null,
+    format: string | null,
+    projectId: string | null,
+  ) =>
+    [...subtitleStyleKeys.all, 'list', isSystem, format, projectId] as const,
+}
+
+/**
+ * 字幕样式过滤器入参（与后端 listSubtitleStyles* 路由一一对应）。
+ *
+ * - `isSystem=true` 仅取 W18 已 seed 的系统模板
+ * - `isSystem=false` 仅取用户自定义样式
+ * - 缺省时（undefined / null）返回全部
+ */
+export interface UseSubtitleStylesArgs {
+  isSystem?: boolean | null
+  format?: string | null
+  projectId?: string | null
+}
+
+/**
+ * 拉取字幕样式列表（W20-T3 SubtitleStylePicker 使用）。
+ *
+ * 仅做最薄封装：调用 OpenAPI generated client 上的
+ * `CommerceSubtitleStylesService.listSubtitleStylesEndpointApiV1CommerceSubtitleStylesGet`，
+ * 把响应里的 `data` 兜底成空数组返回，避免 UI 直接 `.map(undefined)` 报错。
+ *
+ * 不在 hook 里再二次过滤，所有筛选条件原样下传后端，靠 query key 区分缓存。
+ */
+export function useSubtitleStyles(args: UseSubtitleStylesArgs = {}) {
+  const { isSystem = null, format = null, projectId = null } = args
+  return useQuery({
+    queryKey: subtitleStyleKeys.list(isSystem, format, projectId),
+    queryFn: async (): Promise<SubtitleStyleRead[]> => {
+      const res =
+        await CommerceSubtitleStylesService.listSubtitleStylesEndpointApiV1CommerceSubtitleStylesGet({
+          isSystem,
+          format,
+          projectId,
+        })
       return res.data ?? []
     },
   })

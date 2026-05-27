@@ -1,23 +1,5 @@
 {
-  "productImageGrid": {
-    "angle": {
-      "FRONT": "正面",
-      "LEFT": "左侧",
-      "RIGHT": "右侧",
-      "BACK": "背面",
-      "THREE_QUARTER": "四分之三",
-      "TOP": "顶视",
-      "DETAIL": "细节"
-    },
-    "quality": {
-      "LOW": "低",
-      "MEDIUM": "中",
-      "HIGH": "高",
-      "ULTRA": "超高"
-    },
-    "uploadHint": "点击上传",
-    "primaryBadge": "主图"
-  },
+  "productImageGrid": {},
   "voicePackPicker": {
     "loading": "Loading…",
     "errorRetry": "Failed to load. Click to retry.",
@@ -25,5 +7,18 @@
     "pause": "Pause",
     "noResults": "No voice packs found for {{language}}"
   },
-  "subtitleStylePicker": {}
+  "subtitleStylePicker": {
+    "tabSystem": "System templates",
+    "tabCustom": "Custom",
+    "preview": "Sample subtitle preview",
+    "fontSize": "Font size",
+    "primaryColour": "Primary colour",
+    "outlineColour": "Outline colour",
+    "alignment": "Alignment",
+    "marginV": "Vertical margin",
+    "invalidHex": "Invalid hex colour, expected #RRGGBB",
+    "platformDouyin": "Douyin default",
+    "platformTiktok": "TikTok",
+    "platformReels": "Reels"
+  }
 }
