@@ -76,11 +76,20 @@ def _build_engine() -> AsyncEngine:
         # 快照锁定在 ping 时刻；下一个请求拿这条连接读取时，看到的是 ping
         # 之前的世界，错过最近一次 COMMIT，表现为 "刚创建的行查不到"。
         # READ COMMITTED 让每条 SELECT 看到当前已提交快照，消除 visibility 问题。
+        #
+        # 双重保险：engine-level isolation_level + connect_args.init_command。
+        # 实测 SQLAlchemy engine-level isolation_level 在 aiomysql 上不可靠
+        # （某些 checkout 路径不会 SET SESSION），必须在 connection 建立时
+        # 直接执行 SET SESSION TRANSACTION ISOLATION LEVEL，强制每个 aiomysql
+        # 连接从握手起就处于 READ COMMITTED。
         kwargs["pool_size"] = 10
         kwargs["max_overflow"] = 20
         kwargs["pool_recycle"] = 3600
         kwargs["pool_pre_ping"] = True
         kwargs["isolation_level"] = "READ COMMITTED"
+        kwargs["connect_args"] = {
+            "init_command": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
+        }
 
     new_engine = create_async_engine(settings.database_url, **kwargs)
 
