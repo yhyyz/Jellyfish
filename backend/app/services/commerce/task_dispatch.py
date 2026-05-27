@@ -394,6 +394,20 @@ class CommerceTaskDispatchService:
             :py:meth:`_dispatch_descriptor`，由调用方按 commit→dispatch
             顺序触发。
 
+        Worker 上下文调用警告（B2 复发防护）：
+            chain dispatch（例如 video_generation worker 完成后链式派发
+            ASR 子任务）必须遵循同样的 prepare→commit→dispatch 三段式：
+            **先 _prepare_enqueue / enqueue_xxx 拿 descriptor**，**再
+            await session.commit() 让链表中的 GenerationTask 行落库**，
+            **最后才能 dispatch_after_commit**。如果在 worker 内直接调
+            旧风格的 ``_enqueue``（即 flush 后立刻 send_task），就会重现
+            W19b-T2 修复的 race：子任务消息已投递、但父事务尚未提交，
+            子 worker 拉到行时 ``db.get`` 返回 ``None`` 即静默 ACK，
+            子任务永远停在 pending（B2）。
+            因此本类 **不** 暴露任何“flush+send 一把梭”的入口，所有
+            ``enqueue_*`` 方法都必须配合 ``dispatch_after_commit`` 使用，
+            worker 也不例外。
+
         Args:
             task_kind: 业务任务类型；必须出现在 worker registry 中。
             run_args: 透传给 worker 的执行参数 dict。
