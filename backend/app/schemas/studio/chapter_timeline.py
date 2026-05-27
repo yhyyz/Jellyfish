@@ -33,6 +33,20 @@ class ChapterTimelineSegmentWrite(BaseModel):
         ge=0,
         description="裁剪出点毫秒（exclusive，可选）；为空则默认为源成片时长",
     )
+    subtitle_track_file_id: str | None = Field(
+        None,
+        description=(
+            "P3 W19：本段渲染好的 .ass 字幕 FileItem ID（W18 shot_subtitle_render"
+            "_worker 产出），合成阶段 ffmpeg subtitles= 滤镜硬烧到画面"
+        ),
+    )
+    tts_audio_file_id: str | None = Field(
+        None,
+        description=(
+            "P3 W19：本段 TTS 合成音频 FileItem ID；audio_strategy=silent_with_tts "
+            "时合成阶段 amix 混入"
+        ),
+    )
 
 
 class ChapterTimelineWrite(BaseModel):
@@ -50,6 +64,14 @@ class ChapterTimelineSegmentRead(BaseModel):
     position: int = Field(..., ge=0)
     trim_start_ms: int | None = Field(None, description="已保存入点毫秒；null 表示从 0")
     trim_end_ms: int | None = Field(None, description="已保存出点毫秒（exclusive）；null 表示至片尾")
+    subtitle_track_file_id: str | None = Field(
+        None,
+        description="P3 W19：本段字幕 .ass 文件 FileItem ID（chapter_av_export 烧录用）",
+    )
+    tts_audio_file_id: str | None = Field(
+        None,
+        description="P3 W19：本段 TTS 音频 FileItem ID（silent_with_tts 路径混入）",
+    )
     clip_status: TimelineClipStatus
     file_id: str | None = None
     label: str = Field("", description="镜头标题等展示字段")

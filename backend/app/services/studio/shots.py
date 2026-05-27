@@ -129,6 +129,9 @@ def _build_shot_read(
         skip_extraction=bool(shot.skip_extraction),
         script_excerpt=shot.script_excerpt or "",
         generated_video_file_id=shot.generated_video_file_id,
+        audio_strategy=shot.audio_strategy,
+        product_focus_level=shot.product_focus_level,
+        dubbed_video_file_id=shot.dubbed_video_file_id,
         last_extracted_at=shot.last_extracted_at,
         extraction=ShotExtractionSummaryRead(
             state=_build_extraction_state(

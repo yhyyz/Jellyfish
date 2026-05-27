@@ -20,10 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
 from app.schemas.commerce.tasks import (
+    AsrSubtitleGenerateRequest,
+    ChapterAvExportRequest,
+    ChapterAvPlanRequest,
     ComplianceCheckRequest,
     ProductExtractRequest,
     ScriptGenerateRequest,
+    ShotSubtitleRenderRequest,
     TaskEnqueueResponse,
+    TtsGenerateRequest,
 )
 from app.core.contracts.story import BatchGenerationRequest
 from app.schemas.common import ApiResponse, success_response
@@ -112,6 +117,131 @@ async def enqueue_story_batch(
 
     service = CommerceTaskDispatchService(db)
     payload = await service.enqueue_story_batch(body.model_dump())
+    return success_response(
+        TaskEnqueueResponse.model_validate(payload),
+        code=status.HTTP_202_ACCEPTED,
+    )
+
+
+@router.post(
+    "/chapter-av-plan",
+    response_model=ApiResponse[TaskEnqueueResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="入队：章节 AV 决策树（P3 W17）",
+)
+async def enqueue_chapter_av_plan(
+    body: ChapterAvPlanRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskEnqueueResponse]:
+    """收参 → 落 ``GenerationTask`` 行 → Celery slow 队列投递 → 返回 task_id。
+
+    触发 ``chapter_av_plan`` worker：对章节内所有 ShotDialogLine 跑 Decision F
+    决策树（estimate → speed_adjust → llm_rewrite → hold），keep_native shot
+    跳过整树产出 skip_native 决策。
+    """
+
+    service = CommerceTaskDispatchService(db)
+    payload = await service.enqueue_chapter_av_plan(body.model_dump())
+    return success_response(
+        TaskEnqueueResponse.model_validate(payload),
+        code=status.HTTP_202_ACCEPTED,
+    )
+
+
+@router.post(
+    "/tts/generate",
+    response_model=ApiResponse[TaskEnqueueResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="入队：TTS 合成（CosyVoice，P3 W17）",
+)
+async def enqueue_tts_generate(
+    body: TtsGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskEnqueueResponse]:
+    """收参 → 落 ``GenerationTask`` 行 → Celery fast 队列投递 → 返回 task_id。
+
+    触发 ``tts_generate`` worker：用 DashScope CosyVoice 合成单段对白音频，
+    输出 (audio_file_id, word_timestamps[], cache_hit)；命中 tts_cache 走快
+    速分支不调供应商。
+    """
+
+    service = CommerceTaskDispatchService(db)
+    payload = await service.enqueue_tts_generate(body.model_dump())
+    return success_response(
+        TaskEnqueueResponse.model_validate(payload),
+        code=status.HTTP_202_ACCEPTED,
+    )
+
+
+@router.post(
+    "/asr-subtitle-generate",
+    response_model=ApiResponse[TaskEnqueueResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="入队：ASR 字幕反推（Paraformer-v2，P3 W17 收尾）",
+)
+async def enqueue_asr_subtitle_generate(
+    body: AsrSubtitleGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskEnqueueResponse]:
+    """收参 → 落 ``GenerationTask`` 行 → Celery fast 队列投递 → 返回 task_id。
+
+    触发 ``asr_subtitle_generate`` worker：用 DashScope Paraformer-v2 异步 ASR
+    反推视频自带音轨的字级时间戳，供 keep_native 路径生成字幕；要求
+    ``video_file_id`` 对应 FileItem 公网可访问。
+    """
+
+    service = CommerceTaskDispatchService(db)
+    payload = await service.enqueue_asr_subtitle_generate(body.model_dump())
+    return success_response(
+        TaskEnqueueResponse.model_validate(payload),
+        code=status.HTTP_202_ACCEPTED,
+    )
+
+
+@router.post(
+    "/shot-subtitle-render",
+    response_model=ApiResponse[TaskEnqueueResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="入队：单镜头字幕渲染（ASS，P3 W18）",
+)
+async def enqueue_shot_subtitle_render(
+    body: ShotSubtitleRenderRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskEnqueueResponse]:
+    """收参 → 落 ``GenerationTask`` 行 → Celery fast 队列投递 → 返回 task_id。
+
+    触发 ``shot_subtitle_render`` worker：把字级时间戳按 SubtitleStyle 渲染
+    成 ``.ass`` 文件，落 minio + 写 SubtitleTrack 行；触发安全区 lint，违规
+    返回 warnings 但不阻塞渲染。
+    """
+
+    service = CommerceTaskDispatchService(db)
+    payload = await service.enqueue_shot_subtitle_render(body.model_dump())
+    return success_response(
+        TaskEnqueueResponse.model_validate(payload),
+        code=status.HTTP_202_ACCEPTED,
+    )
+
+
+@router.post(
+    "/chapter-av-export",
+    response_model=ApiResponse[TaskEnqueueResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="入队：章节级 AV 合成（P3 W19）",
+)
+async def enqueue_chapter_av_export(
+    body: ChapterAvExportRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskEnqueueResponse]:
+    """收参 → 落 ``GenerationTask`` 行 → Celery slow 队列投递 → 返回 task_id。
+
+    触发 ``chapter_av_export`` worker：跨路径合成"配音 + 字幕"成片，按
+    Shot.audio_strategy 分流（silent_with_tts amix TTS / keep_native pass-through
+    原音）+ ASS 硬烧 + loudnorm 响度归一化；产物落 ``Shot.dubbed_video_file_id``。
+    """
+
+    service = CommerceTaskDispatchService(db)
+    payload = await service.enqueue_chapter_av_export(body.model_dump())
     return success_response(
         TaskEnqueueResponse.model_validate(payload),
         code=status.HTTP_202_ACCEPTED,

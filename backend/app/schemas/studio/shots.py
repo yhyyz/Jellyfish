@@ -20,6 +20,7 @@ from app.models.studio import (
     ShotStatus,
     VFXType,
 )
+from app.models.types import AudioStrategy, ProductFocusLevel
 
 
 class ShotBase(BaseModel):
@@ -34,6 +35,23 @@ class ShotBase(BaseModel):
     generated_video_file_id: str | None = Field(
         None,
         description="已生成视频关联的文件 ID（files.id，type=video）",
+    )
+    audio_strategy: AudioStrategy = Field(
+        AudioStrategy.silent_with_tts,
+        description=(
+            "P3 W16/W17：镜头音频策略。silent_with_tts=丢弃模型音轨走 TTS 覆盖；"
+            "keep_native=保留模型自带原音 + ASR 反推字幕"
+        ),
+    )
+    product_focus_level: ProductFocusLevel = Field(
+        ProductFocusLevel.none,
+        description=(
+            "P3 W16 Decision H：商品视觉聚焦级别。决定 r2v multi_ref 取图角度优先级"
+        ),
+    )
+    dubbed_video_file_id: str | None = Field(
+        None,
+        description="P3 W19：章节合成（chapter_av_export）输出的'配音+字幕'成片 FileItem ID",
     )
 
 
@@ -66,6 +84,9 @@ class ShotUpdate(BaseModel):
     skip_extraction: bool | None = None
     script_excerpt: str | None = None
     generated_video_file_id: str | None = None
+    audio_strategy: AudioStrategy | None = None
+    product_focus_level: ProductFocusLevel | None = None
+    dubbed_video_file_id: str | None = None
 
 
 class ShotRead(ShotBase):
@@ -191,6 +212,22 @@ class ShotDialogLineBase(BaseModel):
     target_character_id: str | None = Field(None, description="听者角色 ID")
     speaker_name: str | None = Field(None, description="说话角色名称（用于回填关联；可空）")
     target_name: str | None = Field(None, description="听者角色名称（用于回填关联；可空）")
+    tts_voice_id: str | None = Field(
+        None,
+        description="P3 W17：本行强制使用的音色 voice_pack ID（覆盖角色默认）",
+    )
+    tts_audio_file_id: str | None = Field(
+        None,
+        description="P3 W17：本行 TTS 合成结果音频 FileItem ID（命中 tts_cache 时回填）",
+    )
+    start_time_ms: int | None = Field(
+        None,
+        description="P3 W17：对白在镜头时间线内的起始毫秒（chapter_av_planner 写入）",
+    )
+    end_time_ms: int | None = Field(
+        None,
+        description="P3 W17：对白结束毫秒；end - start = TTS 音频时长上限",
+    )
 
 
 class ShotDialogLineCreate(BaseModel):
@@ -202,6 +239,10 @@ class ShotDialogLineCreate(BaseModel):
     target_character_id: str | None = None
     speaker_name: str | None = None
     target_name: str | None = None
+    tts_voice_id: str | None = None
+    tts_audio_file_id: str | None = None
+    start_time_ms: int | None = None
+    end_time_ms: int | None = None
 
 
 class ShotDialogLineUpdate(BaseModel):
@@ -212,6 +253,10 @@ class ShotDialogLineUpdate(BaseModel):
     target_character_id: str | None = None
     speaker_name: str | None = None
     target_name: str | None = None
+    tts_voice_id: str | None = None
+    tts_audio_file_id: str | None = None
+    start_time_ms: int | None = None
+    end_time_ms: int | None = None
 
 
 class ShotDialogLineRead(ShotDialogLineBase):

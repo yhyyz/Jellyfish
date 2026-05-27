@@ -114,6 +114,102 @@ class ComplianceCheckRequest(BaseModel):
     brand_aliases: list[str] = Field(default_factory=list, description="品牌别名列表（含商品名/俚语）")
 
 
+class ChapterAvPlanRequest(BaseModel):
+    """``POST /api/v1/commerce/chapter-av-plan`` 请求体（P3 W17）。
+
+    触发 ``chapter_av_plan`` worker：对章节内所有 ``ShotDialogLine`` 跑
+    Decision F 决策树（estimate → speed_adjust → llm_rewrite → hold），
+    keep_native shot 跳过整树。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    chapter_id: str = Field(..., min_length=1, description="目标章节 ID")
+
+
+class TtsGenerateRequest(BaseModel):
+    """``POST /api/v1/commerce/tts/generate`` 请求体（P3 W17）。
+
+    触发 ``tts_generate`` worker：用 CosyVoice 合成单段对白音频，落
+    FileItem + tts_cache。``cache_key = sha256(text|voice_pack_id|speed:.3f)``
+    命中即直接复用既有音频。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(..., min_length=1, description="待合成文本")
+    voice_pack_id: str = Field(..., min_length=1, description="VoicePack 主键（如 cosyvoice_v2_longxiaochun）")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, description="语速倍率，0.5–2.0")
+    audio_format: str = Field(default="mp3", description="输出格式：mp3 / wav / pcm / opus")
+    enable_word_timestamps: bool = Field(default=True, description="是否启用字级时间戳")
+
+
+class AsrSubtitleGenerateRequest(BaseModel):
+    """``POST /api/v1/commerce/asr-subtitle-generate`` 请求体（P3 W17 收尾）。
+
+    触发 ``asr_subtitle_generate`` worker：用 Paraformer-v2 反推视频/音频
+    自带音轨的字级时间戳，供 keep_native 路径生成字幕。要求
+    ``video_file_id`` 对应的 FileItem 公网可访问（DashScope 限制）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    video_file_id: str = Field(..., min_length=1, description="源视频 / 音频 FileItem ID")
+    language_hints: list[str] = Field(
+        default_factory=lambda: ["zh", "en"],
+        description="语言提示，默认中英混合",
+    )
+
+
+class ShotSubtitleRenderRequest(BaseModel):
+    """``POST /api/v1/commerce/shot-subtitle-render`` 请求体（P3 W18）。
+
+    触发 ``shot_subtitle_render`` worker：把字级时间戳按 SubtitleStyle
+    渲染成 ``.ass`` 文件，落 minio + SubtitleTrack。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    shot_id: str = Field(..., min_length=1, description="字幕所属镜头 ID")
+    style_id: str = Field(
+        ...,
+        min_length=1,
+        description="SubtitleStyle ID（如 douyin_default / tiktok_viral / reels_lower_third）",
+    )
+    word_timestamps: list[dict[str, Any]] = Field(
+        ...,
+        description="字级时间戳数组：[{text, begin_ms, end_ms}, ...]",
+    )
+    language_code: str = Field(default="zh-CN", description="字幕语言代码")
+    source: str = Field(
+        default="tts_word_timestamps",
+        description="来源：tts_word_timestamps / asr_paraformer_v2 / manual",
+    )
+
+
+class ChapterAvExportRequest(BaseModel):
+    """``POST /api/v1/commerce/chapter-av-export`` 请求体（P3 W19）。
+
+    触发 ``chapter_av_export`` worker：跨路径合成"配音 + 字幕"成片。
+    要求章节内所有 Shot.generated_video_file_id 已就位（裸视频已生成），
+    每段 ChapterTimelineSegment 的 subtitle_track_file_id / tts_audio_file_id
+    可选——按 audio_strategy 自动分流：silent_with_tts amix TTS、keep_native
+    pass-through 原音；缺 TTS 段降级 anullsrc 静音。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    chapter_id: str = Field(..., min_length=1, description="目标章节 ID")
+    aspect: str = Field(
+        default="9:16",
+        description="输出宽高比：9:16（1080×1920）/ 16:9（1280×720）",
+    )
+    audio_strategy_override: str | None = Field(
+        default=None,
+        description="覆盖所有镜头 audio_strategy：silent_with_tts / keep_native / null（按各 Shot 字段独立分流）",
+    )
+
+
 class TaskEnqueueResponse(BaseModel):
     """3 个 commerce/* 异步任务入口的统一响应壳。
 
@@ -126,14 +222,26 @@ class TaskEnqueueResponse(BaseModel):
     """
 
     task_id: str = Field(..., description="任务 ID（GenerationTask.id）")
-    task_kind: str = Field(..., description="任务类型：product_info_extract / story_script_generate / compliance_check")
+    task_kind: str = Field(
+        ...,
+        description=(
+            "任务类型：product_info_extract / story_script_generate / compliance_check / "
+            "chapter_av_plan / tts_generate / asr_subtitle_generate / "
+            "shot_subtitle_render / chapter_av_export"
+        ),
+    )
     status: str = Field(..., description="入队后的初始状态，固定为 'pending'")
     enqueued_at: datetime = Field(..., description="入队时间戳（server-side）")
 
 
 __all__ = [
+    "AsrSubtitleGenerateRequest",
+    "ChapterAvExportRequest",
+    "ChapterAvPlanRequest",
     "ComplianceCheckRequest",
     "ProductExtractRequest",
     "ScriptGenerateRequest",
+    "ShotSubtitleRenderRequest",
     "TaskEnqueueResponse",
+    "TtsGenerateRequest",
 ]

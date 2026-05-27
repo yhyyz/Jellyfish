@@ -100,6 +100,8 @@ async def build_timeline_read(db: AsyncSession, chapter_id: str) -> ChapterTimel
         sid = seg_row.id if seg_row else ""
         trim_start = seg_row.trim_start_ms if seg_row else None
         trim_end = seg_row.trim_end_ms if seg_row else None
+        sub_fid = seg_row.subtitle_track_file_id if seg_row else None
+        tts_fid = seg_row.tts_audio_file_id if seg_row else None
         reads.append(
             ChapterTimelineSegmentRead(
                 id=sid,
@@ -107,6 +109,8 @@ async def build_timeline_read(db: AsyncSession, chapter_id: str) -> ChapterTimel
                 position=position,
                 trim_start_ms=trim_start,
                 trim_end_ms=trim_end,
+                subtitle_track_file_id=sub_fid,
+                tts_audio_file_id=tts_fid,
                 clip_status=status,
                 file_id=fid,
                 label=shot.title,
@@ -174,6 +178,8 @@ async def replace_timeline_segments(
                 position=position,
                 trim_start_ms=row.trim_start_ms,
                 trim_end_ms=row.trim_end_ms,
+                subtitle_track_file_id=row.subtitle_track_file_id,
+                tts_audio_file_id=row.tts_audio_file_id,
             ),
         )
 
