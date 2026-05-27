@@ -1,0 +1,29 @@
+{
+  "productImageGrid": {
+    "angle": {
+      "FRONT": "正面",
+      "LEFT": "左侧",
+      "RIGHT": "右侧",
+      "BACK": "背面",
+      "THREE_QUARTER": "四分之三",
+      "TOP": "顶视",
+      "DETAIL": "细节"
+    },
+    "quality": {
+      "LOW": "低",
+      "MEDIUM": "中",
+      "HIGH": "高",
+      "ULTRA": "超高"
+    },
+    "uploadHint": "点击上传",
+    "primaryBadge": "主图"
+  },
+  "voicePackPicker": {
+    "loading": "加载中…",
+    "errorRetry": "加载失败，点击重试",
+    "play": "试听",
+    "pause": "暂停",
+    "noResults": "未找到符合 {{language}} 的音色"
+  },
+  "subtitleStylePicker": {}
+}

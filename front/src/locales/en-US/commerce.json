@@ -1,0 +1,29 @@
+{
+  "productImageGrid": {
+    "angle": {
+      "FRONT": "正面",
+      "LEFT": "左侧",
+      "RIGHT": "右侧",
+      "BACK": "背面",
+      "THREE_QUARTER": "四分之三",
+      "TOP": "顶视",
+      "DETAIL": "细节"
+    },
+    "quality": {
+      "LOW": "低",
+      "MEDIUM": "中",
+      "HIGH": "高",
+      "ULTRA": "超高"
+    },
+    "uploadHint": "点击上传",
+    "primaryBadge": "主图"
+  },
+  "voicePackPicker": {
+    "loading": "Loading…",
+    "errorRetry": "Failed to load. Click to retry.",
+    "play": "Play",
+    "pause": "Pause",
+    "noResults": "No voice packs found for {{language}}"
+  },
+  "subtitleStylePicker": {}
+}
