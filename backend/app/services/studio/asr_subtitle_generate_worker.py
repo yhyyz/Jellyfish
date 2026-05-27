@@ -58,6 +58,7 @@ warning，不向上抛——ASR 主任务已 commit 成功，链式失败不应�
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -184,6 +185,13 @@ async def _resolve_public_audio_url(
     storage 已配置 ``s3_public_base_url``（CloudFront / 自建反代等），且对应对象
     必须是 public-read 或经签名 URL 形式可访问。
 
+    本地开发回退（W19b-T2c）：当 ``info.url`` 指向不可被 DashScope 访问的
+    内网/本机地址（典型如 ``http://127.0.0.1:9000/...`` 的本地 minio），
+    自动降级为 "下载本地对象 → 上传到环境变量 ``ASR_PUBLIC_BUCKET``
+    指定的公网 S3 桶 → 用 ``ASR_PUBLIC_CDN_BASE`` 作为 CDN 前缀拼出 HTTPS URL"。
+    这条回退仅对 ``localhost`` / ``127.`` / ``10.`` / ``192.168.`` /
+    ``172.`` 段生效，避免在生产把已 CDN 化的 URL 重复二次上传。
+
     Args:
         session: 当前 worker 的 async session（用于读 FileItem 行）。
         file_id: 待反推字幕的源 FileItem ID（type 应为 ``video`` 或 ``audio``）。
@@ -209,7 +217,78 @@ async def _resolve_public_audio_url(
         raise RuntimeError(
             f"storage.get_file_info returned empty URL for file_id={file_id}"
         )
+    if _looks_local_only(info.url):
+        return await _republish_to_public_cdn(storage_key=storage_key)
     return info.url
+
+
+_LOCAL_HOST_PREFIXES = (
+    "http://localhost",
+    "https://localhost",
+    "http://127.",
+    "https://127.",
+    "http://10.",
+    "https://10.",
+    "http://192.168.",
+    "https://192.168.",
+)
+
+
+def _looks_local_only(url: str) -> bool:
+    """识别一个 storage URL 是否只对本机 / 内网可见，无法被外部 ASR 拉取。"""
+    lowered = url.strip().lower()
+    if any(lowered.startswith(prefix) for prefix in _LOCAL_HOST_PREFIXES):
+        return True
+    # 172.16.0.0 - 172.31.255.255 是 RFC1918 私有段，逐段判断更直观
+    for second in range(16, 32):
+        if lowered.startswith(f"http://172.{second}.") or lowered.startswith(
+            f"https://172.{second}."
+        ):
+            return True
+    return False
+
+
+async def _republish_to_public_cdn(*, storage_key: str) -> str:
+    """把内网对象重新上传到公网 S3 桶并返回 CDN URL。
+
+    依赖运行时环境变量：
+    - ``ASR_PUBLIC_BUCKET``: 公网可读 S3 桶名称（必填，否则抛错让外层失败更清晰）。
+    - ``ASR_PUBLIC_CDN_BASE``: CDN/Distribution 域名（带协议，必填）。
+    - ``ASR_PUBLIC_PREFIX``: 桶内 key 前缀（可选，默认 ``tmp/asr-bridge``）。
+
+    具体策略：先 ``storage.download_object_bytes`` 把本机 minio 上的二进制内容
+    拉下来；再用 boto3 写到外部桶；最后拼出 ``{cdn_base}/{prefix}/{basename}``。
+    单次上传命中即返回，不做去重缓存（DashScope 任务级 idempotency 由调用侧
+    保证，此处只关心 "目标 URL 公网可读"）。
+    """
+    import os
+    import boto3
+    from botocore.config import Config as BotoConfig
+
+    public_bucket = os.environ.get("ASR_PUBLIC_BUCKET", "").strip()
+    public_cdn = os.environ.get("ASR_PUBLIC_CDN_BASE", "").strip().rstrip("/")
+    if not public_bucket or not public_cdn:
+        raise RuntimeError(
+            "Local-only storage URL detected but ASR_PUBLIC_BUCKET / "
+            "ASR_PUBLIC_CDN_BASE not configured; cannot publish to public CDN"
+        )
+    prefix = os.environ.get("ASR_PUBLIC_PREFIX", "tmp/asr-bridge").strip("/")
+
+    data = await storage.download_file(key=storage_key)
+    base_name = storage_key.rsplit("/", 1)[-1] or storage_key.replace("/", "_")
+    public_key = f"{prefix}/{base_name}" if prefix else base_name
+
+    def _put() -> None:
+        client = boto3.client("s3", config=BotoConfig(retries={"max_attempts": 3}))
+        client.put_object(
+            Bucket=public_bucket,
+            Key=public_key,
+            Body=data,
+            ContentType="video/mp4",
+        )
+
+    await asyncio.to_thread(_put)
+    return f"{public_cdn}/{public_key}"
 
 
 async def _chain_dispatch_subtitle_render(

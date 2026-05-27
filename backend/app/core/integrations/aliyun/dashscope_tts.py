@@ -374,9 +374,12 @@ class DashScopeTtsApiAdapter:
 
         origin = (cfg.base_url or _DASHSCOPE_PARAFORMER_BASE).rstrip("/")
         # cfg.base_url 通常指向 OpenAI 兼容 endpoint（如 .../compatible-mode/v1），
-        # 与 DashScope 原生 /api/v1 不互通：只要 origin 不是 dashscope.aliyuncs.com 顶级，
-        # 仍然回退到 _DASHSCOPE_PARAFORMER_BASE 以避免 404。
-        if "dashscope.aliyuncs.com" not in origin:
+        # 与 DashScope 原生 /api/v1 不互通：只要 origin 不是 dashscope.aliyuncs.com
+        # 顶级（即带任何 path 后缀，例如 ``/compatible-mode/v1`` / ``/api/v1`` 等），
+        # 都强制收敛到 _DASHSCOPE_PARAFORMER_BASE，避免拼成
+        # ``.../compatible-mode/v1/api/v1/services/audio/asr/transcription`` 这种 404。
+        normalized_origin = origin.split("//", 1)[-1].rstrip("/")
+        if normalized_origin != "dashscope.aliyuncs.com":
             origin = _DASHSCOPE_PARAFORMER_BASE
         submit_url = f"{origin}/api/v1/services/audio/asr/transcription"
         auth_headers = {"Authorization": f"Bearer {cfg.api_key}"}
