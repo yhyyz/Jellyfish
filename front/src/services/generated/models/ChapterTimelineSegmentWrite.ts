@@ -18,5 +18,13 @@ export type ChapterTimelineSegmentWrite = {
      * 裁剪出点毫秒（exclusive，可选）；为空则默认为源成片时长
      */
     trim_end_ms?: (number | null);
+    /**
+     * P3 W19：本段渲染好的 .ass 字幕 FileItem ID（W18 shot_subtitle_render_worker 产出），合成阶段 ffmpeg subtitles= 滤镜硬烧到画面
+     */
+    subtitle_track_file_id?: (string | null);
+    /**
+     * P3 W19：本段 TTS 合成音频 FileItem ID；audio_strategy=silent_with_tts 时合成阶段 amix 混入
+     */
+    tts_audio_file_id?: (string | null);
 };
 

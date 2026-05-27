@@ -18,7 +18,7 @@ export type TaskEnqueueResponse = {
      */
     task_id: string;
     /**
-     * 任务类型：product_info_extract / story_script_generate / compliance_check
+     * 任务类型：product_info_extract / story_script_generate / compliance_check / chapter_av_plan / tts_generate / asr_subtitle_generate / shot_subtitle_render / chapter_av_export
      */
     task_kind: string;
     /**

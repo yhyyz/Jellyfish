@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AudioStrategy } from './AudioStrategy';
+import type { ProductFocusLevel } from './ProductFocusLevel';
 import type { ShotStatus } from './ShotStatus';
 export type ShotUpdate = {
     chapter_id?: (string | null);
@@ -12,5 +14,8 @@ export type ShotUpdate = {
     skip_extraction?: (boolean | null);
     script_excerpt?: (string | null);
     generated_video_file_id?: (string | null);
+    audio_strategy?: (AudioStrategy | null);
+    product_focus_level?: (ProductFocusLevel | null);
+    dubbed_video_file_id?: (string | null);
 };
 

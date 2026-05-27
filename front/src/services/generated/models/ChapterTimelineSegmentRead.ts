@@ -21,6 +21,14 @@ export type ChapterTimelineSegmentRead = {
      * 已保存出点毫秒（exclusive）；null 表示至片尾
      */
     trim_end_ms?: (number | null);
+    /**
+     * P3 W19：本段字幕 .ass 文件 FileItem ID（chapter_av_export 烧录用）
+     */
+    subtitle_track_file_id?: (string | null);
+    /**
+     * P3 W19：本段 TTS 音频 FileItem ID（silent_with_tts 路径混入）
+     */
+    tts_audio_file_id?: (string | null);
     clip_status: TimelineClipStatus;
     file_id?: (string | null);
     /**
