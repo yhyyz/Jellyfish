@@ -1041,6 +1041,88 @@ backend/app/api/v1/routes/commerce/
 
 W20 落地后，前端工作室与 commerce 页面对 W16-W19b 全部能力具备完整可视化触点；后续 W21 进入 e2e 集成与 v0.6.0 release 阶段。
 
+## Visual Production Layer（W16–W21 落地版）
+
+> 本节是 P3 阶段 W16–W21 完成后的**视听执行层一体化架构概览**，把视频生成、TTS 配音、ASR 反推字幕、字幕渲染、章节级 AV 合成与前端工作室六个子系统拉成一张图。持久化引擎与事务边界另见 [持久化引擎与事务边界](/docs/architecture/persistence-engine/)，按 wave 拆分的实现细节见上方各 H2 章节。本节遵循 AGENTS.md「architecture 只记录当前真实生效实现」原则，不写未来计划。
+
+### 视频生成：r2v 多图参考
+
+| 决策 | 当前事实 | 文件位置 |
+| --- | --- | --- |
+| 模型选择 | 默认 `happyhorse-1.0-r2v`（`multi_ref` 模式，最多 9 张参考图） | `backend/app/core/integrations/aliyun/video_capabilities.py` |
+| 任务派发 | 单一 `video_generation` task_kind，内部按 capability 路由 `multi_ref` | `backend/app/services/film/generated_video.py` |
+| 参考图预算 | 9 槽：Product 3–5 / Character 2–3 / Scene 1–2，超出按优先级丢弃 + warning（Decision G） | `backend/app/services/studio/reference_image_budget.py` |
+| view_angle 优先级序列 | `hero=[FRONT,THREE_QUARTER,DETAIL]` / `functional=[DETAIL,THREE_QUARTER,FRONT]` / `subtle=[THREE_QUARTER,FRONT]`（Decision H） | `backend/app/services/studio/generation/video/shot_product_reference_resolver.py` |
+
+### 音频：双路径（silent_with_tts / keep_native）
+
+`Shot.audio_strategy` 一字段决定从视频生成 prompt hint 到字幕来源的整条链路。两条路径在 W17 收尾后完全对称 first-class，互不阻塞。
+
+| audio_strategy | 流程 | Decision F | 字幕来源 | 何时用 |
+| --- | --- | --- | --- | --- |
+| `silent_with_tts`（默认） | 模型出无声画面 → CosyVoice TTS 合成台词 → ffmpeg amix 替换原音轨 | 完整跑：估时 → speed_adjust → llm_rewrite → hold | CosyVoice `word_timestamps` | 旁白驱动 / 演员不出镜 |
+| `keep_native`（W17 收尾启用） | 保留模型原音 → Paraformer-v2 异步 ASR 反推字级时间戳 → 烧 ASS 字幕 | 整树跳过，产出 `skip_native` 占位决策 | Paraformer-v2 `word_timestamps` | 演员张嘴 / 真人口播 |
+
+跨镜音色一致性：`Character.voice_pack_id` / `StoryVariant.voice_pack_id` / `StoryVariant.narration_voice_pack_id` 三个 FK 共享 `voice_packs.id`，全镜头同声纹（D9 + D15）。`(text, voice_pack_id, speed)` 三元组哈希进 `tts_cache.cache_key`，避免重复计费。
+
+### 字幕渲染：默认硬烧 + ASS derivative
+
+| 内置 SubtitleStyle | 平台 | 关键参数 |
+| --- | --- | --- |
+| `douyin_default` | 抖音 | 9:16 安全区底部 lower-third，逐字 karaoke 高亮 |
+| `tiktok_viral` | TikTok | 大字号居中，主色亮黄 + 黑色描边，强对比 |
+| `reels_lower_third` | Instagram Reels | 底部三分位，浅色背景半透明底框 |
+
+句子切分策略（`subtitle_renderer.py`）：中文按字数 + 强标点（`。！？…；：`），英文按词数 + `.!?;:`；> 3s 强制对半切，< 500ms 短 cue 前向合并。安全区 lint（`subtitle_safe_zone.py`）4 类静态规则（字号下限 / `margin_v` / `margin_l/r` / WCAG 4.5:1 对比度）只产 warning 不阻塞。ASS 文件以 `chapter_master_subtitle` usage_kind 落 minio（ACL=public-read），合成阶段用 `subtitles=` filter 硬烧到画面，源 `.ass` 作为 derivative 保留以备调试。
+
+### 章节级 AV 合成：chapter_av_export
+
+| 维度 | 当前事实 |
+| --- | --- |
+| Worker | `backend/app/services/studio/chapter_av_export_task.py`（slow queue，1800s 超时） |
+| Filter 构造 | `backend/app/services/studio/chapter_av_export_filter.py`（纯函数 `build_filter_complex`，按 `audio_strategy` 分流） |
+| 视频归一化 | `setsar=1, fps=30, format=yuv420p, scale+pad`（concat filter 强制） |
+| 音轨合并 | `silent_with_tts` 走 `adelay → amix(normalize=0) → apad+atrim`；`keep_native` 走 `[i:a] atrim` 直通 |
+| 响度归一化 | `loudnorm I=-16:TP=-1.5:LRA=11` single-pass（短视频 ±1 LU 内） |
+| 字幕硬烧 | `subtitles=filename='...'`，6 字符转义 + Windows 反斜杠归一化 |
+| 输出编码 | `libx264 preset medium crf 20 pix_fmt yuv420p high@4.1 + faststart`，`aac 192k 48kHz stereo` |
+| 输出指针 | `Shot.dubbed_video_file_id` + `FileUsageKind.chapter_master_dubbed`（与老 `chapter_master_video` 共存） |
+
+链路接通：`run_video_generation_task` 成功路径在 `set_status(succeeded)` 同事务内按 `meta.audio_strategy` 自动派发下游 worker（`silent_with_tts` 派 N 个 `tts_generate` / `keep_native` 派 1 个 `asr_subtitle_generate`），子任务行与状态原子 commit。
+
+### 后端只读 HTTP API（W20-T0b）
+
+| Method | 路径 | 过滤 | 文件位置 |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/commerce/voice-packs` | 可选 `?language_code=` | `backend/app/api/v1/routes/commerce/voice_packs_routes.py` |
+| `GET` | `/api/v1/commerce/subtitle-styles` | 无（按 `is_system` + `sort_order` 排序） | `backend/app/api/v1/routes/commerce/subtitle_styles_routes.py` |
+
+两条路由均为只读，不暴露 POST / PATCH。系统级 seed 由 `bootstrap_builtin_voice_packs` / `bootstrap_builtin_subtitle_styles` 在应用启动时幂等写入。前端调用统一走 OpenAPI generated client（`front/src/services/generated/`），不再封装手写 service。
+
+### 前端工作室升级（W20）
+
+| 模块 | 文件位置 | 功能 |
+| --- | --- | --- |
+| `ProductImageGrid` | `front/src/pages/aiStudio/commerce/products/ProductImageGrid.tsx` | 7 `view_angle` × 4 `quality_level` 二维网格，按 UNIQUE 触发幂等替换 |
+| `VoicePackPicker` | `front/src/pages/aiStudio/commerce/components/VoicePackPicker.tsx` | `language_code` 过滤 + `provider` 分组 + `sample_file` HTML5 试听 |
+| `SubtitleStylePicker` | `front/src/pages/aiStudio/commerce/components/SubtitleStylePicker.tsx` | 3 系统模板预览 + 自定义编辑 + `colorCodec` helper（ASS `&HAABBGGRR` ↔ Hex 互转） |
+| `AVPreviewPanel` | `front/src/pages/aiStudio/commerce/workbench/AVPreviewPanel.tsx` | StoryWorkbench 右抽屉，`dubbed_video_file_id` 优先播放 / 一键触发 `chapter_av_export` / 嵌套两个 picker |
+| `/commerce/voice-packs` | `front/src/pages/aiStudio/commerce/voice-packs/VoicePacksPage.tsx` | 系统级 6 条 CosyVoice 音色库浏览 + 上传定制 stub |
+| `/commerce/subtitle-styles` | `front/src/pages/aiStudio/commerce/subtitle-styles/SubtitleStylesPage.tsx` | 系统级 3 条字幕样式库浏览 + 项目覆盖占位 |
+
+测试基建：Vitest 2.1.9 + `@testing-library/react` + `@testing-library/user-event` + jsdom 落地（`front/vitest.config.ts` + `front/src/test/setup.ts`），W20 累计 37 个 cases 全绿（三组件 15 + 三页面 14 + helpers 8）。
+
+i18n commerce 命名空间拆 7 子 ns 落 `front/public/locales/zh-CN/commerce/`：`nav` / `product-image-grid` / `voice-pack-picker` / `subtitle-style-picker` / `voice-packs` / `subtitle-styles` / `av-preview`。按 D4 决策 W20 仅落 zh-CN，en-US fallback 由 i18next 默认机制兜底。
+
+### 关联模块边界
+
+视听执行层严格遵守 [AGENTS.md 页面职责](/docs/guide/) 边界：
+
+- **分镜编辑页 = 准备**：负责资产/对白提取、候选确认、`shot.status` 推进到 `ready`，不承担视频生成与 AV 预览职责。
+- **分镜工作室 = 生成**：承载 `ProductImageGrid` / `VoicePackPicker` / `SubtitleStylePicker` / `AVPreviewPanel`，负责视频准备度检查、视频生成、TTS / ASR 链路触发与 dubbed 视频预览。`AVPreviewPanel` 只承担生成触发与播放，不做提取确认。
+- **任务中心 = 通用任务面板**：`tts_generate` / `asr_subtitle_generate` / `shot_subtitle_render` / `chapter_av_export` 四个新 task_kind 的运行时状态在任务中心展示通用进度与成功/失败，业务上下文（音色选择、字幕样式编辑、AV 预览）留在工作室抽屉。
+- **状态三分**：`shot.status`（信息确认）/ runtime task status（任务进度）/ video-readiness（生成准备度）三类状态在前端展示时严格区分，不混用。
+
 ## References
 
 - 计划文档：[剧情带货实施计划](/docs/plans/jellyfish-story-commerce/)
