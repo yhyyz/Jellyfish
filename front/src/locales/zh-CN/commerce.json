@@ -20,5 +20,12 @@
     "platformDouyin": "抖音默认",
     "platformTiktok": "TikTok",
     "platformReels": "Reels"
+  },
+  "subtitleStyleLibrary": {
+    "pageTitle": "字幕样式库",
+    "systemSection": "系统模板",
+    "projectOverridesNotice": "项目级字幕样式覆盖在 W21 启用，目前仅支持系统模板",
+    "loadFailed": "加载失败",
+    "preview": "示例字幕预览"
   }
 }

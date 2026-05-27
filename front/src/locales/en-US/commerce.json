@@ -20,5 +20,12 @@
     "platformDouyin": "Douyin default",
     "platformTiktok": "TikTok",
     "platformReels": "Reels"
+  },
+  "subtitleStyleLibrary": {
+    "pageTitle": "Subtitle style library",
+    "systemSection": "System templates",
+    "projectOverridesNotice": "Project-level subtitle overrides will be enabled in W21; only system templates are available now",
+    "loadFailed": "Failed to load",
+    "preview": "Sample subtitle preview"
   }
 }
