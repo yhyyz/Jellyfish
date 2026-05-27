@@ -51,9 +51,15 @@ async def ensure_not_exists(
     entity_id: Any,
     *,
     detail: str,
-    status_code: int = status.HTTP_400_BAD_REQUEST,
+    status_code: int = status.HTTP_409_CONFLICT,
 ) -> None:
-    """确保给定主键对应的实体不存在。"""
+    """确保给定主键对应的实体不存在。
+
+    用于 create endpoint 的“ID 重复”判断：当主键对应的资源已存在时，
+    抛出 409 Conflict（REST 契约里表示“资源已存在，可改用 PATCH”），
+    而非 400 Bad Request（仅表示“客户端发了脏数据”），便于前端
+    OpenAPI client 区分两类语义。
+    """
     obj = await db.get(model, entity_id)
     if obj is not None:
         raise HTTPException(status_code=status_code, detail=detail)

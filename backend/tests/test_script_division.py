@@ -103,6 +103,6 @@ async def test_write_division_result_refuses_when_chapter_already_has_shots() ->
         with pytest.raises(HTTPException) as exc_info:
             await write_division_result_to_chapter(db, chapter_id="c1", result=_division_result())
 
-        assert exc_info.value.status_code == 400
+        assert exc_info.value.status_code == 409
         assert "already has shots" in exc_info.value.detail
     await engine.dispose()

@@ -68,7 +68,7 @@ async def test_ensure_not_exists_raises_on_duplicate() -> None:
         with pytest.raises(HTTPException) as exc_info:
             await ensure_not_exists(db, Provider, "p1", detail="Provider already exists")
 
-        assert exc_info.value.status_code == 400
+        assert exc_info.value.status_code == 409
         assert exc_info.value.detail == "Provider already exists"
     await engine.dispose()
 

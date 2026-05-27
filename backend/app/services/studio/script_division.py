@@ -62,8 +62,10 @@ async def write_division_result_to_chapter(
 
     existing = await db.execute(select(Shot.id).where(Shot.chapter_id == chapter_id).limit(1))
     if existing.first() is not None:
+        # 章节已有镜头视为“资源冲突”：与 ensure_not_exists 同语义，统一返 409，
+        # 避免前端把这类“需先清空再写入”的状态错认为参数错误（400）。
         raise HTTPException(
-            status_code=400,
+            status_code=409,
             detail="Chapter already has shots; refusing to write (write_strategy=fail)",
         )
 

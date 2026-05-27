@@ -106,7 +106,9 @@ async def create_entity(
 
     exists = await db.get(spec.model, data["id"])
     if exists is not None:
-        raise HTTPException(status_code=400, detail=entity_already_exists(spec.model.__name__))
+        # 重复创建：返回 409 Conflict 与 ensure_not_exists 默认一致，
+        # 让前端能稳定区分 “重复 ID” 与 “参数错误” 两类语义。
+        raise HTTPException(status_code=409, detail=entity_already_exists(spec.model.__name__))
 
     if entity_type_norm == "character":
         if await db.get(Project, data["project_id"]) is None:
