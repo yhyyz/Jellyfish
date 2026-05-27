@@ -167,8 +167,9 @@ class StoryProjectsService:
         )
 
         self._db.add(project)
-        self._db.add(config)
         try:
+            await self._db.flush()
+            self._db.add(config)
             await self._db.flush()
         except IntegrityError as exc:
             await self._db.rollback()
