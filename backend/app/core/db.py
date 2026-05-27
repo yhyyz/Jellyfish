@@ -70,11 +70,17 @@ def _build_engine() -> AsyncEngine:
         # SQLITE_BUSY 21ms 瞬间失败的根因修复。
         kwargs["connect_args"] = {"isolation_level": None, "timeout": 60.0}
     else:
-        # 远端数据库（MySQL / PostgreSQL）保留原连接池策略。
+        # 远端数据库（MySQL / PostgreSQL）保留原连接池策略 + 强制 READ COMMITTED。
+        # 为什么 isolation_level=READ COMMITTED：MySQL InnoDB 默认 REPEATABLE READ，
+        # 配合 pool_pre_ping=True（每次 checkout 前 SELECT 1）会让连接的事务
+        # 快照锁定在 ping 时刻；下一个请求拿这条连接读取时，看到的是 ping
+        # 之前的世界，错过最近一次 COMMIT，表现为 "刚创建的行查不到"。
+        # READ COMMITTED 让每条 SELECT 看到当前已提交快照，消除 visibility 问题。
         kwargs["pool_size"] = 10
         kwargs["max_overflow"] = 20
         kwargs["pool_recycle"] = 3600
         kwargs["pool_pre_ping"] = True
+        kwargs["isolation_level"] = "READ COMMITTED"
 
     new_engine = create_async_engine(settings.database_url, **kwargs)
 
