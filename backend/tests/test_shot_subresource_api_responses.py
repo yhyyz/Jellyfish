@@ -29,6 +29,25 @@ from app.models.studio import (
 )
 
 
+class _FakeResult:
+    """最小 SQLAlchemy Result 替身：满足 scalars().all() / first() / scalar_one_or_none() 调用。"""
+
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+    def first(self):
+        return self._rows[0] if self._rows else None
+
+    def scalar_one_or_none(self):
+        return self._rows[0] if self._rows else None
+
+
 class _FakeShotSubresourceDB:
     """最小 DB 替身：仅覆盖镜头子资源接口测试所需行为。"""
 
@@ -107,6 +126,10 @@ class _FakeShotSubresourceDB:
             self.frame_images.pop(obj.id, None)
             return
         raise TypeError(f"Unsupported object type: {type(obj)!r}")
+
+    async def execute(self, *_args, **_kwargs):
+        """最小 execute 桩：candidate-rollback 等流程会调用 db.execute(stmt)。"""
+        return _FakeResult([])
 
 
 def _override_db(db: _FakeShotSubresourceDB):
