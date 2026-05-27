@@ -32,21 +32,26 @@ async def _add_and_flush_with_retry(session: AsyncSession, file_obj: FileItem) -
     aiosqlite 后台线程模型下，busy_timeout 实测不可靠（INSERT 立即返回
     SQLITE_BUSY，不等待）。修复策略：
     1) SAVEPOINT 包住单条 INSERT，失败后只回滚这一行；
-    2) 每次重试前主动 PRAGMA busy_timeout=60000 强制刷写；
+    2) 每次重试前主动 PRAGMA busy_timeout=60000 强制刷写（仅 SQLite）；
     3) 指数退避 + 抖动，最多 30 次（封顶 10s）≈ 累计 ~3 min 的重试预算。
 
     重试预算大于任何合理的"另一个 writer 持有事务"时间窗，足以兜底
     所有 in-process / cross-process / WAL checkpoint 类竞态。
+
+    PRAGMA gate：T2c 之后后端可能跑在 MySQL 之上。MySQL 不识别
+    SQLite PRAGMA 语法（执行立即抛 SQL syntax error），必须按方言开关。
     """
+    is_sqlite = session.bind is not None and session.bind.dialect.name == "sqlite"
     last_exc: OperationalError | None = None
     for attempt in range(_FILE_INSERT_MAX_ATTEMPTS):
         if attempt > 0:
             backoff = min(0.3 * (1.5 ** (attempt - 1)), _FILE_INSERT_MAX_BACKOFF_S)
             await asyncio.sleep(backoff + random.uniform(0, 0.2))
-        try:
-            await session.execute(text("PRAGMA busy_timeout=60000"))
-        except OperationalError:
-            pass  # 极个别场景下连 PRAGMA 都被锁，让外层重试覆盖
+        if is_sqlite:
+            try:
+                await session.execute(text("PRAGMA busy_timeout=60000"))
+            except OperationalError:
+                pass  # 极个别场景下连 PRAGMA 都被锁，让外层重试覆盖
         try:
             async with session.begin_nested():
                 session.add(file_obj)

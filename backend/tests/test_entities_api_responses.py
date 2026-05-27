@@ -45,6 +45,9 @@ class _FakeEntityDB:
     async def flush(self) -> None:
         return None
 
+    async def commit(self) -> None:
+        return None
+
     async def refresh(self, obj: object) -> None:
         now = datetime.now(UTC)
         if getattr(obj, "created_at", None) is None:

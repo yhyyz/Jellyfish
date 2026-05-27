@@ -3,6 +3,7 @@
 from typing import Any
 
 from sqlalchemy import event
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -70,28 +71,49 @@ def _build_engine() -> AsyncEngine:
         # SQLITE_BUSY 21ms 瞬间失败的根因修复。
         kwargs["connect_args"] = {"isolation_level": None, "timeout": 60.0}
     else:
-        # 远端数据库（MySQL / PostgreSQL）保留原连接池策略 + 强制 READ COMMITTED。
-        # 为什么 isolation_level=READ COMMITTED：MySQL InnoDB 默认 REPEATABLE READ，
-        # 配合 pool_pre_ping=True（每次 checkout 前 SELECT 1）会让连接的事务
-        # 快照锁定在 ping 时刻；下一个请求拿这条连接读取时，看到的是 ping
-        # 之前的世界，错过最近一次 COMMIT，表现为 "刚创建的行查不到"。
-        # READ COMMITTED 让每条 SELECT 看到当前已提交快照，消除 visibility 问题。
+        # 远端数据库（MySQL / PostgreSQL）：用 NullPool 消除连接复用导致的
+        # 跨请求 visibility race。
         #
-        # 双重保险：engine-level isolation_level + connect_args.init_command。
-        # 实测 SQLAlchemy engine-level isolation_level 在 aiomysql 上不可靠
-        # （某些 checkout 路径不会 SET SESSION），必须在 connection 建立时
-        # 直接执行 SET SESSION TRANSACTION ISOLATION LEVEL，强制每个 aiomysql
-        # 连接从握手起就处于 READ COMMITTED。
-        kwargs["pool_size"] = 10
-        kwargs["max_overflow"] = 20
-        kwargs["pool_recycle"] = 3600
-        kwargs["pool_pre_ping"] = True
+        # T2c：T2a/T2b 同时设了 engine-level isolation_level=READ COMMITTED 与
+        # connect_args.init_command，独立验证 fresh engine 下 3/3 connection
+        # 为 READ-COMMITTED；但实测 uvicorn 长跑后，复用 pool 中的连接做
+        # `db.get(ShotDetail, id)` 仍然查不到 2ms 前另一连接 COMMIT 的记录，
+        # 表现为持久 (>1s 仍查不到) 的 REPEATABLE READ 快照行为。
+        # 一旦换 NullPool（每次 checkout 都重连，连接握手即跑 init_command，
+        # 用完即关），race 立即消失。
+        #
+        # NullPool 的代价：每个 HTTP 请求都重连 MySQL，本地开发量级完全可承受
+        # （实际开销 1~3ms/连接）；生产可改回 QueuePool 但必须配合
+        # 显式 connect-event 强制 SET SESSION，并验证不复发。
+        kwargs["poolclass"] = NullPool
         kwargs["isolation_level"] = "READ COMMITTED"
         kwargs["connect_args"] = {
             "init_command": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
+            "autocommit": True,
         }
 
     new_engine = create_async_engine(settings.database_url, **kwargs)
+
+    if not _is_sqlite(settings.database_url):
+
+        @event.listens_for(new_engine.sync_engine, "connect")
+        def _mysql_force_read_committed(dbapi_conn: Any, _conn_record: Any) -> None:
+            """每个新建 MySQL 连接握手后立即强制 READ COMMITTED。
+
+            为什么不能只靠 connect_args.init_command：
+            实测 aiomysql 0.3 + SA 2.0 在某些路径下 init_command 会被
+            后续的 SET autocommit / SET TRANSACTION 行为覆盖，导致首条
+            事务仍然落在 REPEATABLE READ。这里在 SA 的 connect 事件里
+            再补一次显式 SET SESSION，并提前 ROLLBACK 清空 aiomysql
+            连接握手期遗留的隐式事务，确保新连接从首条 SELECT 开始就
+            稳定处于 READ COMMITTED 快照行为下。
+            """
+            cur = dbapi_conn.cursor()
+            try:
+                cur.execute("ROLLBACK")
+                cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+            finally:
+                cur.close()
 
     if _is_sqlite(settings.database_url):
 
