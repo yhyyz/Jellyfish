@@ -72,7 +72,7 @@ def _build_sync_engine() -> Engine:
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.execute("PRAGMA foreign_keys=ON")
-                cursor.execute("PRAGMA busy_timeout=15000")
+                cursor.execute("PRAGMA busy_timeout=60000")
                 cursor.execute("PRAGMA temp_store=MEMORY")
             finally:
                 cursor.close()
