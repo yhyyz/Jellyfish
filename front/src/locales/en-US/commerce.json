@@ -36,5 +36,17 @@
     "loadFailed": "Failed to load",
     "retry": "Retry",
     "empty": "No voice packs match the current filter"
+  },
+  "avPreview": {
+    "drawerTitle": "AV Preview",
+    "videoFallback": "Your browser does not support the video tag",
+    "emptyHint": "Waiting for chapter_av_export to finish",
+    "triggerExport": "Generate final video",
+    "viewTaskCenter": "Open task center",
+    "voicePanel": "Voice",
+    "subtitlePanel": "Subtitle style",
+    "exportEnqueued": "Enqueued in the generation queue",
+    "exportFailed": "Failed to trigger",
+    "exportPending": "Generating…"
   }
 }

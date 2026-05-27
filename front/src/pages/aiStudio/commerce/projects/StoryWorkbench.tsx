@@ -35,6 +35,7 @@ import {
   Button,
   Card,
   Col,
+  Drawer,
   Empty,
   Modal,
   Row,
@@ -44,7 +45,7 @@ import {
   Tooltip,
   message,
 } from 'antd'
-import { ArrowLeftOutlined, EditOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, EditOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useStoryProjectDetail } from './queries'
 import {
@@ -67,6 +68,7 @@ import { ScriptEditor } from './components/ScriptEditor'
 import { ComplianceWarningBanner } from './components/ComplianceWarningBanner'
 import { ShotTimelineStrip } from './components/ShotTimelineStrip'
 import { VariantList } from './components/VariantList'
+import { AVPreviewPanel } from './components/AVPreviewPanel'
 import { useQuery } from '@tanstack/react-query'
 
 /** Platform 枚举 → 中文展示 */
@@ -189,6 +191,12 @@ const StoryWorkbench: React.FC = () => {
       setSelectedFormulaId(project.config.formula_id)
     }
   }, [project, selectedFormulaId])
+
+  // ---------- AV 预览抽屉（W20-T4） ----------
+  // 抽屉默认收起；用户在工作台右上角点「音视频预览」按钮打开。
+  // 严守 AGENTS.md 「工作室 = 生成」边界：抽屉只承担成片预览 / 触发
+  // chapter_av_export / 跳任务中心，不掺资产或对白提取确认能力。
+  const [avDrawerOpen, setAvDrawerOpen] = useState(false)
 
   // 构造章节兜底：如果项目尚无章节，commerce/script-generate 需要 chapter_id。
   // P1 简化：取项目下第一个章节；没有则提示用户先创建章节。
@@ -333,6 +341,19 @@ const StoryWorkbench: React.FC = () => {
       {/* 顶部项目头 */}
       <ProjectHeader project={project} primaryProduct={primaryProduct} />
 
+      {/* AV 预览抽屉触发按钮：放在项目头与中部三栏之间，与浮动 CTA 解耦。 */}
+      <div className="mb-2 flex justify-end">
+        <Tooltip title="打开音视频预览抽屉（成片播放 / 触发 chapter_av_export）">
+          <Button
+            icon={<PlayCircleOutlined />}
+            onClick={() => setAvDrawerOpen(true)}
+            disabled={!firstChapterId}
+          >
+            音视频预览
+          </Button>
+        </Tooltip>
+      </div>
+
       {variantsLoading && variants.length === 0 ? (
         <div className="mb-2 text-xs text-gray-400">变体加载中...</div>
       ) : null}
@@ -385,6 +406,28 @@ const StoryWorkbench: React.FC = () => {
           </Space>
         </div>
       </Affix>
+
+      {/* AV 预览抽屉（W20-T4）：宽 480，按 plan 规格挂在右侧。
+          chapter_av_export 任务的目标 chapter 取首章节 firstChapterId；
+          shot 暂留 null，落到 Empty 分支由用户主动触发生成。 */}
+      <Drawer
+        title="音视频预览"
+        placement="right"
+        width={480}
+        open={avDrawerOpen}
+        onClose={() => setAvDrawerOpen(false)}
+        destroyOnClose
+      >
+        {firstChapterId ? (
+          <AVPreviewPanel
+            chapterId={firstChapterId}
+            projectId={project.id}
+            shot={null}
+          />
+        ) : (
+          <Empty description="项目尚无章节，无法发起音视频合成" />
+        )}
+      </Drawer>
     </div>
   )
 }
