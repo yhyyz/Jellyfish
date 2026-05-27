@@ -31,23 +31,36 @@ def _is_sqlite_sync(url: str) -> bool:
 def _build_sync_engine() -> Engine:
     """构建给 Celery worker 用的同步引擎。
 
-    做什么：与异步引擎保持同样的 SQLite 连接级 PRAGMA 配置，
-    确保 Celery 任务里 sync session 的 WAL / 外键 / 超时等行为
-    与 web 进程一致，避免出现 "web 看得到 / worker 看不到" 这类
-    跨执行体的可见性差异。
+    做什么：与异步引擎保持同样的 SQLite 连接级 PRAGMA 配置 + 同样的
+    isolation_level=None / 显式 BEGIN listener，确保 Celery 任务里 sync
+    session 与 web 进程在 WAL 模式下行为一致，**特别是消除 pysqlite 的
+    legacy txn 模式导致的 stale read snapshot pin**。
+
+    为什么必须这么做：
+    pysqlite (stdlib sqlite3) 默认不会为 SELECT 语句自动发 BEGIN。在
+    SQLAlchemy 连接池里，连接归还后下次复用时残留的读事务可能继续
+    持有旧的 WAL end mark；新事务读到的数据就是上一次 commit 之前的
+    世界。Celery worker 拿到 task_id 后 db.get(GenerationTask, task_id)
+    返回 None 就是这个症状。修复方式 = 把驱动放进 autocommit 模式
+    (connect_args isolation_level=None)，再用 begin 事件让 SQLAlchemy
+    自己显式发 BEGIN，每次都拿到最新快照。
 
     为什么不复用 db.py 的事件钩子：
     db.py 里钩子是注册到 ``async_engine.sync_engine``（异步引擎内嵌的
     底层同步引擎），不会作用到这里独立创建的 ``Engine`` 实例。
-    因此必须在本模块再注册一次 ``connect`` 监听器。
+    因此必须在本模块再注册一次。
     """
     sync_url = _to_sync_database_url(settings.database_url)
-    new_engine = create_engine(
-        sync_url,
+
+    kwargs: dict[str, Any] = dict(
         echo=settings.debug,
         future=True,
         pool_pre_ping=True,
     )
+    if _is_sqlite_sync(sync_url):
+        kwargs["connect_args"] = {"isolation_level": None}
+
+    new_engine = create_engine(sync_url, **kwargs)
 
     if _is_sqlite_sync(sync_url):
 
@@ -63,6 +76,11 @@ def _build_sync_engine() -> Engine:
                 cursor.execute("PRAGMA temp_store=MEMORY")
             finally:
                 cursor.close()
+
+        @event.listens_for(new_engine, "begin")
+        def _sqlite_on_begin(conn: Any) -> None:
+            """显式发 BEGIN：搭配 isolation_level=None，强制每个事务拿最新 WAL 快照。"""
+            conn.exec_driver_sql("BEGIN")
 
     return new_engine
 
