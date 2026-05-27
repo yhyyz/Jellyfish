@@ -1,7 +1,7 @@
 ---
 title: "剧情带货后续计划"
 weight: 60
-description: "P2 / P3 阶段的剩余工作。已完成的 P1 已沉淀到 architecture/commerce-story-data-model.md。"
+description: "P2 阶段的剩余工作与 P4 Scale 计划。已完成的 P1 / P3 已沉淀到 architecture/commerce-story-data-model.md 与 v0.6.0 release note。"
 ---
 
 > 本文属于"任务计划"文档，仅描述剧情带货 (story-driven commerce) 当前**仍在推进**或**待推进**的工作。
@@ -24,6 +24,17 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 - 4 个前端页面：`ProductLibrary` / `StoryProjectLobby` / `StoryWorkbench` + `MainLayout` 侧栏分组
 
 详见：[commerce-story-data-model.md](/docs/architecture/commerce-story-data-model/)。
+
+---
+
+## P3 已完成（仅作引用）
+
+P3 阶段 W16–W21 已全部落地并发版 v0.6.0。
+
+- 详细架构事实见：[commerce-story-data-model.md — Visual Production Layer (W16–W21 落地版)](/docs/architecture/commerce-story-data-model/#visual-production-layerw16w21-%E8%90%BD%E5%9C%B0%E7%89%88)
+- 双引擎事务边界与 chain dispatch 契约见：[persistence-engine.md](/docs/architecture/persistence-engine/)
+- 操作指南见：[voice-pack-setup](/docs/guide/voice-pack-setup/) / [subtitle-style-config](/docs/guide/subtitle-style-config/) / [r2v-multi-reference](/docs/guide/r2v-multi-reference/)
+- 发布说明见：[v0.6.0 — Visual Production Layer](/blog/v0-6-0/)
 
 ---
 
@@ -271,16 +282,20 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 | T20-8   | ✅ Vitest 37/37 cases 全绿（含三组件 15 + 三页面 14 + helpers 8）：`pnpm vitest run` 退出 0；测试基建 `e2579ec`（Vitest 2.1.9 + RTL + jsdom）                                                                    |
 | T20-9   | ✅ `pnpm exec tsc --noEmit` 0 errors；`pnpm run openapi:update` 拉 T0b 新路由（commit `a784d36`）；`pnpm run build` 8.96s 成功                                                                                  |
 
-### P3 Wave 21 — 集成与发布 v0.6.0（约 3 工作日）
+### P3 Wave 21 — 集成与发布 v0.6.0（已完成）
 
-| 任务 ID | 内容                                                                                                                                                                                                                                                  |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T21-1   | 端到端 E2E：从空 DB → 多角度商品图 → r2v 视频生成 → TTS 配音 → 字幕渲染 → chapter_av_export → 真实 mp4（含字幕 + 配音 + 响度归一化）；脚本落 `backend/scripts/p3_e2e_smoke.py`                                                                          |
-| T21-2   | regression：跑全量 pytest（`-k commerce or story or compliance or product or builtin_prompts or shot or chapter`）+ Vitest 全绿；确认 P1+P2 + drama 流程零回归                                                                                          |
-| T21-3   | `site/content/docs/architecture/commerce-story-data-model.md` 同步：新增 "Visual Production Layer" 章节（VoicePack / SubtitleStyle / SubtitleTrack / 多图 r2v / chapter_av_export pipeline），下移已落地的 W16-W21 内容                              |
-| T21-4   | `site/content/docs/guide/`：新增 `voice-pack-setup.md` / `subtitle-style-config.md` / `r2v-multi-reference.md` 三篇 how-to                                                                                                                              |
-| T21-5   | `site/content/blog/v0-6-0.md` release note：Highlights / Added / Changed / Migration Guide / Compatibility Matrix / Validation Commands                                                                                                                |
-| T21-6   | `pnpm run openapi:update` 终态校验；删除已落地的 W16-W21 任务表                                                                                                                                                                                          |
+> **状态**：W21 集成发布 100% 落地。详细发布信息见
+> [v0.6.0 发布说明 — Visual Production Layer](/blog/v0-6-0/)。
+>
+> 关键产出：
+> - `backend/scripts/p3_e2e_smoke.py`（commit `bcda32d`）：keep_native 5 段管线 e2e 固化，三模式 `--help` / `--dry-run` / production，4 个离线 TDD 测试 green
+> - 三篇 how-to guide（commits `c40f848` / `b7c01bc` / `b20ef8f`）：voice-pack-setup / subtitle-style-config / r2v-multi-reference
+> - `architecture/commerce-story-data-model.md` 追加 Visual Production Layer H2 章节（commit `c228f7b`）：固化 W16–W21 视听执行层架构事实
+> - `site/content/blog/v0-6-0.md` release note（commit `023ff75`）：17 H2 严格章节结构整合 W19b + W20 + W21
+> - W21-pre baseline cleanup（commit `2fe2a2f`）：清理 10 个 baseline 失败 + 3 个 collection error，pytest 1093/1093 green
+> - openapi 终态 sync + plans cleanup（本 commit）：`pnpm run openapi:gen` 走真实 backend dump，`generated/` 与 `openapi.json` 零 diff，tsc / vitest 37/37 / build 全绿
+>
+> W21 已完成 → P3 全阶段 (W16–W21) 收口。下一站 P4 Scale（详见下方 Phase 4 章节）。
 
 ### P3 风险登记
 
