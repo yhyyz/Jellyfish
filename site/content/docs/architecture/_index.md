@@ -12,6 +12,7 @@ description: "记录当前真实生效的系统结构、状态流转、页面边
 推荐阅读：
 
 - [项目结构](/docs/architecture/project-structure/)
+- [持久化引擎与事务边界](/docs/architecture/persistence-engine/)
 - [任务执行架构](/docs/architecture/task-execution/)
 - [LLM 供应商与模型管理](/docs/architecture/llm-provider-model-management/)
 - [LLM 默认模型解析](/docs/architecture/llm-default-model-resolution/)

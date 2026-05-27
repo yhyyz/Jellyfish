@@ -197,11 +197,21 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 
 ### P3 Wave 19 — AV 合成升级（已完成）
 
-> **状态**：W19 已 100% 落地，commit `4e666e4`。新 ``chapter_av_export`` 与老 ``chapter_timeline_export`` 并存（后者保留至 v0.7.0 删除）。
+> **状态**：W19 主体 + W19b 持久化加固已 100% 落地。W19 主线 commit `4e666e4`；W19 finalize commit `5446050`（5 条 commerce HTTP 路由 + audio/subtitle schema）；W19b 共 12+ 条 commit 解决双数据库后端的事务边界 / 隔离级别 / 写锁竞争 / chain dispatch 时序：
 >
-> **顺手接通**：W17 收尾遗留的 ``video_generation`` 成功路径 chain dispatch 在本 wave 完成 — silent_with_tts 自动派发 N 条 tts_generate；keep_native 自动派发 1 条 asr_subtitle_generate。
+> - **B1 / SQLite WAL 跨会话可见性**：`f434bee`（T1）+ `42c634b`（T1b 外键顺序）+ `153e6d4`（T1c sync 引擎补 isolation_level + begin）+ `f9a8c66`（T1d busy_timeout 60s）+ `c63f06d`（T1e busy_timeout 走 connect_args + sync NullPool）+ `7f6cab3`（T1f file insert SAVEPOINT retry）+ `afdd75c`（T1g retry 预算 30 + 显式 PRAGMA 兜底）。
+> - **B2 / chain dispatch 时序 + B3 B6 / ASR→subtitle 链路**：`6453706`（T2 commit-then-send + ASR→subtitle chain）。
+> - **MySQL 后端跨请求 visibility race**：`b76e29d`（T2a READ COMMITTED）+ `2597db8`（T2b aiomysql connect_args.init_command）+ T2c 系列（NullPool + service-layer commit）。
 >
-> **manual QA 公网验证**：用 4 个 15s 故事视频（W18 之前 demo 产物）跑完整合成，[公网链接](https://dxs9dnjebzm6y.cloudfront.net/tmp/W19-av-export-all-stories-keep-native-1779798606.mp4)。loudnorm 测量 input -14.85 LUFS → output -15.46 LUFS（完全在目标 -16 ±1 LU 容差区）。
+> 上述 12+ commit 把"dev SQLite 单文件并发"与"dev MySQL 跨请求 snapshot"两套后端的事务边界问题彻底打平，是 keep_native 100% HTTP API 端到端跑通的前提。
+>
+> **顺手接通**：W17 收尾遗留的 `video_generation` 成功路径 chain dispatch 在本 wave 完成 — silent_with_tts 自动派发 N 条 tts_generate；keep_native 自动派发 1 条 asr_subtitle_generate。
+>
+> **W19 manual QA**：用 4 个 15s 故事视频（W18 之前 demo 产物）跑完整合成，[公网链接](https://dxs9dnjebzm6y.cloudfront.net/tmp/W19-av-export-all-stories-keep-native-1779798606.mp4)。loudnorm 测量 input -14.85 LUFS → output -15.46 LUFS（完全在目标 -16 ±1 LU 容差区）。
+>
+> **W19b 端到端验证**：5-shot 商品剧情 keep_native 视频通过 100% 平台 HTTP API 跑通，最终 chapter_av_export mp4 = 25.8s × 1080×1920 H.264 + AAC 自带原音 + ASR 反推字幕烧录。[公网链接](https://dxs9dnjebzm6y.cloudfront.net/tmp/W19b-FINAL-platform-keepnative-1779858873.mp4)。
+>
+> 现行架构事实（双引擎配置 / 事务边界 / chain dispatch 契约 / keep_native 流水线）已沉淀到 [持久化引擎与事务边界](/docs/architecture/persistence-engine/) 与 [任务执行架构](/docs/architecture/task-execution/) 中。
 
 | 任务 ID | 内容                                                                                                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -215,7 +225,9 @@ P1 已经在 `dev` 分支落地并沉淀到架构文档，本计划不再重复�
 | T19-8   | ✅ manual QA：4 个 15s 故事视频（keep_native 路径）合成 62s 1080×1920 9:16 成片；loudnorm 输出 -15.46 LUFS；ffmpeg 19.9s；公网 URL 见上方说明 |
 | **T19-9** | ✅ **W17 收尾遗留接通**：`run_video_generation_task` 成功路径加 chain dispatch — silent_with_tts → 遍历 ShotDialogLine 逐行派发 tts_generate；keep_native → 派发 1 个 asr_subtitle_generate；缺 voice_id / 空文本 / 无 meta 全部兼容 skip |
 
-### P3 Wave 20 — 前端工作室升级（约 4 工作日）
+### P3 Wave 20 — 前端工作室升级（待启动，约 4 工作日）
+
+> **状态**：W17 / W18 / W19 / W19b 全部 ✅ 完成；后端流水线（r2v + TTS + ASR + 字幕渲染 + chapter_av_export + chain dispatch + 双引擎事务边界）已端到端跑通。W20 是下一阶段重点，承接前端工作室对新流水线的可视化与可操作性改造。
 
 | 任务 ID | 内容                                                                                                                                                                                                          |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

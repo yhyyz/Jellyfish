@@ -33,3 +33,33 @@ description: "章节级镜头编排时间线、乐观锁保存与异步 FFmpeg �
 ## 与产品边界
 
 - 分镜编辑页/分镜工作室职责不变；「章节剪辑」仅负责章节内镜头顺序与导出成片，不承载分镜提取确认主流程。
+
+## chapter_av_export：含字幕配音的合成流水线
+
+除上面"裸视频拼接"路径外，章节级当前还提供 `chapter_av_export` 路径，用来一次合成"视频 + TTS/原音 + 字幕 + 响度归一化"成片。
+
+- task_kind：`chapter_av_export`（slow queue, 1800s 超时）
+- 编排层：`services/studio/chapter_av_export.py`，纯函数滤镜组装在 `services/studio/chapter_av_export_filter.py`
+- 与老 `chapter_timeline_export` 并存，老接口标 deprecated，计划在 v0.7.0 删除
+
+输出文件类型：
+
+- `FileUsageKind.chapter_master_dubbed`：含字幕硬烧 + 配音 + 响度归一化的最终成片
+- `FileUsageKind.chapter_master_audio` / `chapter_master_subtitle`：中间产物（音轨 / ASS 源文件）按需保留
+
+合成时按 `Shot.audio_strategy` 走两条对称路径：
+
+- `silent_with_tts`：每段视频静音 + 对应 ShotDialogLine 的 TTS 音频通过 `amix(normalize=0)` + `apad` / `atrim` 对齐到段长。
+- `keep_native`：直接保留 r2v / i2v / t2v 模型自带原音，按 `[v_idx:a]` 直通到 concat。
+
+字幕处理：
+
+- 默认 `subtitles=` filter 硬烧 ASS 到最终 mp4
+- ASS 源文件已经在 `shot_subtitle_render` 阶段独立落 minio，可以单独下载用于换语言 / 换字号而不必重生整段视频
+
+响度：concat 之后统一接 `loudnorm I=-16:TP=-1.5:LRA=11`，目标 -16 LUFS（移动端标准 ±1）。
+
+入参信任规则与老 `chapter_timeline_export` 相同：runner 只信任 `run_args.chapter_id`，再进库重新解析镜头顺序、`generated_video_file_id` / `dubbed_video_file_id` / `subtitle_track_file_id`，避免请求时刻与执行时刻数据漂移。
+
+成片可见性依赖前置链路：`chapter_av_export` 之前必须完成 video_generation → ASR/TTS chain dispatch → shot_subtitle_render，详见 [持久化引擎与事务边界](/docs/architecture/persistence-engine/) 与 [任务执行架构](/docs/architecture/task-execution/)。
+

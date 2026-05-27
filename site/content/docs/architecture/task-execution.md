@@ -309,3 +309,26 @@ Broker：Redis
 - Web 侧任务创建与状态恢复逻辑保留在 `app.services.script_processing_tasks`
 
 这条约束已经用于修复 worker 下暴露出的循环导入问题。
+
+## Chain dispatch 时序契约
+
+worker / API 中只要存在“完成 A 任务后派发 B 任务”的链式行为，都必须遵守：
+
+> **send_task 只能在调用方完成 commit 之后再发出，不允许在事务尚未落库时投递。**
+
+当前生效约束：
+
+- API 层的 `CommerceTaskDispatchService` 提供 `enqueue_*` 接口，只在请求事务里登记意图，真正的 Celery `send_task` 推迟到调用方 commit 之后再触发。
+- Worker 层的链式派发使用 prepare-then-send 模式：先 `set_status(succeeded) + set_result(...)` 并 commit，再 `send_task` 派发下游。
+- 反例：如果 send_task 在 commit 之前发出，下游任务可能立即被 worker pop 起来执行，但它要读的源行还没可见，导致 `not found` / `dialog lines empty` 等假阴性失败。
+
+这条契约的具体实现依赖持久化层的事务边界，详见 [持久化引擎与事务边界](/docs/architecture/persistence-engine/)。
+
+## 视频生成成功路径的链式派发
+
+`video_generation` 成功路径已接入 chain dispatch，按 `Shot.audio_strategy` 分流：
+
+- `silent_with_tts`：遍历 `ShotDialogLine`，逐行派发 `tts_generate`（fast queue）。缺少 `voice_id` / 文本为空 / 缺 meta 的情况整体 skip 不报错。
+- `keep_native`：派发 1 条 `asr_subtitle_generate`（fast queue），由 Paraformer-v2 反推字级时间戳写回 `ShotDialogLine.start_time_ms / end_time_ms`。
+
+派发动作位于 worker 成功路径，发生在状态 / 结果 commit 之后，与上面"chain dispatch 时序契约"保持一致。这一段链路把 r2v / i2v / t2v 的视频产出与下游字幕 / 配音流水线绑定起来，是 commerce keep_native 100% HTTP 端到端跑通的前提之一。
