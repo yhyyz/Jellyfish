@@ -63,6 +63,10 @@ class _FakeLlmDB:
     async def delete(self, obj: Provider) -> None:
         self.providers.pop(obj.id, None)
 
+    async def commit(self) -> None:
+        """最小 commit 桩：Provider 创建/删除链路的 crud helper 会调用 db.commit()。"""
+        return None
+
 
 def _seed_provider(db: _FakeLlmDB, provider_id: str = "p-1") -> Provider:
     now = datetime.now(UTC)

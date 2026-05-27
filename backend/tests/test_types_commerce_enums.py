@@ -103,6 +103,14 @@ _FILE_USAGE_LEGACY = {
     "api",
 }
 _FILE_USAGE_NEW = {"product_image", "product_hero_shot", "commerce_reference"}
+# P3 W17 引入的 TTS / 音轨用途（tts_audio / bgm_track / sfx_track）。
+_FILE_USAGE_AUDIO_W17 = {"tts_audio", "bgm_track", "sfx_track"}
+# P3 W19 引入的章节级 AV 合成产物（master audio / subtitle / dubbed video）。
+_FILE_USAGE_CHAPTER_AV_W19 = {
+    "chapter_master_audio",
+    "chapter_master_subtitle",
+    "chapter_master_dubbed",
+}
 
 
 def test_file_usage_kind_preserves_legacy_values() -> None:
@@ -116,7 +124,13 @@ def test_file_usage_kind_adds_commerce_values() -> None:
 
 
 def test_file_usage_kind_total_count() -> None:
-    assert len(FileUsageKind) == len(_FILE_USAGE_LEGACY) + len(_FILE_USAGE_NEW)
+    """FileUsageKind 总数 = legacy + commerce(P1) + W17 audio + W19 chapter AV。"""
+    assert len(FileUsageKind) == (
+        len(_FILE_USAGE_LEGACY)
+        + len(_FILE_USAGE_NEW)
+        + len(_FILE_USAGE_AUDIO_W17)
+        + len(_FILE_USAGE_CHAPTER_AV_W19)
+    )
 
 
 _PROMPT_CATEGORY_LEGACY = {
