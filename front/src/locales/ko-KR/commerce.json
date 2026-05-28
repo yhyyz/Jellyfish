@@ -25,8 +25,76 @@
     "pageTitle": "자막 스타일 라이브러리",
     "systemSection": "시스템 템플릿",
     "projectOverridesNotice": "프로젝트별 자막 오버라이드는 P5에서 제공됩니다. 현재는 시스템 템플릿만 사용할 수 있습니다",
+    "projectOverridesHint": "URL에 ?projectId=xxx를 추가하면 프로젝트 편집 모드로 진입합니다",
+    "projectMode": "프로젝트 편집",
     "loadFailed": "로드 실패",
-    "preview": "자막 미리보기 (샘플)"
+    "preview": "자막 미리보기 (샘플)",
+    "editBtn": "편집",
+    "col": {
+      "name": "이름",
+      "scope": "범위",
+      "fontFamily": "글꼴",
+      "fontSize": "크기",
+      "actions": "작업"
+    },
+    "scope": {
+      "system": "시스템",
+      "project": "프로젝트"
+    }
+  },
+  "subtitleStyleEditor": {
+    "createTitle": "프로젝트 자막 스타일 신규 생성",
+    "editTitle": "자막 스타일 편집",
+    "createBtn": "프로젝트 스타일 새로 만들기",
+    "saveBtn": "프로젝트 오버라이드로 저장",
+    "cancelBtn": "취소",
+    "resetBtn": "시스템 템플릿으로 재설정",
+    "resetConfirm": "시스템 템플릿으로 재설정하시겠습니까? 현재 프로젝트 오버라이드가 삭제되며, 렌더링 시 시스템 스타일로 폴백됩니다.",
+    "resetOk": "재설정 확인",
+    "cloneBtn": "프로젝트 오버라이드로 복제",
+    "saveSuccess": "저장되었습니다",
+    "saveFailed": "저장 실패",
+    "cloneSuccess": "프로젝트 오버라이드로 복제되었습니다",
+    "cloneFailed": "복제 실패",
+    "resetSuccess": "시스템 템플릿으로 재설정되었습니다",
+    "resetFailed": "재설정 실패",
+    "systemBadge": "시스템",
+    "projectBadge": "프로젝트",
+    "immutableHint": "시스템 자막 스타일은 읽기 전용입니다. 아래의 \"프로젝트 오버라이드로 복제\" 버튼으로 이 스타일을 기반으로 프로젝트별 오버라이드를 만들 수 있습니다.",
+    "previewTitle": "실시간 미리보기",
+    "previewText": "자막 미리보기 (샘플)",
+    "previewHint": "미리보기는 참고용이며, 실제 렌더링은 백엔드 파이프라인에서 수행됩니다.",
+    "fields": {
+      "name": "이름",
+      "description": "설명",
+      "fontFamily": "글꼴",
+      "fontSize": "글꼴 크기",
+      "primaryColour": "기본 색상",
+      "secondaryColour": "보조 색상",
+      "outlineColour": "외곽선 색상",
+      "backColour": "그림자 / 박스 색상",
+      "bold": "굵게",
+      "italic": "기울임꼴",
+      "alignment": "정렬",
+      "outline": "외곽선 폭",
+      "shadow": "그림자 오프셋",
+      "borderStyle": "테두리 스타일",
+      "marginL": "왼쪽 여백",
+      "marginR": "오른쪽 여백",
+      "marginV": "세로 여백",
+      "fontFallbackChain": "글꼴 폴백 체인"
+    },
+    "alignment": {
+      "bottomLeft": "하단 왼쪽",
+      "bottomCenter": "하단 중앙",
+      "bottomRight": "하단 오른쪽",
+      "middleCenter": "중앙",
+      "topCenter": "상단 중앙"
+    },
+    "borderStyle": {
+      "outlineShadow": "외곽선 + 그림자",
+      "opaqueBox": "불투명 박스"
+    }
   },
   "voicePackLibrary": {
     "pageTitle": "보이스 라이브러리",

@@ -208,7 +208,7 @@ describe('SubtitleStyleLibrary', () => {
     ).toBeInTheDocument()
   })
 
-  it('case 4: 未带 ?projectId 时显示 info banner「项目级覆盖在 W21 启用」', () => {
+  it('case 4: 未带 ?projectId 时显示 info banner「在 URL 加 ?projectId 进入项目级编辑」', () => {
     mockUseSubtitleStyles.mockReturnValue({
       data: SYSTEM_STYLES,
       isLoading: false,
@@ -218,7 +218,7 @@ describe('SubtitleStyleLibrary', () => {
     renderAt('/commerce/subtitle-styles')
 
     expect(
-      screen.getByText('subtitleStyleLibrary.projectOverridesNotice'),
+      screen.getByText('subtitleStyleLibrary.projectOverridesHint'),
     ).toBeInTheDocument()
   })
 })

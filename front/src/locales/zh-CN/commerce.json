@@ -25,8 +25,76 @@
     "pageTitle": "字幕样式库",
     "systemSection": "系统模板",
     "projectOverridesNotice": "项目级字幕样式覆盖在 W21 启用，目前仅支持系统模板",
+    "projectOverridesHint": "在 URL 上加 ?projectId=xxx 进入项目级编辑模式",
+    "projectMode": "项目级编辑",
     "loadFailed": "加载失败",
-    "preview": "示例字幕预览"
+    "preview": "示例字幕预览",
+    "editBtn": "编辑",
+    "col": {
+      "name": "名称",
+      "scope": "来源",
+      "fontFamily": "字体",
+      "fontSize": "字号",
+      "actions": "操作"
+    },
+    "scope": {
+      "system": "系统级",
+      "project": "项目级"
+    }
+  },
+  "subtitleStyleEditor": {
+    "createTitle": "新建项目级字幕样式",
+    "editTitle": "编辑字幕样式",
+    "createBtn": "新建项目级样式",
+    "saveBtn": "保存为项目覆盖",
+    "cancelBtn": "取消",
+    "resetBtn": "重置为系统模板",
+    "resetConfirm": "确定重置为系统模板？此操作将删除当前项目级覆盖，渲染时回退到系统级样式。",
+    "resetOk": "确定重置",
+    "cloneBtn": "克隆为项目覆盖",
+    "saveSuccess": "已保存",
+    "saveFailed": "保存失败",
+    "cloneSuccess": "已克隆为项目覆盖",
+    "cloneFailed": "克隆失败",
+    "resetSuccess": "已重置为系统模板",
+    "resetFailed": "重置失败",
+    "systemBadge": "系统级",
+    "projectBadge": "项目级",
+    "immutableHint": "系统级字幕样式只读。可使用底部「克隆为项目覆盖」按钮基于此样式创建项目级覆盖。",
+    "previewTitle": "实时预览",
+    "previewText": "示例字幕预览",
+    "previewHint": "预览仅供体感参考，实际渲染由后端管线完成。",
+    "fields": {
+      "name": "名称",
+      "description": "描述",
+      "fontFamily": "字体",
+      "fontSize": "字号",
+      "primaryColour": "主填充色",
+      "secondaryColour": "预高亮色",
+      "outlineColour": "描边色",
+      "backColour": "阴影/盒背景色",
+      "bold": "粗体",
+      "italic": "斜体",
+      "alignment": "对齐",
+      "outline": "描边宽度",
+      "shadow": "阴影偏移",
+      "borderStyle": "边框样式",
+      "marginL": "左边距",
+      "marginR": "右边距",
+      "marginV": "垂直边距",
+      "fontFallbackChain": "字体回退链"
+    },
+    "alignment": {
+      "bottomLeft": "底左",
+      "bottomCenter": "底中",
+      "bottomRight": "底右",
+      "middleCenter": "中中",
+      "topCenter": "顶中"
+    },
+    "borderStyle": {
+      "outlineShadow": "描边+阴影",
+      "opaqueBox": "实心矩形盒"
+    }
   },
   "voicePackLibrary": {
     "pageTitle": "音色库",

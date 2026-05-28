@@ -25,8 +25,76 @@
     "pageTitle": "Subtitle style library",
     "systemSection": "System templates",
     "projectOverridesNotice": "Project-level subtitle overrides will be enabled in W21; only system templates are available now",
+    "projectOverridesHint": "Append ?projectId=xxx to the URL to enter project-level edit mode",
+    "projectMode": "Project edit",
     "loadFailed": "Failed to load",
-    "preview": "Sample subtitle preview"
+    "preview": "Sample subtitle preview",
+    "editBtn": "Edit",
+    "col": {
+      "name": "Name",
+      "scope": "Scope",
+      "fontFamily": "Font",
+      "fontSize": "Size",
+      "actions": "Actions"
+    },
+    "scope": {
+      "system": "System",
+      "project": "Project"
+    }
+  },
+  "subtitleStyleEditor": {
+    "createTitle": "Create project subtitle style",
+    "editTitle": "Edit subtitle style",
+    "createBtn": "New project style",
+    "saveBtn": "Save as project override",
+    "cancelBtn": "Cancel",
+    "resetBtn": "Reset to system template",
+    "resetConfirm": "Reset to system template? This deletes the current project override; rendering will fall back to system style.",
+    "resetOk": "Confirm reset",
+    "cloneBtn": "Clone as project override",
+    "saveSuccess": "Saved",
+    "saveFailed": "Save failed",
+    "cloneSuccess": "Cloned to project override",
+    "cloneFailed": "Clone failed",
+    "resetSuccess": "Reset to system template",
+    "resetFailed": "Reset failed",
+    "systemBadge": "System",
+    "projectBadge": "Project",
+    "immutableHint": "System-level subtitle styles are read-only. Use the \"Clone as project override\" button below to create a project-level override from this template.",
+    "previewTitle": "Live preview",
+    "previewText": "Sample subtitle preview",
+    "previewHint": "Preview is for reference only; actual rendering is handled by the backend pipeline.",
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "fontFamily": "Font family",
+      "fontSize": "Font size",
+      "primaryColour": "Primary colour",
+      "secondaryColour": "Secondary colour",
+      "outlineColour": "Outline colour",
+      "backColour": "Shadow / box colour",
+      "bold": "Bold",
+      "italic": "Italic",
+      "alignment": "Alignment",
+      "outline": "Outline width",
+      "shadow": "Shadow offset",
+      "borderStyle": "Border style",
+      "marginL": "Margin left",
+      "marginR": "Margin right",
+      "marginV": "Margin vertical",
+      "fontFallbackChain": "Font fallback chain"
+    },
+    "alignment": {
+      "bottomLeft": "Bottom left",
+      "bottomCenter": "Bottom center",
+      "bottomRight": "Bottom right",
+      "middleCenter": "Middle center",
+      "topCenter": "Top center"
+    },
+    "borderStyle": {
+      "outlineShadow": "Outline + shadow",
+      "opaqueBox": "Opaque box"
+    }
   },
   "voicePackLibrary": {
     "pageTitle": "Voice Library",

@@ -25,8 +25,76 @@
     "pageTitle": "字幕スタイルライブラリ",
     "systemSection": "システムテンプレート",
     "projectOverridesNotice": "プロジェクト単位の字幕オーバーライドは P5 で開放されます。現在はシステムテンプレートのみ利用可能です",
+    "projectOverridesHint": "URL に ?projectId=xxx を付けるとプロジェクト編集モードに入ります",
+    "projectMode": "プロジェクト編集",
     "loadFailed": "読み込みに失敗しました",
-    "preview": "字幕プレビュー（サンプル）"
+    "preview": "字幕プレビュー（サンプル）",
+    "editBtn": "編集",
+    "col": {
+      "name": "名前",
+      "scope": "スコープ",
+      "fontFamily": "フォント",
+      "fontSize": "サイズ",
+      "actions": "操作"
+    },
+    "scope": {
+      "system": "システム",
+      "project": "プロジェクト"
+    }
+  },
+  "subtitleStyleEditor": {
+    "createTitle": "プロジェクト字幕スタイルを新規作成",
+    "editTitle": "字幕スタイルを編集",
+    "createBtn": "プロジェクトスタイルを新規作成",
+    "saveBtn": "プロジェクトオーバーライドとして保存",
+    "cancelBtn": "キャンセル",
+    "resetBtn": "システムテンプレートに戻す",
+    "resetConfirm": "システムテンプレートに戻しますか？現在のプロジェクトオーバーライドが削除され、レンダリング時にシステム側へフォールバックします。",
+    "resetOk": "リセット確定",
+    "cloneBtn": "プロジェクトオーバーライドとして複製",
+    "saveSuccess": "保存しました",
+    "saveFailed": "保存に失敗しました",
+    "cloneSuccess": "プロジェクトオーバーライドへ複製しました",
+    "cloneFailed": "複製に失敗しました",
+    "resetSuccess": "システムテンプレートに戻しました",
+    "resetFailed": "リセットに失敗しました",
+    "systemBadge": "システム",
+    "projectBadge": "プロジェクト",
+    "immutableHint": "システム字幕スタイルは読み取り専用です。下部の「プロジェクトオーバーライドとして複製」ボタンで、このスタイルを基にプロジェクト固有のオーバーライドを作成できます。",
+    "previewTitle": "リアルタイムプレビュー",
+    "previewText": "字幕プレビュー（サンプル）",
+    "previewHint": "プレビューは目安です。実際のレンダリングはバックエンドパイプラインで行います。",
+    "fields": {
+      "name": "名前",
+      "description": "説明",
+      "fontFamily": "フォントファミリ",
+      "fontSize": "フォントサイズ",
+      "primaryColour": "メインカラー",
+      "secondaryColour": "サブカラー",
+      "outlineColour": "アウトラインカラー",
+      "backColour": "シャドウ / ボックスカラー",
+      "bold": "太字",
+      "italic": "斜体",
+      "alignment": "配置",
+      "outline": "アウトライン幅",
+      "shadow": "シャドウオフセット",
+      "borderStyle": "ボーダースタイル",
+      "marginL": "左マージン",
+      "marginR": "右マージン",
+      "marginV": "縦マージン",
+      "fontFallbackChain": "フォントフォールバックチェーン"
+    },
+    "alignment": {
+      "bottomLeft": "下左",
+      "bottomCenter": "下中央",
+      "bottomRight": "下右",
+      "middleCenter": "中央",
+      "topCenter": "上中央"
+    },
+    "borderStyle": {
+      "outlineShadow": "アウトライン + シャドウ",
+      "opaqueBox": "塗り潰しボックス"
+    }
   },
   "voicePackLibrary": {
     "pageTitle": "ボイスライブラリ",
