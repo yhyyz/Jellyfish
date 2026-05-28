@@ -1,4 +1,10 @@
-# 生成准备架构
+---
+title: "生成准备架构 (W22+)"
+weight: 15
+description: "Jellyfish 当前已落地的统一生成准备架构：shared / frame / video / asset_image 四层模型，以及前端 useGenerationDraft hook 的接入范围与边界。"
+---
+
+> 本文属于"当前架构"文档，描述当前真实生效的实现。早期推进过程见 commit ac9d111（Phase 1-4）。
 
 ## 定位
 
