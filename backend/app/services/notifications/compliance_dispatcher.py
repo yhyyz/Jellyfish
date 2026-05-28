@@ -51,6 +51,10 @@ from app.integrations.notifications.slack import (
 )
 from app.models.notification_channel import NotificationChannel
 from app.services.notifications.delivery_log import record_failed_delivery
+from app.services.notifications.escalation_engine import (
+    EscalationInput,
+    maybe_escalate,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -260,6 +264,8 @@ async def dispatch_blocker_finding(
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     slack_sender: Callable[..., Awaitable[None]] = send_slack_webhook,
     email_sender: Callable[..., Awaitable[None]] = send_email,
+    escalation_owner_email: str | None = None,
+    enable_escalation: bool = True,
 ) -> DispatcherResult:
     """对单条 BLOCKER finding 触发 fan-out。
 
@@ -271,6 +277,11 @@ async def dispatch_blocker_finding(
         smtp_config / smtp_sender: SMTP 配置；缺省时 email 渠道直接判失败。
         channels_override: 测试用，绕过 DB 直接传渠道列表。
         sleep / slack_sender / email_sender: 测试 hook。
+        escalation_owner_email: 升级 owner 邮箱；缺省走
+            ``settings.escalation_owner_email``，再缺省则升级判定仍计数但不
+            发 owner 邮件。
+        enable_escalation: 紧急 kill switch；测试 / 老路径若不需要 escalation
+            可置 ``False``（W26-T2 接入后默认 ``True``）。
 
     Returns:
         :class:`DispatcherResult` 统计；本函数永不抛异常。
@@ -289,45 +300,79 @@ async def dispatch_blocker_finding(
                 "no active notification channels; skip dispatch",
                 extra={"profile_id": payload.profile_id},
             )
-            return
+        else:
+            async def _one(channel: NotificationChannel) -> tuple[NotificationChannel, bool, int, str | None]:
+                ok, attempts, err = await _deliver_channel(
+                    channel,
+                    payload,
+                    smtp_config=smtp_config,
+                    smtp_sender=smtp_sender,
+                    sleep=sleep,
+                    slack_sender=slack_sender,
+                    email_sender=email_sender,
+                )
+                return channel, ok, attempts, err
 
-        async def _one(channel: NotificationChannel) -> tuple[NotificationChannel, bool, int, str | None]:
-            ok, attempts, err = await _deliver_channel(
-                channel,
-                payload,
-                smtp_config=smtp_config,
-                smtp_sender=smtp_sender,
-                sleep=sleep,
-                slack_sender=slack_sender,
-                email_sender=email_sender,
+            outcomes = await asyncio.gather(
+                *(_one(c) for c in channels),
+                return_exceptions=False,
             )
-            return channel, ok, attempts, err
 
-        outcomes = await asyncio.gather(
-            *(_one(c) for c in channels),
-            return_exceptions=False,
-        )
+            for channel, ok, attempts, err in outcomes:
+                result.attempted += 1
+                if ok:
+                    result.succeeded += 1
+                    continue
+                result.failed += 1
+                result.failed_channels.append(channel.id)
+                try:
+                    await record_failed_delivery(
+                        s,
+                        channel_id=channel.id,
+                        finding_id=payload.finding_id,
+                        kind=channel.kind,
+                        target=channel.target,
+                        attempts=attempts,
+                        error=err or "unknown",
+                    )
+                except Exception:  # noqa: BLE001
+                    # 写日志失败不应放大主路径错误；仅 log。
+                    logger.exception("failed to record notification delivery row")
 
-        for channel, ok, attempts, err in outcomes:
-            result.attempted += 1
-            if ok:
-                result.succeeded += 1
-                continue
-            result.failed += 1
-            result.failed_channels.append(channel.id)
+        # W26-T2: fan-out 完成后做团队级 BLOCKER 升级判定。
+        # 即便 channels 为空，BLOCKER 仍应计入连续计数器，
+        # 因此放在 if/else 之外。
+        if enable_escalation:
             try:
-                await record_failed_delivery(
+                resolved_owner = escalation_owner_email
+                if resolved_owner is None:
+                    # 延迟 import 避免在模块顶层把 settings 拉成全局，便于
+                    # 测试通过 monkeypatch 替换。
+                    from app.config import settings as _settings  # noqa: WPS433
+
+                    resolved_owner = _settings.escalation_owner_email
+                await maybe_escalate(
                     s,
-                    channel_id=channel.id,
-                    finding_id=payload.finding_id,
-                    kind=channel.kind,
-                    target=channel.target,
-                    attempts=attempts,
-                    error=err or "unknown",
+                    EscalationInput(
+                        finding_id=payload.finding_id,
+                        rule_id=payload.rule_id,
+                        description=payload.description,
+                        profile_id=payload.profile_id,
+                        team_id=None,
+                        variant_id=payload.variant_id,
+                    ),
+                    smtp_config=smtp_config,
+                    smtp_sender=smtp_sender,
+                    owner_email=resolved_owner,
+                    email_sender=email_sender,
                 )
             except Exception:  # noqa: BLE001
-                # 写日志失败不应放大主路径错误；仅 log。
-                logger.exception("failed to record notification delivery row")
+                # 升级判定失败绝不影响 fan-out 主路径（例如旧测试 sqlite
+                # 没建 escalation_state 表的情况）。
+                logger.exception(
+                    "escalation engine raised unexpected error",
+                    extra={"finding_id": payload.finding_id},
+                )
 
     try:
         if own_session:

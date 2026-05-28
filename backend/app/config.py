@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     smtp_start_tls: bool = True
     smtp_sender: str | None = None
 
+    # ESCALATION_OWNER_EMAIL（W26-T2：团队级 BLOCKER 升级 owner 通知地址）
+    # 缺省为空 → 升级判定仍会正常计数，但不发 owner 邮件（无 RBAC / User 表，
+    # 因此用环境变量做唯一 fallback）。
+    escalation_owner_email: str | None = None
+
     # DINOv2 sidecar（W27-T1：视觉一致性引擎，DECISION D-VISION-DEPLOY=sidecar）
     # base_url 缺省指向 docker-compose 内部 DNS；本机调试可在 .env 覆盖。
     # timeout 与 retries 的乘积（5×3=15s）小于 worker 默认 600s，避免单帧

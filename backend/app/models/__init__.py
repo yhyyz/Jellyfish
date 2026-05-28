@@ -6,6 +6,7 @@ from app.models.base import TimestampMixin
 from app.models.brand_archetype import BrandArchetype
 from app.models.brand_style_guide import BrandStyleGuide
 from app.models.compliance import ComplianceFinding, ComplianceProfile
+from app.models.escalation_state import EscalationState
 from app.models.notification_channel import NotificationChannel, NotificationDelivery
 from app.models.cta_pattern import CtaPattern
 from app.models.platform_export_preset import PlatformExportPreset
@@ -92,6 +93,7 @@ __all__ = [
     "ComplianceFinding",
     "NotificationChannel",
     "NotificationDelivery",
+    "EscalationState",
     "StoryFormula",
     "StoryVariant",
     "StoryOutcome",
