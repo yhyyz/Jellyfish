@@ -180,7 +180,7 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
               // 默认行为完全等价，新增 voice_bgm / full / off 在 worker
               // _build_filter_specs 内分流。
               audio_mix_mode: audioMixMode,
-            } as { chapter_id: string; audio_mix_mode: AudioMixMode },
+            },
           },
         )
       return res.data

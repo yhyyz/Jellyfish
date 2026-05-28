@@ -26,5 +26,17 @@ export type ChapterTimelineSegmentWrite = {
      * P3 W19：本段 TTS 合成音频 FileItem ID；audio_strategy=silent_with_tts 时合成阶段 amix 混入
      */
     tts_audio_file_id?: (string | null);
+    /**
+     * P5 W31：本段 BGM 音轨 FileItem ID（usage_kind=bgm_track）。AudioMixMode in {voice_bgm, full} 时合成阶段混入；voice_only 忽略；为空时 voice_bgm/full 自动 fallback 到 voice_only
+     */
+    bgm_file_id?: (string | null);
+    /**
+     * P5 W31：本段 SFX 音轨 FileItem ID（usage_kind=sfx_track）。仅 AudioMixMode=full 合成阶段通过 amerge 加入；为空时 full 自动降级为带 ducking 的 voice_bgm
+     */
+    sfx_file_id?: (string | null);
+    /**
+     * P5 W31：full 模式 sidechaincompress 自动 ducking 增益（dB），范围 [-30.0, 0.0]，默认 -12.0；voice_bgm 用静态 weights 不读此字段
+     */
+    bgm_ducking_db?: number;
 };
 

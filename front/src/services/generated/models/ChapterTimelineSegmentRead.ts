@@ -29,6 +29,18 @@ export type ChapterTimelineSegmentRead = {
      * P3 W19：本段 TTS 音频 FileItem ID（silent_with_tts 路径混入）
      */
     tts_audio_file_id?: (string | null);
+    /**
+     * P5 W31：本段 BGM FileItem ID（voice_bgm/full 模式混入）
+     */
+    bgm_file_id?: (string | null);
+    /**
+     * P5 W31：本段 SFX FileItem ID（仅 full 模式 amerge 加入）
+     */
+    sfx_file_id?: (string | null);
+    /**
+     * P5 W31：full 模式 sidechaincompress ducking 增益（dB）
+     */
+    bgm_ducking_db?: number;
     clip_status: TimelineClipStatus;
     file_id?: (string | null);
     /**
