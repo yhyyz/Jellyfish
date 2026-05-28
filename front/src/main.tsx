@@ -5,6 +5,8 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
+import jaJP from 'antd/locale/ja_JP'
+import koKR from 'antd/locale/ko_KR'
 import App from './App.tsx'
 import 'antd/dist/reset.css'
 import './index.css'
@@ -15,7 +17,15 @@ import { queryClient } from './queryClient'
 
 const RootApp: React.FC = () => {
   const language = useAppStore((state) => state.language)
-  const antdLocale = language === 'en-US' ? enUS : zhCN
+  // P5 W28：4 语言 antd locale 切换（zh-CN / en-US / ja-JP / ko-KR）
+  const antdLocale =
+    language === 'en-US'
+      ? enUS
+      : language === 'ja-JP'
+        ? jaJP
+        : language === 'ko-KR'
+          ? koKR
+          : zhCN
 
   return (
     <QueryClientProvider client={queryClient}>

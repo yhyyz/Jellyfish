@@ -16,7 +16,8 @@
     "test:ui": "vitest --ui",
     "openapi:fetch": "curl -sSf ${JELLYFISH_BACKEND_URL:-http://127.0.0.1:8088}/openapi.json -o ./openapi.json",
     "openapi:gen": "pnpm exec -- openapi --input ./openapi.json --output ./src/services/generated --client fetch --useOptions --useUnionTypes",
-    "openapi:update": "pnpm run openapi:fetch && pnpm run openapi:gen"
+    "openapi:update": "pnpm run openapi:fetch && pnpm run openapi:gen",
+    "audit-i18n": "tsx scripts/audit-i18n-completeness.ts"
   },
   "dependencies": {
     "@ant-design/charts": "^2",
@@ -56,6 +57,7 @@
     "openapi-typescript-codegen": "0.30.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
+    "tsx": "^4.22.3",
     "typescript": "^5.2.2",
     "vite": "^5.0.8",
     "vitest": "^2"

@@ -1,0 +1,18 @@
+{
+  "title": "システム設定",
+  "nickname": "ニックネーム",
+  "role": "ロール",
+  "darkMode": "ダークモード",
+  "darkModeTooltip": "サンプルスイッチです。実際のプロジェクトではテーマ切替に接続できます",
+  "save": "設定を保存",
+  "updated": "基本情報を更新しました（サンプル）",
+  "roleOptions": {
+    "admin": "システム管理者",
+    "operator": "オペレーター",
+    "guest": "ゲスト"
+  },
+  "validation": {
+    "nicknameRequired": "ニックネームを入力してください",
+    "roleRequired": "ロールを選択してください"
+  }
+}

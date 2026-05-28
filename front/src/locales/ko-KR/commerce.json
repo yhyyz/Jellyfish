@@ -1,0 +1,70 @@
+{
+  "productImageGrid": {},
+  "voicePackPicker": {
+    "loading": "로드 중…",
+    "errorRetry": "로드에 실패했습니다. 클릭하여 다시 시도",
+    "play": "미리듣기",
+    "pause": "일시정지",
+    "noResults": "{{language}}에 해당하는 보이스 팩이 없습니다"
+  },
+  "subtitleStylePicker": {
+    "tabSystem": "시스템 템플릿",
+    "tabCustom": "커스텀",
+    "preview": "자막 미리보기 (샘플)",
+    "fontSize": "글자 크기",
+    "primaryColour": "주 색상",
+    "outlineColour": "외곽선 색상",
+    "alignment": "정렬",
+    "marginV": "하단 여백",
+    "invalidHex": "색상 형식이 올바르지 않습니다. #RRGGBB 형식이어야 합니다",
+    "platformDouyin": "Douyin 기본",
+    "platformTiktok": "TikTok",
+    "platformReels": "Reels"
+  },
+  "subtitleStyleLibrary": {
+    "pageTitle": "자막 스타일 라이브러리",
+    "systemSection": "시스템 템플릿",
+    "projectOverridesNotice": "프로젝트별 자막 오버라이드는 P5에서 제공됩니다. 현재는 시스템 템플릿만 사용할 수 있습니다",
+    "loadFailed": "로드 실패",
+    "preview": "자막 미리보기 (샘플)"
+  },
+  "voicePackLibrary": {
+    "pageTitle": "보이스 팩 라이브러리",
+    "filterLanguage": "언어",
+    "uploadCustom": "맞춤형 보이스 업로드",
+    "uploadComingSoon": "곧 출시 — 커스텀 보이스 트레이닝은 P5에서 제공됩니다",
+    "loadFailed": "로드 실패",
+    "retry": "다시 시도",
+    "empty": "조건에 맞는 보이스 팩이 없습니다"
+  },
+  "platformExportPresetLibrary": {
+    "pageTitle": "플랫폼 내보내기 프리셋 라이브러리",
+    "systemSection": "시스템 프리셋",
+    "filterPlatform": "플랫폼",
+    "filterAll": "전체",
+    "loadFailed": "로드 실패",
+    "retry": "다시 시도",
+    "empty": "조건에 맞는 프리셋이 없습니다",
+    "aspectRatio": "화면 비율",
+    "maxDuration": "최대 길이",
+    "codec": "코덱",
+    "loudness": "라우드니스"
+  },
+  "avPreview": {
+    "drawerTitle": "AV 미리보기",
+    "videoFallback": "사용 중인 브라우저는 video 태그를 지원하지 않습니다",
+    "emptyHint": "chapter_av_export 완료를 기다리는 중",
+    "triggerExport": "지금 최종 영상 생성",
+    "viewTaskCenter": "작업 센터 열기",
+    "voicePanel": "보이스",
+    "subtitlePanel": "자막 스타일",
+    "exportEnqueued": "생성 큐에 추가되었습니다",
+    "exportFailed": "실행에 실패했습니다",
+    "exportPending": "생성 중…"
+  },
+  "compliance": {},
+  "formula": {},
+  "hook": {},
+  "cta": {},
+  "archetype": {}
+}

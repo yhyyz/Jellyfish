@@ -1,0 +1,70 @@
+{
+  "productImageGrid": {},
+  "voicePackPicker": {
+    "loading": "読み込み中…",
+    "errorRetry": "読み込みに失敗しました。クリックして再試行",
+    "play": "試聴",
+    "pause": "一時停止",
+    "noResults": "{{language}} に該当する音声パックが見つかりません"
+  },
+  "subtitleStylePicker": {
+    "tabSystem": "システムテンプレート",
+    "tabCustom": "カスタム",
+    "preview": "字幕プレビュー（サンプル）",
+    "fontSize": "フォントサイズ",
+    "primaryColour": "メインカラー",
+    "outlineColour": "縁取りカラー",
+    "alignment": "配置",
+    "marginV": "下マージン",
+    "invalidHex": "カラー形式が正しくありません。#RRGGBB を入力してください",
+    "platformDouyin": "Douyin デフォルト",
+    "platformTiktok": "TikTok",
+    "platformReels": "Reels"
+  },
+  "subtitleStyleLibrary": {
+    "pageTitle": "字幕スタイルライブラリ",
+    "systemSection": "システムテンプレート",
+    "projectOverridesNotice": "プロジェクト単位の字幕オーバーライドは P5 で開放されます。現在はシステムテンプレートのみ利用可能です",
+    "loadFailed": "読み込みに失敗しました",
+    "preview": "字幕プレビュー（サンプル）"
+  },
+  "voicePackLibrary": {
+    "pageTitle": "音声パックライブラリ",
+    "filterLanguage": "言語",
+    "uploadCustom": "カスタム音声をアップロード",
+    "uploadComingSoon": "近日公開 — カスタム音声トレーニングは P5 で利用可能になります",
+    "loadFailed": "読み込みに失敗しました",
+    "retry": "再試行",
+    "empty": "条件に一致する音声パックがありません"
+  },
+  "platformExportPresetLibrary": {
+    "pageTitle": "プラットフォームエクスポート プリセットライブラリ",
+    "systemSection": "システムプリセット",
+    "filterPlatform": "プラットフォーム",
+    "filterAll": "すべて",
+    "loadFailed": "読み込みに失敗しました",
+    "retry": "再試行",
+    "empty": "条件に一致するプリセットがありません",
+    "aspectRatio": "アスペクト比",
+    "maxDuration": "最大尺",
+    "codec": "コーデック",
+    "loudness": "ラウドネス"
+  },
+  "avPreview": {
+    "drawerTitle": "AV プレビュー",
+    "videoFallback": "お使いのブラウザは video タグに対応していません",
+    "emptyHint": "chapter_av_export の完了を待機しています",
+    "triggerExport": "今すぐ最終映像を生成",
+    "viewTaskCenter": "タスクセンターを開く",
+    "voicePanel": "音声",
+    "subtitlePanel": "字幕スタイル",
+    "exportEnqueued": "生成キューに追加しました",
+    "exportFailed": "実行に失敗しました",
+    "exportPending": "生成中…"
+  },
+  "compliance": {},
+  "formula": {},
+  "hook": {},
+  "cta": {},
+  "archetype": {}
+}

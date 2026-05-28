@@ -260,16 +260,19 @@ const MainLayout: React.FC = () => {
             <Select
               size="small"
               value={language}
-              style={{ width: 120 }}
+              style={{ width: 140 }}
+              aria-label="language-switcher"
               onChange={(value) => {
                 setLanguage(value)
                 void i18n.changeLanguage(value)
                 window.localStorage.setItem('jellyfish_language', value)
-                document.documentElement.lang = value === 'en-US' ? 'en' : 'zh-CN'
+                document.documentElement.lang = value
               }}
               options={[
                 { label: t('lang.zh'), value: 'zh-CN' },
                 { label: t('lang.en'), value: 'en-US' },
+                { label: t('lang.ja'), value: 'ja-JP' },
+                { label: t('lang.ko'), value: 'ko-KR' },
               ]}
             />
 

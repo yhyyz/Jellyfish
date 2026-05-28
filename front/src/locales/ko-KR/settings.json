@@ -1,0 +1,18 @@
+{
+  "title": "시스템 설정",
+  "nickname": "닉네임",
+  "role": "역할",
+  "darkMode": "다크 모드",
+  "darkModeTooltip": "예시 스위치입니다. 실제 프로젝트에서는 테마 전환에 연결할 수 있습니다",
+  "save": "설정 저장",
+  "updated": "기본 정보가 업데이트되었습니다 (예시)",
+  "roleOptions": {
+    "admin": "시스템 관리자",
+    "operator": "운영자",
+    "guest": "게스트"
+  },
+  "validation": {
+    "nicknameRequired": "닉네임을 입력해 주세요",
+    "roleRequired": "역할을 선택해 주세요"
+  }
+}
