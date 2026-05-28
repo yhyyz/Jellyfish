@@ -119,6 +119,7 @@ export type { ApiResponse_StoryOutcomeRead_ } from './models/ApiResponse_StoryOu
 export type { ApiResponse_StoryProjectRead_ } from './models/ApiResponse_StoryProjectRead_';
 export type { ApiResponse_StoryVariantRead_ } from './models/ApiResponse_StoryVariantRead_';
 export type { ApiResponse_StudioScriptExtractionDraft_ } from './models/ApiResponse_StudioScriptExtractionDraft_';
+export type { ApiResponse_SubtitleStyleRead_ } from './models/ApiResponse_SubtitleStyleRead_';
 export type { ApiResponse_TaskCancelRead_ } from './models/ApiResponse_TaskCancelRead_';
 export type { ApiResponse_TaskCreated_ } from './models/ApiResponse_TaskCreated_';
 export type { ApiResponse_TaskEnqueueResponse_ } from './models/ApiResponse_TaskEnqueueResponse_';
@@ -256,6 +257,8 @@ export type { ProjectRead } from './models/ProjectRead';
 export type { ProjectSceneLinkRead } from './models/ProjectSceneLinkRead';
 export type { ProjectStyle } from './models/ProjectStyle';
 export type { ProjectStyleOptionsRead } from './models/ProjectStyleOptionsRead';
+export type { ProjectSubtitleStyleCreateInput } from './models/ProjectSubtitleStyleCreateInput';
+export type { ProjectSubtitleStyleUpdateInput } from './models/ProjectSubtitleStyleUpdateInput';
 export type { ProjectUpdate } from './models/ProjectUpdate';
 export type { ProjectVisualStyle } from './models/ProjectVisualStyle';
 export type { PromptCategory } from './models/PromptCategory';

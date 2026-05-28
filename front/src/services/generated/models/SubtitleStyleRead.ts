@@ -113,6 +113,10 @@ export type SubtitleStyleRead = {
      */
     sort_order: number;
     /**
+     * 项目级覆盖归属的项目 ID；NULL=系统级 seed，非 NULL=该项目自定义
+     */
+    project_id?: (string | null);
+    /**
      * 入库时间
      */
     created_at: string;
