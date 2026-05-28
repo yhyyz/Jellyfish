@@ -246,6 +246,16 @@ class SubtitleStyle(Base, TimestampMixin):
         ),
     )
 
+    # 关于 (project_id, name) 唯一性：
+    # alembic 0022（W30-followup）在 DB 层补了 UNIQUE 约束，规避 service
+    # 层 SELECT-then-INSERT 的并发 race（两个并发 POST 各自 SELECT 落空
+    # 后双双 INSERT 留下脏数据）。具体做法：
+    #   - 加 generated column ``_scope_key VARCHAR(64) GENERATED ALWAYS AS
+    #     (COALESCE(project_id, '__system__')) STORED``；
+    #   - 在 ``(_scope_key, name)`` 上建 UNIQUE 索引
+    #     ``uq_subtitle_styles_scope_name``。
+    # ORM 不显式映射 ``_scope_key``——它是纯 DB 派生列，不应进入业务读
+    # 路径；service 层只需 catch ``IntegrityError`` 转 HTTP 409。
     __table_args__ = (
         Index("ix_subtitle_styles_format_lang", "format", "language_code"),
     )

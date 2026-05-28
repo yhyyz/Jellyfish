@@ -34,6 +34,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.studio_projects import Project
@@ -248,7 +249,8 @@ async def create_project_subtitle_style(
 
     Raises:
         HTTPException(404): ``project_id`` 不存在。
-        HTTPException(409): 同 project 内 ``name`` 已存在。
+        HTTPException(409): 同 project 内 ``name`` 已存在
+            （上层 SELECT 命中 / DB UNIQUE IntegrityError 兜底，二选一触发）。
 
     关键内部逻辑：
         - 服务端 mint ``id``（``substyle_<uuid hex 前 12 位>``），不允许调用方
@@ -256,6 +258,10 @@ async def create_project_subtitle_style(
         - ``is_system`` 强制 ``False``，``sort_order`` 默认 0；项目级行不参与
           系统级排序权重。
         - ``project_id`` 写入服务端从 path 参数取的值，不接受 body 篡改。
+        - 在 ``db.flush()`` 处 catch ``IntegrityError``：alembic 0022 在
+          ``(_scope_key, name)`` 上加了 UNIQUE 索引，并发 POST 同 name 时
+          后到者会被 DB 直接拒绝，service 层把它统一转换为 HTTP 409，与上
+          层 ``SELECT`` 命中分支返回相同的错误语义。
     """
 
     await _ensure_project_exists(db, project_id)
@@ -282,7 +288,17 @@ async def create_project_subtitle_style(
         **_payload_to_orm_kwargs(payload_dict),
     )
     db.add(style)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"SubtitleStyle name already exists in project {project_id}: "
+                f"{payload.name!r}"
+            ),
+        ) from exc
     await db.refresh(style)
     return _serialize_subtitle_style(style)
 
@@ -356,7 +372,17 @@ async def update_project_subtitle_style(
     converted = _payload_to_orm_kwargs(updates)
     for field_name, value in converted.items():
         setattr(style, field_name, value)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "SubtitleStyle name already exists in project "
+                f"{project_id}: {new_name!r}"
+            ),
+        ) from exc
     await db.refresh(style)
     return _serialize_subtitle_style(style)
 
