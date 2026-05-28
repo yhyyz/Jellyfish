@@ -340,13 +340,15 @@ P3 阶段 W16–W21 已全部落地并发版 v0.6.0。
 
 ### P4 Wave 22 — Outcome + Analytics（约 8 工作日）
 
-| 任务 ID | 内容                                                                                              |
-| ------- | ------------------------------------------------------------------------------------------------- |
-| T22-1   | `StoryOutcome` 录入 API + 前端表单（手动录入完播率 / 互动率 / 加购 / 订单 / GMV）                 |
-| T22-2   | CSV 批量导入端点（`POST /api/v1/commerce/outcomes/import`，支持抖音 / 小红书原始字段映射）        |
-| T22-3   | 4 个分析图表（按公式 / 钩子 / 人格 / 平台 4 个维度归因），使用统一 `PerformanceChart` 组件        |
-| T22-4   | KPI 卡片（GMV / ROI / 完播率 / 加购率） + 变体对比表                                              |
-| 路由    | `/commerce/analytics`                                                                             |
+| 任务 ID | 内容                                                                                              | 状态                       |
+| ------- | ------------------------------------------------------------------------------------------------- | -------------------------- |
+| T22-1   | `StoryOutcome` 录入 API + 前端表单（手动录入完播率 / 互动率 / 加购 / 订单 / GMV）                 | ✅ 已落地 (commit 1decbc3) |
+| T22-2   | CSV 批量导入端点（`POST /api/v1/commerce/outcomes/import`，支持抖音 / 小红书原始字段映射）        | ✅ 已落地 (commit 7fe3734) |
+| T22-3   | 4 个分析图表（按公式 / 钩子 / 人格 / 平台 4 个维度归因），使用统一 `PerformanceChart` 组件        | ✅ 已落地 (commit e0699de) |
+| T22-4   | KPI 卡片（GMV / ROI / 完播率 / 加购率） + 变体对比表                                              | ✅ 已落地 (commit b23cb8d) |
+| 路由    | `/commerce/analytics`                                                                             | ✅ 已落地                  |
+
+> 当前真实实现详见 [当前架构 — 投放效果与归因分析](/docs/architecture/commerce-analytics/)。
 
 ### P4 Wave 23 — Multi-Platform Export（约 5 工作日）
 
@@ -357,37 +359,45 @@ P3 阶段 W16–W21 已全部落地并发版 v0.6.0。
 
 ### P4 Wave 24 — Partner API（约 8 工作日）
 
-| 任务 ID | 内容                                                                                                                  |
-| ------- | --------------------------------------------------------------------------------------------------------------------- |
-| T24-1   | `ApiKeyQuota` 启用 + bcrypt 哈希存储 + API key 中间件（注入 quota 上下文）                                            |
-| T24-2   | `POST /api/v1/public/commerce/generate` 第三方调用 endpoint（同步入队 + 返回 task_id）                                |
-| T24-3   | `GET /api/v1/public/commerce/tasks/{id}` 状态查询                                                                     |
-| T24-4   | `slowapi` 限流集成（`rate_per_minute` 字段生效） + 配额日 / 月重置 Celery beat 任务                                   |
-| T24-5   | Admin UI 创建 / 撤销 API key（`/settings/api-keys`），含日 / 月配额配置 + 用量统计                                    |
+| 任务 ID | 内容                                                                                                                  | 状态                       |
+| ------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| T24-1   | `ApiKeyQuota` 启用 + bcrypt 哈希存储 + API key 中间件（注入 quota 上下文）                                            | ✅ 已落地 (commit 6401c98) |
+| T24-2   | `POST /api/v1/public/commerce/generate` 第三方调用 endpoint（同步入队 + 返回 task_id）                                | ✅ 已落地 (commit 73bff80) |
+| T24-3   | `GET /api/v1/public/commerce/tasks/{id}` 状态查询                                                                     | ✅ 已落地 (commit 83deddc) |
+| T24-4   | `slowapi` 限流集成（`rate_per_minute` 字段生效） + 配额日 / 月重置 Celery beat 任务                                   | ✅ 已落地 (commit 8dc089e) |
+| T24-5   | Admin UI 创建 / 撤销 API key（`/settings/api-keys`），含日 / 月配额配置 + 用量统计                                    | ✅ 已落地 (commit 7c66e48) |
+
+> 当前真实实现详见 [当前架构 — Partner API（第三方调用入口）](/docs/architecture/partner-api/)。
 
 ### P4 Wave 25 — Brand Asset Vault（约 5 工作日）
 
-| 任务 ID | 内容                                                                                                          |
-| ------- | ------------------------------------------------------------------------------------------------------------- |
-| T25-1   | `Product.competitor_names` 自动过滤管线（生成阶段 reject + suggest fix）                                      |
-| T25-2   | `archetype` + `tone_grid` 强制约束（违反则在生成阶段 reject 并要求重写，不进入 variant 表）                   |
-| T25-3   | 品牌话术规范库 `BrandStyleGuide` 表（强制金句 / 禁用句式 / 必备结尾 / 品牌人格短描述）                        |
+| 任务 ID | 内容                                                                                                          | 状态                       |
+| ------- | ------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| T25-1   | `Product.competitor_names` 自动过滤管线（生成阶段 reject + suggest fix）                                      | ✅ 已落地 (commit 7c3a1d2) |
+| T25-2   | `archetype` + `tone_grid` 强制约束（违反则在生成阶段 reject 并要求重写，不进入 variant 表）                   | ✅ 已落地 (commit ac5c177) |
+| T25-3   | 品牌话术规范库 `BrandStyleGuide` 表（强制金句 / 禁用句式 / 必备结尾 / 品牌人格短描述）                        | ✅ 已落地 (commit 7c0b872) |
+
+> 当前真实实现详见 [当前架构 — 品牌资产保险柜](/docs/architecture/brand-asset-vault/)。
 
 ### P4 Wave 26 — Compliance Notifications（约 4 工作日）
 
-| 任务 ID | 内容                                                                                          |
-| ------- | --------------------------------------------------------------------------------------------- |
-| T26-1   | Slack / 邮件 webhook 合规阻断告警（BLOCKER 级 finding 触发）                                  |
-| T26-2   | 团队级 escalation rules（连续 N 次阻断 → 升级到团队 owner）                                   |
+| 任务 ID | 内容                                                                                          | 状态                       |
+| ------- | --------------------------------------------------------------------------------------------- | -------------------------- |
+| T26-1   | Slack / 邮件 webhook 合规阻断告警（BLOCKER 级 finding 触发）                                  | ✅ 已落地 (commit e26d8a4) |
+| T26-2   | 团队级 escalation rules（连续 N 次阻断 → 升级到团队 owner）                                   | ✅ 已落地 (commit 659a088) |
+
+> 当前真实实现详见 [当前架构 — 合规阻断告警子系统](/docs/architecture/compliance-notifications/)。
 
 ### P4 Wave 27 — Visual Consistency Engine（约 4 工作日）
 
-| 任务 ID | 内容                                                                                                                                                |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T27-1   | DINOv2 ViT-B/14 一致性服务：每个 r2v 产出抽样 4–8 帧 → CLIP image embedding → 与 ProductImage 参考做 cosine similarity                              |
-| T27-2   | 阈值规则：≥ 0.85 通过；0.75–0.85 警告（人工复核）；< 0.75 自动重生成（最多 N 次）                                                                    |
-| T27-3   | 一致性报告：StoryWorkbench 内每个 shot 显示 consistency_score，可点击查看抽样帧 vs 参考图对比                                                       |
-| T27-4   | 集成到 `chapter_av_export` 前置门（可选）：消耗的镜头分数全部 ≥ 0.75 才允许导出，否则提示重生                                                       |
+| 任务 ID | 内容                                                                                                                                                | 状态                       |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| T27-1   | DINOv2 ViT-B/14 一致性服务：每个 r2v 产出抽样 4–8 帧 → CLIP image embedding → 与 ProductImage 参考做 cosine similarity                              | ✅ 已落地 (commit 182825c) |
+| T27-2   | 阈值规则：≥ 0.85 通过；0.75–0.85 警告（人工复核）；< 0.75 自动重生成（最多 N 次）                                                                    | ✅ 已落地 (commit 8d1f93d) |
+| T27-3   | 一致性报告：StoryWorkbench 内每个 shot 显示 consistency_score，可点击查看抽样帧 vs 参考图对比                                                       | ✅ 已落地 (commit d98e9b2) |
+| T27-4   | 集成到 `chapter_av_export` 前置门（可选）：消耗的镜头分数全部 ≥ 0.75 才允许导出，否则提示重生                                                       | ✅ 已落地 (commit c224f52) |
+
+> 当前真实实现详见 [当前架构 — 视觉一致性引擎](/docs/architecture/visual-consistency-engine/)。
 
 ### P4 完成标准
 
