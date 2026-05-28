@@ -4,9 +4,12 @@
 - 仅把 Celery 当作执行层与 broker 客户端；
 - 任务状态/结果真相仍然回写 GenerationTask；
 - 第一阶段不依赖 Celery result backend。
+
+W24-T4：新增 beat_schedule + redbeat scheduler 用于周期性配额重置。
 """
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_process_init
 
 from app.config import settings
@@ -16,7 +19,10 @@ from app.core.db import reset_db_runtime
 celery_app = Celery(
     "jellyfish",
     broker=settings.celery_broker_url,
-    include=["app.tasks.execute_task"],
+    include=[
+        "app.tasks.execute_task",
+        "app.tasks.quota_reset",
+    ],
 )
 
 celery_app.conf.update(
@@ -26,22 +32,32 @@ celery_app.conf.update(
     task_ignore_result=True,
     timezone="Asia/Shanghai",
     enable_utc=False,
-    # 任务队列路由：根据 Celery 已注册任务名 (`task.execute*` 命名空间) 路由。
-    #
-    # 项目实际只在 `app.tasks.execute_task` 中注册了一个统一执行入口
-    # `@celery_app.task(name="task.execute")`，所以路由必须以 `task.execute*`
-    # 为锚点，而不是按模块路径 `app.services.worker.*` 匹配（旧规则永远命不中）。
-    #
-    # 约定：
-    # - `task.execute.video` / `task.execute.image` / `task.execute.timeline`
-    #   等耗时任务入口落到 `slow` 队列；
-    # - 其余 `task.execute*`（含当前默认入口 `task.execute`）落到 `fast` 队列。
-    # Celery 路由按声明顺序匹配，先列具体规则再列兜底。
     task_routes={
         "task.execute.video*": {"queue": "slow"},
         "task.execute.image*": {"queue": "slow"},
         "task.execute.timeline*": {"queue": "slow"},
         "task.execute*": {"queue": "fast"},
+    },
+    # W24-T4：周期任务调度器使用 RedBeat（基于 Redis 的分布式锁），
+    # 支持多进程/多副本同时启动 beat 而不重复触发。默认的
+    # ``celery.beat.PersistentScheduler`` 用本地文件存储，无法在
+    # docker-compose 多副本部署下安全运行。
+    beat_scheduler="redbeat.RedBeatScheduler",
+    # RedBeat 复用现有 Celery broker（Redis）即可；额外允许通过
+    # ``settings.celery_broker_url`` 指向独立 redis URL。
+    redbeat_redis_url=settings.celery_broker_url,
+    redbeat_lock_timeout=900,
+    beat_schedule={
+        # 每日 00:00（项目时区 Asia/Shanghai）重置 ``consumed_today``。
+        "reset-daily-quotas": {
+            "task": "task.quota.reset_daily",
+            "schedule": crontab(minute=0, hour=0),
+        },
+        # 每月 1 日 00:00 重置 ``consumed_this_month``。
+        "reset-monthly-quotas": {
+            "task": "task.quota.reset_monthly",
+            "schedule": crontab(minute=0, hour=0, day_of_month=1),
+        },
     },
 )
 

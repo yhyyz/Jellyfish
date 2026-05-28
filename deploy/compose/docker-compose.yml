@@ -150,6 +150,51 @@ services:
     # 直接使用镜像内已安装依赖的虚拟环境，避免运行时 `uv run` 临时拉包导致队列长时间 pending。
     command: [".venv/bin/celery", "-A", "app.core.celery_app:celery_app", "worker", "-l", "info"]
 
+  # W24-T4：周期任务调度器。使用 RedBeat（基于 Redis 分布式锁），即使
+  # 多实例部署也只会有一个进程实际触发 schedule，避免日/月配额被重置多次。
+  # 与 celery-worker 共用同一镜像 + 同一 broker，仅启动参数不同。
+  celery-beat:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/backend.Dockerfile
+    environment:
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
+      DEBUG: "false"
+      API_V1_PREFIX: /api/v1
+      S3_ENDPOINT_URL: http://rustfs:9000
+      S3_REGION_NAME: us-east-1
+      S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      CORS_ORIGINS: http://localhost:7788,http://127.0.0.1:7788
+      OPENAI_API_KEY: ${OPENAI_API_KEY-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend-init-db:
+        condition: service_completed_successfully
+      mysql-init-sql:
+        condition: service_completed_successfully
+    command:
+      [
+        ".venv/bin/celery",
+        "-A",
+        "app.core.celery_app:celery_app",
+        "beat",
+        "-l",
+        "info",
+        "--scheduler",
+        "redbeat.RedBeatScheduler",
+      ]
+    restart: unless-stopped
+
   front:
     build:
       context: ../..
