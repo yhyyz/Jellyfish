@@ -79,12 +79,17 @@ export class LlmService {
      */
     public static createProviderApiV1LlmProvidersPost({
         requestBody,
+        authorization,
     }: {
         requestBody: ProviderCreate,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_ProviderRead_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/llm/providers',
+            headers: {
+                'authorization': authorization,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -167,15 +172,20 @@ export class LlmService {
     public static updateProviderApiV1LlmProvidersProviderIdPatch({
         providerId,
         requestBody,
+        authorization,
     }: {
         providerId: string,
         requestBody: ProviderUpdate,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_ProviderRead_> {
         return __request(OpenAPI, {
             method: 'PATCH',
             url: '/api/v1/llm/providers/{provider_id}',
             path: {
                 'provider_id': providerId,
+            },
+            headers: {
+                'authorization': authorization,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -191,14 +201,19 @@ export class LlmService {
      */
     public static deleteProviderApiV1LlmProvidersProviderIdDelete({
         providerId,
+        authorization,
     }: {
         providerId: string,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_NoneType_> {
         return __request(OpenAPI, {
             method: 'DELETE',
             url: '/api/v1/llm/providers/{provider_id}',
             path: {
                 'provider_id': providerId,
+            },
+            headers: {
+                'authorization': authorization,
             },
             errors: {
                 422: `Validation Error`,
@@ -272,12 +287,17 @@ export class LlmService {
      */
     public static createModelApiV1LlmModelsPost({
         requestBody,
+        authorization,
     }: {
         requestBody: ModelCreate,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_ModelRead_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/llm/models',
+            headers: {
+                'authorization': authorization,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -362,15 +382,20 @@ export class LlmService {
     public static updateModelApiV1LlmModelsModelIdPatch({
         modelId,
         requestBody,
+        authorization,
     }: {
         modelId: string,
         requestBody: ModelUpdate,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_ModelRead_> {
         return __request(OpenAPI, {
             method: 'PATCH',
             url: '/api/v1/llm/models/{model_id}',
             path: {
                 'model_id': modelId,
+            },
+            headers: {
+                'authorization': authorization,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -386,14 +411,19 @@ export class LlmService {
      */
     public static deleteModelApiV1LlmModelsModelIdDelete({
         modelId,
+        authorization,
     }: {
         modelId: string,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_NoneType_> {
         return __request(OpenAPI, {
             method: 'DELETE',
             url: '/api/v1/llm/models/{model_id}',
             path: {
                 'model_id': modelId,
+            },
+            headers: {
+                'authorization': authorization,
             },
             errors: {
                 422: `Validation Error`,
@@ -418,12 +448,17 @@ export class LlmService {
      */
     public static updateModelSettingsApiV1LlmModelSettingsPut({
         requestBody,
+        authorization,
     }: {
         requestBody: ModelSettingsUpdate,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_ModelSettingsRead_> {
         return __request(OpenAPI, {
             method: 'PUT',
             url: '/api/v1/llm/model-settings',
+            headers: {
+                'authorization': authorization,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

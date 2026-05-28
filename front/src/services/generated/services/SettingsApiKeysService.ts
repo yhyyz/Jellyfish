@@ -23,12 +23,17 @@ export class SettingsApiKeysService {
      */
     public static createApiKeyEndpointApiV1SettingsApiKeysPost({
         requestBody,
+        authorization,
     }: {
         requestBody: ApiKeyCreateRequest,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_ApiKeyCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/settings/api-keys',
+            headers: {
+                'authorization': authorization,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -47,15 +52,20 @@ export class SettingsApiKeysService {
      */
     public static listApiKeysEndpointApiV1SettingsApiKeysGet({
         includeInactive = false,
+        authorization,
     }: {
         /**
          * 是否包含已 revoke 的 inactive 行；缺省仅列活跃 key
          */
         includeInactive?: boolean,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_list_ApiKeyRead__> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/settings/api-keys',
+            headers: {
+                'authorization': authorization,
+            },
             query: {
                 'include_inactive': includeInactive,
             },
@@ -74,12 +84,17 @@ export class SettingsApiKeysService {
      */
     public static revokeApiKeyEndpointApiV1SettingsApiKeysRevokePost({
         requestBody,
+        authorization,
     }: {
         requestBody: ApiKeyHashRequest,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_ApiKeyRead_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/settings/api-keys/revoke',
+            headers: {
+                'authorization': authorization,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -98,12 +113,17 @@ export class SettingsApiKeysService {
      */
     public static getApiKeyUsageEndpointApiV1SettingsApiKeysUsagePost({
         requestBody,
+        authorization,
     }: {
         requestBody: ApiKeyHashRequest,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_ApiKeyUsageRead_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/settings/api-keys/usage',
+            headers: {
+                'authorization': authorization,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

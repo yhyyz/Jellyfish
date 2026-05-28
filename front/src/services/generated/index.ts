@@ -127,6 +127,7 @@ export type { ApiResponse_TaskEnqueueResponse_ } from './models/ApiResponse_Task
 export type { ApiResponse_TaskLinkAdoptRead_ } from './models/ApiResponse_TaskLinkAdoptRead_';
 export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResultRead_';
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
+export type { ApiResponse_Token_ } from './models/ApiResponse_Token_';
 export type { ApiResponse_VariantAggregateListResponse_ } from './models/ApiResponse_VariantAggregateListResponse_';
 export type { ApiResponse_VariantAnalysisResult_ } from './models/ApiResponse_VariantAnalysisResult_';
 export type { ApiResponse_VideoGenerationOptionsRead_ } from './models/ApiResponse_VideoGenerationOptionsRead_';
@@ -140,6 +141,7 @@ export type { BatchGenerationRequest } from './models/BatchGenerationRequest';
 export type { BatchVariantSpec } from './models/BatchVariantSpec';
 export type { Body_create_custom_voice_pack_endpoint_api_v1_commerce_voice_packs_custom_post } from './models/Body_create_custom_voice_pack_endpoint_api_v1_commerce_voice_packs_custom_post';
 export type { Body_import_outcomes_csv_api_v1_commerce_outcomes_import_post } from './models/Body_import_outcomes_csv_api_v1_commerce_outcomes_import_post';
+export type { Body_login_access_token_api_v1_login_access_token_post } from './models/Body_login_access_token_api_v1_login_access_token_post';
 export type { Body_upload_file_api_api_v1_studio_files_upload_post } from './models/Body_upload_file_api_api_v1_studio_files_upload_post';
 export type { BrandArchetypeRead } from './models/BrandArchetypeRead';
 export type { BrandStyleGuideRead } from './models/BrandStyleGuideRead';
@@ -376,6 +378,7 @@ export type { TaskStatusRead } from './models/TaskStatusRead';
 export type { TimelineClipRead } from './models/TimelineClipRead';
 export type { TimelineClipStatus } from './models/TimelineClipStatus';
 export type { TimelineClipType } from './models/TimelineClipType';
+export type { Token } from './models/Token';
 export type { TtsGenerateRequest } from './models/TtsGenerateRequest';
 export type { ValidationError } from './models/ValidationError';
 export type { VariantAggregateListResponse } from './models/VariantAggregateListResponse';
@@ -392,6 +395,7 @@ export type { VideoPromptPreviewResponse } from './models/VideoPromptPreviewResp
 export type { VoiceCloneStatus } from './models/VoiceCloneStatus';
 export type { VoicePackRead } from './models/VoicePackRead';
 
+export { AuthService } from './services/AuthService';
 export { CommerceAnalyticsService } from './services/CommerceAnalyticsService';
 export { CommerceExportService } from './services/CommerceExportService';
 export { CommerceOutcomesService } from './services/CommerceOutcomesService';

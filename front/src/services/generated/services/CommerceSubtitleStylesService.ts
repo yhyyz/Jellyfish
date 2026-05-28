@@ -90,15 +90,20 @@ export class CommerceSubtitleStylesService {
     public static createProjectSubtitleStyleEndpointApiV1CommerceProjectsProjectIdSubtitleStylesPost({
         projectId,
         requestBody,
+        authorization,
     }: {
         projectId: string,
         requestBody: ProjectSubtitleStyleCreateInput,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_SubtitleStyleRead_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/commerce/projects/{project_id}/subtitle-styles',
             path: {
                 'project_id': projectId,
+            },
+            headers: {
+                'authorization': authorization,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -122,10 +127,12 @@ export class CommerceSubtitleStylesService {
         projectId,
         styleId,
         requestBody,
+        authorization,
     }: {
         projectId: string,
         styleId: string,
         requestBody: ProjectSubtitleStyleUpdateInput,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_SubtitleStyleRead_> {
         return __request(OpenAPI, {
             method: 'PATCH',
@@ -133,6 +140,9 @@ export class CommerceSubtitleStylesService {
             path: {
                 'project_id': projectId,
                 'style_id': styleId,
+            },
+            headers: {
+                'authorization': authorization,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -155,9 +165,11 @@ export class CommerceSubtitleStylesService {
     public static deleteProjectSubtitleStyleEndpointApiV1CommerceProjectsProjectIdSubtitleStylesStyleIdDelete({
         projectId,
         styleId,
+        authorization,
     }: {
         projectId: string,
         styleId: string,
+        authorization?: (string | null),
     }): CancelablePromise<ApiResponse_NoneType_> {
         return __request(OpenAPI, {
             method: 'DELETE',
@@ -165,6 +177,9 @@ export class CommerceSubtitleStylesService {
             path: {
                 'project_id': projectId,
                 'style_id': styleId,
+            },
+            headers: {
+                'authorization': authorization,
             },
             errors: {
                 422: `Validation Error`,
