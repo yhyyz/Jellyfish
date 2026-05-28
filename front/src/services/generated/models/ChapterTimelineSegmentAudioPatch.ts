@@ -26,5 +26,9 @@ export type ChapterTimelineSegmentAudioPatch = {
      * full 模式 sidechaincompress ducking 增益（dB），范围 [-30.0, 0.0]；不传则保持原值
      */
     bgm_ducking_db?: (number | null);
+    /**
+     * P5 W31-followup：SFX 在 segment 内的起始毫秒（0..30000）；不传则保持原值
+     */
+    sfx_offset_ms?: (number | null);
 };
 

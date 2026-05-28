@@ -72,6 +72,15 @@ class ChapterTimelineSegmentWrite(BaseModel):
             "范围 [-30.0, 0.0]，默认 -12.0；voice_bgm 用静态 weights 不读此字段"
         ),
     )
+    sfx_offset_ms: int = Field(
+        default=0,
+        ge=0,
+        le=30000,
+        description=(
+            "P5 W31-followup：SFX 在 segment 内的起始毫秒（0..30000），"
+            "传给 ffmpeg adelay；缺省 0 表示从 segment 起点播放"
+        ),
+    )
 
 
 class ChapterTimelineWrite(BaseModel):
@@ -110,6 +119,14 @@ class ChapterTimelineSegmentRead(BaseModel):
         ge=-30.0,
         le=0.0,
         description="P5 W31：full 模式 sidechaincompress ducking 增益（dB）",
+    )
+    sfx_offset_ms: int = Field(
+        default=0,
+        ge=0,
+        le=30000,
+        description=(
+            "P5 W31-followup：SFX 在 segment 内的起始毫秒（0..30000）"
+        ),
     )
     clip_status: TimelineClipStatus
     file_id: str | None = None
@@ -168,5 +185,14 @@ class ChapterTimelineSegmentAudioPatch(BaseModel):
         description=(
             "full 模式 sidechaincompress ducking 增益（dB），范围 "
             "[-30.0, 0.0]；不传则保持原值"
+        ),
+    )
+    sfx_offset_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=30000,
+        description=(
+            "P5 W31-followup：SFX 在 segment 内的起始毫秒（0..30000）；"
+            "不传则保持原值"
         ),
     )

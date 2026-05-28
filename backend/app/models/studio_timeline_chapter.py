@@ -122,6 +122,16 @@ class ChapterTimelineSegment(Base, TimestampMixin):
             "范围 [-30.0, 0.0]，默认 -12.0；voice_bgm 用静态 weights 不读此列"
         ),
     )
+    sfx_offset_ms: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment=(
+            "P5 W31-followup：SFX 在 segment 内的起始毫秒（0..30000），"
+            "传给 ffmpeg adelay；缺省 0 表示从 segment 起点播放"
+        ),
+    )
     # 历史 SQL 已存在无默认值版本；这里补 ORM 侧默认，避免 INSERT 依赖 DB default。
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

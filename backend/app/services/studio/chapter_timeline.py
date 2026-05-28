@@ -104,9 +104,11 @@ async def build_timeline_read(db: AsyncSession, chapter_id: str) -> ChapterTimel
         sub_fid = seg_row.subtitle_track_file_id if seg_row else None
         tts_fid = seg_row.tts_audio_file_id if seg_row else None
         # P5 W31：BGM/SFX/ducking 字段透传到 Read 视图，缺省值与 schema 默认对齐。
+        # P5 W31-followup：sfx_offset_ms 同样透传，让前端 slider 能复现已存值。
         bgm_fid = seg_row.bgm_file_id if seg_row else None
         sfx_fid = seg_row.sfx_file_id if seg_row else None
         ducking_db = float(seg_row.bgm_ducking_db) if seg_row else -12.0
+        sfx_offset = int(seg_row.sfx_offset_ms) if seg_row else 0
         reads.append(
             ChapterTimelineSegmentRead(
                 id=sid,
@@ -119,6 +121,7 @@ async def build_timeline_read(db: AsyncSession, chapter_id: str) -> ChapterTimel
                 bgm_file_id=bgm_fid,
                 sfx_file_id=sfx_fid,
                 bgm_ducking_db=ducking_db,
+                sfx_offset_ms=sfx_offset,
                 clip_status=status,
                 file_id=fid,
                 label=shot.title,
@@ -191,6 +194,7 @@ async def replace_timeline_segments(
                 bgm_file_id=row.bgm_file_id,
                 sfx_file_id=row.sfx_file_id,
                 bgm_ducking_db=row.bgm_ducking_db,
+                sfx_offset_ms=row.sfx_offset_ms,
             ),
         )
 
@@ -262,6 +266,8 @@ async def patch_segment_audio(
         seg.sfx_file_id = update["sfx_file_id"]
     if "bgm_ducking_db" in update and update["bgm_ducking_db"] is not None:
         seg.bgm_ducking_db = float(update["bgm_ducking_db"])
+    if "sfx_offset_ms" in update and update["sfx_offset_ms"] is not None:
+        seg.sfx_offset_ms = int(update["sfx_offset_ms"])
 
     await db.flush()
     await db.refresh(seg)
@@ -291,6 +297,7 @@ async def patch_segment_audio(
         bgm_file_id=seg.bgm_file_id,
         sfx_file_id=seg.sfx_file_id,
         bgm_ducking_db=float(seg.bgm_ducking_db),
+        sfx_offset_ms=int(seg.sfx_offset_ms),
         clip_status=clip_status,
         file_id=file_id,
         label=shot.title,

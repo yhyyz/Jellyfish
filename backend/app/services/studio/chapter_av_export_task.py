@@ -445,7 +445,7 @@ async def _build_filter_specs(
                 audio_mix_mode=audio_mix_mode,
                 bgm_input_index=bgm_input_index,
                 sfx_input_index=sfx_input_index,
-                sfx_offset_ms=0,
+                sfx_offset_ms=int(seg.sfx_offset_ms),
                 bgm_ducking_db=float(seg.bgm_ducking_db),
             )
         )

@@ -164,6 +164,8 @@
     "bgmPlaceholder": "选择项目下的 BGM 音频文件",
     "sfxLabel": "SFX 音效",
     "sfxPlaceholder": "选择项目下的 SFX 音频文件",
+    "sfxOffsetMs": "SFX 起始偏移（ms）",
+    "sfxOffsetMsTooltip": "SFX 在镜头片段内的起始毫秒，0 表示从片段起点播放；范围 0–30000ms",
     "duckingLabel": "BGM ducking 增益（dB）",
     "exportEnqueued": "已加入生成队列",
     "exportFailed": "触发失败",

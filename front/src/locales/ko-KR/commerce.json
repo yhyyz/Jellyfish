@@ -164,6 +164,8 @@
     "bgmPlaceholder": "프로젝트의 BGM 오디오 파일 선택",
     "sfxLabel": "SFX 효과음",
     "sfxPlaceholder": "프로젝트의 SFX 오디오 파일 선택",
+    "sfxOffsetMs": "SFX 시작 오프셋(ms)",
+    "sfxOffsetMsTooltip": "세그먼트 내 SFX 시작 밀리초입니다. 0이면 세그먼트 시작부터 재생합니다. 범위 0–30000ms.",
     "duckingLabel": "BGM ducking 게인 (dB)",
     "exportEnqueued": "생성 큐에 추가되었습니다",
     "exportFailed": "실행에 실패했습니다",

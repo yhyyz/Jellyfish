@@ -99,6 +99,19 @@ const DUCKING_DB_MIN = -30
 const DUCKING_DB_MAX = 0
 const DUCKING_DB_DEFAULT = -12
 
+/**
+ * SFX 偏移滑块边界：与后端 ``ChapterTimelineSegmentWrite.sfx_offset_ms``
+ * Pydantic 校验范围（``ge=0, le=30000``）保持完全一致。
+ *
+ * 取值语义：SFX 在 segment 内的起始毫秒，传给 ffmpeg ``adelay`` 滤镜；
+ * 缺省 0 表示从 segment 起点播放。30000ms = 30s 比单镜头时长上限大得多，
+ * 给用户在长 segment 内自由放置 SFX 的余量。
+ */
+const SFX_OFFSET_MIN = 0
+const SFX_OFFSET_MAX = 30000
+const SFX_OFFSET_STEP = 100
+const SFX_OFFSET_DEFAULT = 0
+
 /** 组件入参契约。 */
 export interface AVPreviewPanelProps {
   /** 当前章节 ID（chapter_av_export 的落点章节） */
@@ -142,10 +155,12 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
     SubtitleStyleValue | undefined
   >(undefined)
   // P5 W31 新增本地状态：mode + BGM/SFX file_id + ducking_db
+  // P5 W31-followup #6 新增本地状态：sfx_offset_ms（slider 持久化到 segment）
   const [audioMixMode, setAudioMixMode] = useState<AudioMixMode>('voice_only')
   const [bgmFileId, setBgmFileId] = useState<string | undefined>(undefined)
   const [sfxFileId, setSfxFileId] = useState<string | undefined>(undefined)
   const [bgmDuckingDb, setBgmDuckingDb] = useState<number>(DUCKING_DB_DEFAULT)
+  const [sfxOffsetMs, setSfxOffsetMs] = useState<number>(SFX_OFFSET_DEFAULT)
 
   /**
    * 拉项目下的音频候选 FileItem（type=audio）。
@@ -288,6 +303,23 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
     }
   }
 
+  /**
+   * P5 W31-followup #6：SFX 偏移滑块。
+   *
+   * 与 ducking 滑块同源逻辑：``onChange`` 仅更新本地 UI（拖动期间高频
+   * 不写库），``onAfterChange`` 在用户松开手时触发一次 PATCH。
+   * ``segmentId`` 缺失时静默不发请求，仅更新 UI。
+   */
+  const handleSfxOffsetChange = (next: number): void => {
+    setSfxOffsetMs(next)
+  }
+  const handleSfxOffsetChangeComplete = (next: number): void => {
+    setSfxOffsetMs(next)
+    if (segmentId) {
+      patchSegmentAudio.mutate({ sfx_offset_ms: next })
+    }
+  }
+
   // TaskCenter 在 layouts/MainLayout 中是常驻浮窗（非路由）；
   // 通过 zustand store 拿到 setOpen 直接打开浮窗即可。
   const setTaskCenterOpen = useTaskUiStore((state) => state.setOpen)
@@ -425,6 +457,25 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
                         options={audioOptions}
                         loading={audioFilesQuery.isLoading}
                         aria-label={t('avPreview.sfxLabel')}
+                      />
+                    </div>
+                    <div data-testid="av-preview-sfx-offset-row">
+                      <div className="flex items-center justify-between text-sm text-gray-600">
+                        <Tooltip title={t('avPreview.sfxOffsetMsTooltip')}>
+                          <span>{t('avPreview.sfxOffsetMs')}</span>
+                        </Tooltip>
+                        <span>{`${sfxOffsetMs} ms`}</span>
+                      </div>
+                      <Slider
+                        min={SFX_OFFSET_MIN}
+                        max={SFX_OFFSET_MAX}
+                        step={SFX_OFFSET_STEP}
+                        value={sfxOffsetMs}
+                        onChange={(v) => handleSfxOffsetChange(v as number)}
+                        onAfterChange={(v) =>
+                          handleSfxOffsetChangeComplete(v as number)
+                        }
+                        aria-label={t('avPreview.sfxOffsetMs')}
                       />
                     </div>
                     <div data-testid="av-preview-ducking-row">

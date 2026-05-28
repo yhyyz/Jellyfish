@@ -164,6 +164,8 @@
     "bgmPlaceholder": "プロジェクト配下の BGM 音声ファイルを選択",
     "sfxLabel": "SFX 効果音",
     "sfxPlaceholder": "プロジェクト配下の SFX 音声ファイルを選択",
+    "sfxOffsetMs": "SFX 開始オフセット（ms）",
+    "sfxOffsetMsTooltip": "セグメント内での SFX 開始ミリ秒。0 はセグメント開始から再生。範囲 0–30000ms。",
     "duckingLabel": "BGM ducking ゲイン（dB）",
     "exportEnqueued": "生成キューに追加しました",
     "exportFailed": "実行に失敗しました",

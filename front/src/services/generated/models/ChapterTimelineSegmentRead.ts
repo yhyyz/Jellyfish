@@ -41,6 +41,10 @@ export type ChapterTimelineSegmentRead = {
      * P5 W31：full 模式 sidechaincompress ducking 增益（dB）
      */
     bgm_ducking_db?: number;
+    /**
+     * P5 W31-followup：SFX 在 segment 内的起始毫秒（0..30000）
+     */
+    sfx_offset_ms?: number;
     clip_status: TimelineClipStatus;
     file_id?: (string | null);
     /**

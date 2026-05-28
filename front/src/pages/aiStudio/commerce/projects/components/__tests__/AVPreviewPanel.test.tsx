@@ -593,4 +593,38 @@ describe('AVPreviewPanel', () => {
       requestBody: expect.objectContaining({ sfx_file_id: 'sfx-zap' }),
     })
   })
+
+  it('case 17 (W31-followup #6): full 模式拖 sfx_offset 滑块 + 松开 → onAfterChange 触发 mutate', async () => {
+    const shot = makeShot()
+    renderPanel(
+      <AVPreviewPanel
+        chapterId="chap-17"
+        projectId="proj-17"
+        segmentId="seg-17"
+        shot={shot}
+      />,
+    )
+
+    fireEvent.click(
+      screen.getByRole('radio', {
+        name: 'avPreview.audioMixMode.full.label',
+      }),
+    )
+
+    // antd Slider 用 keyCode 触发 onChange + onAfterChange 同步回调，
+    // 与 case 12 ducking 滑块同一套交互机制；用 ArrowRight 让初始 0 上移。
+    const sfxOffsetRow = screen.getByTestId('av-preview-sfx-offset-row')
+    const slider = within(sfxOffsetRow).getByRole('slider')
+    fireEvent.keyDown(slider, { key: 'ArrowRight', keyCode: 39, which: 39 })
+
+    await waitFor(() => {
+      expect(mockedPatchSegmentAudio).toHaveBeenCalled()
+    })
+    const lastCall = mockedPatchSegmentAudio.mock.calls.at(-1)?.[0]
+    expect(lastCall.chapterId).toBe('chap-17')
+    expect(lastCall.segmentId).toBe('seg-17')
+    expect(lastCall.requestBody).toHaveProperty('sfx_offset_ms')
+    expect(typeof lastCall.requestBody.sfx_offset_ms).toBe('number')
+    expect(lastCall.requestBody.sfx_offset_ms).toBeGreaterThan(0)
+  })
 })

@@ -38,5 +38,9 @@ export type ChapterTimelineSegmentWrite = {
      * P5 W31：full 模式 sidechaincompress 自动 ducking 增益（dB），范围 [-30.0, 0.0]，默认 -12.0；voice_bgm 用静态 weights 不读此字段
      */
     bgm_ducking_db?: number;
+    /**
+     * P5 W31-followup：SFX 在 segment 内的起始毫秒（0..30000），传给 ffmpeg adelay；缺省 0 表示从 segment 起点播放
+     */
+    sfx_offset_ms?: number;
 };
 

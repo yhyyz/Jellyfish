@@ -136,10 +136,20 @@ async def _seed_chapter_with_segments(
     bgm_files_per_shot: bool = False,
     sfx_files_per_shot: bool = False,
     bgm_ducking_db: float = -12.0,
+    sfx_offset_ms: int = 0,
 ) -> dict[str, str | None]:
     """种入 Project + Chapter + N 个 Shot + ChapterTimelineSegment（可选 BGM/SFX）。
 
-    返回 ``{shot_idx: bgm_file_id_or_None, sfx_idx: sfx_file_id_or_None}``。
+    Args:
+        sm: 异步 session_maker。
+        n_shots: 镜头数。
+        bgm_files_per_shot / sfx_files_per_shot: 是否给每段建 BGM/SFX FileItem。
+        bgm_ducking_db: 写入 segment 的 ducking 增益。
+        sfx_offset_ms: 写入 segment 的 SFX 偏移（W31-followup 新增），缺省
+            0 等价 W31 既有行为；测试 SFX 时间轴时调到非 0 值。
+
+    Returns:
+        ``{shot_id -> bgm_file_id_or_None, sfx_<shot_id> -> sfx_file_id_or_None}``。
     """
 
     out: dict[str, str | None] = {}
@@ -224,6 +234,7 @@ async def _seed_chapter_with_segments(
                     bgm_file_id=bgm_id,
                     sfx_file_id=sfx_id,
                     bgm_ducking_db=bgm_ducking_db,
+                    sfx_offset_ms=sfx_offset_ms,
                 )
             )
             out[shot_id] = bgm_id
@@ -453,8 +464,116 @@ def test_build_filter_specs_full_downloads_bgm_and_sfx(
 
 
 # ---------------------------------------------------------------------------
-# 6. run_chapter_av_export_task: result 中带 audio_mix_mode
+# W31-followup #6: sfx_offset_ms 真实值透传 + adelay 用真实 offset
 # ---------------------------------------------------------------------------
+
+
+def test_build_filter_specs_passes_real_sfx_offset_ms(
+    session_local: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """W31-followup #6：planner 必须把 ``seg.sfx_offset_ms`` 真实值透传到 spec。
+
+    历史 W31 在 ``_build_filter_specs`` 把 ``sfx_offset_ms`` 写死成 0，导致
+    DB 列加了也用不上。本测试 seed 一个 segment 把 sfx_offset_ms=2500，
+    断言 spec 拿到的是 2500 而非 0。
+    """
+    asyncio.run(
+        _seed_chapter_with_segments(
+            session_local,
+            bgm_files_per_shot=True,
+            sfx_files_per_shot=True,
+            sfx_offset_ms=2500,
+        )
+    )
+
+    async def _fake_download(*, key: str) -> bytes:
+        del key
+        return b"\x00"
+
+    async def _fake_probe(_p: Path) -> dict[str, Any]:
+        return {"format": {"duration": "5.0"}, "streams": []}
+
+    def _fake_probe_dur(_probe: dict[str, Any]) -> tuple[float, bool]:
+        return 5.0, False
+
+    monkeypatch.setattr(worker_mod.storage, "download_file", _fake_download)
+    monkeypatch.setattr(worker_mod, "ffprobe_local_file", _fake_probe)
+    monkeypatch.setattr(worker_mod, "probe_duration_and_audio", _fake_probe_dur)
+
+    async def _go() -> None:
+        async with session_local() as db:
+            rows = await _resolve_segment_resources(db, chapter_id=_CHAPTER_ID)
+            specs, _inputs, _ass = await _build_filter_specs(
+                seg_resources=rows,
+                tmp_path=tmp_path,
+                audio_strategy_override=None,
+                audio_mix_mode=AudioMixMode.full,
+            )
+        assert specs[0].sfx_offset_ms == 2500, (
+            "planner 必须把 seg.sfx_offset_ms 真实值透传到 SegmentFilterSpec"
+        )
+
+    asyncio.run(_go())
+
+
+def test_full_mode_filter_uses_real_sfx_offset_in_adelay(
+    session_local: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """W31-followup #6：``full`` 模式 ffmpeg adelay 必须用真实 offset 而非 0。
+
+    串联 planner + filter：seed sfx_offset_ms=1800 → 调 ``_build_filter_specs``
+    + ``build_segment_filter`` → 断言 filter 字符串里有 ``adelay=1800|1800``，
+    不是 ``adelay=0|0``（W31 写死时的退化路径）。
+    """
+    from app.services.studio.chapter_av_export_filter import (
+        build_segment_filter,
+    )
+
+    asyncio.run(
+        _seed_chapter_with_segments(
+            session_local,
+            bgm_files_per_shot=True,
+            sfx_files_per_shot=True,
+            sfx_offset_ms=1800,
+        )
+    )
+
+    async def _fake_download(*, key: str) -> bytes:
+        del key
+        return b"\x00"
+
+    async def _fake_probe(_p: Path) -> dict[str, Any]:
+        return {"format": {"duration": "5.0"}, "streams": []}
+
+    def _fake_probe_dur(_probe: dict[str, Any]) -> tuple[float, bool]:
+        return 5.0, False
+
+    monkeypatch.setattr(worker_mod.storage, "download_file", _fake_download)
+    monkeypatch.setattr(worker_mod, "ffprobe_local_file", _fake_probe)
+    monkeypatch.setattr(worker_mod, "probe_duration_and_audio", _fake_probe_dur)
+
+    async def _go() -> str:
+        async with session_local() as db:
+            rows = await _resolve_segment_resources(db, chapter_id=_CHAPTER_ID)
+            specs, _inputs, _ass = await _build_filter_specs(
+                seg_resources=rows,
+                tmp_path=tmp_path,
+                audio_strategy_override=None,
+                audio_mix_mode=AudioMixMode.full,
+            )
+        return build_segment_filter(specs[0], width=1080, height=1920)
+
+    chain = asyncio.run(_go())
+    assert "adelay=1800|1800" in chain, (
+        f"filter graph 必须用真实 sfx_offset，得到: {chain[:200]}"
+    )
+    assert "adelay=0|0" not in chain, (
+        "filter graph 不能再出现写死 adelay=0|0 的退化路径"
+    )
 
 
 def test_runner_records_audio_mix_mode_in_result(

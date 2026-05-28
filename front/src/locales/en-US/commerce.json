@@ -164,6 +164,8 @@
     "bgmPlaceholder": "Pick a BGM audio file from the project",
     "sfxLabel": "SFX track",
     "sfxPlaceholder": "Pick an SFX audio file from the project",
+    "sfxOffsetMs": "SFX start offset (ms)",
+    "sfxOffsetMsTooltip": "SFX start offset within the segment in milliseconds; 0 means start with the segment. Range 0–30000ms.",
     "duckingLabel": "BGM ducking gain (dB)",
     "exportEnqueued": "Enqueued in the generation queue",
     "exportFailed": "Failed to trigger",
