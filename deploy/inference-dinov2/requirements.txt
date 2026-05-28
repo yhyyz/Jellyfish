@@ -1,0 +1,18 @@
+# DINOv2 ViT-B/14 一致性服务 sidecar 依赖。
+#
+# 设计要点：
+# - torch / transformers 的版本受 facebook/dinov2-base 模型卡兼容性约束；
+#   transformers >=4.41 起官方支持 DINOv2 backbone；
+# - 镜像中默认使用 CPU 版 torch（CUDA 由 nvidia runtime 在容器外注入），
+#   主线 Jellyfish 主镜像不引入这些重型依赖（DECISION D-VISION-DEPLOY）。
+# - 所有版本上限锁定在已发布的稳定大版本，避免上游 break-change 影响 P4 上线节奏。
+
+torch==2.4.1
+torchvision==0.19.1
+transformers==4.46.3
+pillow==10.4.0
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+httpx==0.27.2
+numpy==1.26.4

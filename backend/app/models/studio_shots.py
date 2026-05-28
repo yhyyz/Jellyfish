@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -97,6 +97,16 @@ class Shot(Base,TimestampMixin):
         default=ProductFocusLevel.none,
         server_default=ProductFocusLevel.none.value,
         comment="商品视觉聚焦级别：subtle/functional/hero/none，决定 r2v multi_ref 取图优先级（Decision H）",
+    )
+    consistency_score: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        default=None,
+        comment=(
+            "DINOv2 ViT-B/14 视觉一致性得分（W27-T1）；cosine similarity 区间 [-1, 1]，"
+            "通常落 [0, 1]。NULL 显式表示未跑过 / 缺 reference / sidecar 不可达，"
+            "与数值 0.0（合法 cosine 0）区分"
+        ),
     )
 
     chapter: Mapped["Chapter"] = relationship(back_populates="shots")

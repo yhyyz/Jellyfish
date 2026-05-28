@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     smtp_start_tls: bool = True
     smtp_sender: str | None = None
 
+    # DINOv2 sidecar（W27-T1：视觉一致性引擎，DECISION D-VISION-DEPLOY=sidecar）
+    # base_url 缺省指向 docker-compose 内部 DNS；本机调试可在 .env 覆盖。
+    # timeout 与 retries 的乘积（5×3=15s）小于 worker 默认 600s，避免单帧
+    # 推理失败把整个 task 拖死。
+    dinov2_sidecar_base_url: str = "http://inference-dinov2:8001"
+    dinov2_sidecar_timeout_s: float = 30.0
+    dinov2_sidecar_retries: int = 3
+    dinov2_sidecar_retry_backoff_s: float = 1.5
+
     def model_post_init(self, __context: object) -> None:
         if not self.celery_broker_url or not str(self.celery_broker_url).strip():
             password_part = f":{self.redis_password}@" if self.redis_password else ""

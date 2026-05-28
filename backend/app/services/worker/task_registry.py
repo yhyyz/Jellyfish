@@ -43,6 +43,11 @@ from app.services.studio.shot_subtitle_render_worker import (
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.studio.tts_generate_worker import build_tts_generate_executor
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
+from app.services.visual_consistency.consistency_worker import (
+    DEFAULT_TIMEOUT_SEC as SHOT_CONSISTENCY_TIMEOUT_SEC,
+    TASK_KIND as SHOT_CONSISTENCY_TASK_KIND,
+    run_shot_consistency_check_task,
+)
 from app.services.script_processing_worker import (
     CharacterPortraitTaskExecutor,
     ConsistencyTaskExecutor,
@@ -167,4 +172,15 @@ task_executor_registry.register(
 # 产出"配音 + 字幕"最终成片，与老 chapter_timeline_export 并存（后者标 deprecated）。
 task_executor_registry.register(
     "chapter_av_export", build_chapter_av_export_executor()
+)
+# P4 W27-T1: 视觉一致性 worker（slow 队列，600s 超时），ffmpeg 抽 6 帧 ->
+# DINOv2 sidecar embed -> 与 ProductImage(front/three_quarter) cosine ->
+# 写 shot.consistency_score。ML stack 完全在 sidecar，主镜像不受影响。
+task_executor_registry.register(
+    SHOT_CONSISTENCY_TASK_KIND,
+    AbstractAsyncDelegatingExecutor(
+        task_kind=SHOT_CONSISTENCY_TASK_KIND,
+        runner=run_shot_consistency_check_task,
+        timeout_seconds=SHOT_CONSISTENCY_TIMEOUT_SEC,
+    ),
 )

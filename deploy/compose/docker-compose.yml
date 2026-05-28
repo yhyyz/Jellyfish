@@ -161,6 +161,41 @@ services:
     depends_on:
       - backend
 
+  # P4 W27-T1: DINOv2 ViT-B/14 视觉一致性 sidecar（DECISION D-VISION-DEPLOY=sidecar）。
+  # 主 backend / celery-worker 通过 dinov2_sidecar_base_url=http://inference-dinov2:8001
+  # 调用，本服务承担所有 torch/transformers ML 依赖，与主镜像完全解耦。
+  inference-dinov2:
+    build:
+      context: ../inference-dinov2
+      dockerfile: Dockerfile
+    environment:
+      HF_HOME: /models
+      TRANSFORMERS_CACHE: /models
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    ports:
+      - "${DINOV2_SIDECAR_PORT:-8001}:8001"
+    volumes:
+      # 挂卷持久化模型权重（~330MB），避免每次重启容器重新下载。
+      - dinov2_models:/models
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      # start_period 留 120s 给首次模型加载（HF Hub 网络速度差时需要）。
+      start_period: 120s
+      retries: 3
+    restart: unless-stopped
+    # GPU 加速可选：宿主机装 nvidia-container-toolkit 后，把以下 deploy 段
+    # 取消注释（compose v2.20+ 原生支持 device 请求）。CPU 模式下保持注释即可。
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
 volumes:
   mysql_data:
   rustfs_data:
+  dinov2_models:
