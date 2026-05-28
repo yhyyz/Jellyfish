@@ -14,6 +14,7 @@ from app.core.auth import ApiKeyMiddleware
 from app.core.db import async_session_maker
 from app.core.observability import setup_logging, setup_metrics
 from app.core.rate_limit import setup_rate_limit
+from app.core.security_checks import check_security_at_boot
 from app.schemas.common import ApiResponse
 
 
@@ -68,15 +69,21 @@ async def lifespan(app: FastAPI):
 
     顺序：
     1. 配置日志；
-    2. 同步注册（providers / task adapters，内存结构）；
-    3. 异步引导（系统级 PromptTemplate 等需要 DB 会话的状态）。
+    2. 启动期安全 sanity 检查（v0.7.1）：BOOTSTRAP_ADMIN_PASSWORD /
+       SECRET_KEY 在 production-like env 下必须被显式覆盖，否则 raise；
+    3. 同步注册（providers / task adapters，内存结构）；
+    4. 异步引导（系统级 PromptTemplate 等需要 DB 会话的状态）。
 
-    第 3 步对启动失败容忍：若 DB 不可用（例如刚启动尚未 init_db），
+    第 4 步对启动失败容忍：若 DB 不可用（例如刚启动尚未 init_db），
     仅打印 warning，不阻断进程；正常生产路径会在 lifespan 之外通过
     init_db 或迁移先建好表。
+
+    第 2 步与第 4 步处理策略不同：安全检查必须阻塞启动（让运维立刻看
+    到错误），DB 检查仅 warning（让本地开发即使没启 DB 也能跑导入）。
     """
 
     setup_logging()
+    check_security_at_boot()
     bootstrap_all_registries()
     try:
         async with async_session_maker() as db:

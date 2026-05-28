@@ -103,13 +103,18 @@ class Settings(BaseSettings):
     # refresh token，60 分钟既能避免短会话刷新焦虑，又能在密钥泄露时及时缩窗。
     secret_key: str = "change-me-in-production-please-use-a-random-32byte-key"
     access_token_expire_minutes: int = 60
-    # Stage-1 双轨开关（W32 过渡期）：``True`` 时仍允许调用方用旧的
-    # ``api_key`` 静态 token 当 admin 通过 ``Authorization: Bearer <api_key>``。
-    # 计划 ≤ 2 周后默认 ``False``，并在 P6+ 阶段彻底删除该 fallback 分支。
-    jwt_fallback_to_static: bool = True
+    # P5 v0.7.1 安全加固：``jwt_fallback_to_static`` 默认从 True 改为 False。
+    # W32 双轨过渡期已足够长，所有调用方应已切到 ``Authorization: Bearer
+    # <jwt>``；继续保留 ``api_key`` 静态 token 作为 admin 身份是不必要的攻
+    # 击面（一旦 ``api_key`` 泄露即等同 root 账号）。
+    # 临时回滚机制：仍保留环境变量开关 ``JWT_FALLBACK_TO_STATIC=true``，让
+    # 阻塞迁移的 power-user 能 24 小时窗口续命；P6 起 ``ApiKeyMiddleware``
+    # 会彻底删除该分支。
+    jwt_fallback_to_static: bool = False
     # ``bootstrap_admin`` 启动期幂等创建首个 admin 用户（仅当 users 表为空）。
     # 生产 .env 必须改 ``BOOTSTRAP_ADMIN_PASSWORD``，否则在公网暴露 ``admin /
-    # changeme`` 是即时入侵入口。
+    # changeme`` 是即时入侵入口。v0.7.1 启动期 sanity check 在
+    # ``JELLYFISH_ENV in {production, prod, staging}`` 时直接 raise。
     bootstrap_admin_username: str = "admin"
     bootstrap_admin_email: str = "admin@jellyfish.local"
     bootstrap_admin_password: str = "changeme"

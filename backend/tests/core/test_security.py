@@ -105,3 +105,109 @@ def test_decode_access_token_rejects_missing_sub() -> None:
     )
     with pytest.raises(InvalidTokenError):
         decode_access_token(no_sub)
+
+
+# ---------------------------------------------------------------------------
+# v0.7.1 启动期 sanity check：BOOTSTRAP_ADMIN_PASSWORD / SECRET_KEY
+# 默认值在 production-like env 下必须 raise；其它环境只 warning。
+# ---------------------------------------------------------------------------
+
+
+from app.core.security_checks import (  # noqa: E402  pylint: disable=wrong-import-position
+    check_security_at_boot,
+)
+
+
+def test_security_checks_warn_in_dev_when_password_is_changeme(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """dev 环境下 BOOTSTRAP_ADMIN_PASSWORD='changeme' 仅 warning，不阻塞。"""
+    monkeypatch.setenv("JELLYFISH_ENV", "development")
+    monkeypatch.setattr(settings, "bootstrap_admin_password", "changeme")
+    monkeypatch.setattr(
+        settings,
+        "secret_key",
+        "rotated-secret-key-32bytes-long-not-default-xx",
+    )
+    caplog.set_level("WARNING")
+
+    check_security_at_boot()
+
+    assert any(
+        "BOOTSTRAP_ADMIN_PASSWORD is the default 'changeme'" in rec.message
+        for rec in caplog.records
+    )
+
+
+def test_security_checks_reject_changeme_in_staging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """staging 环境下 BOOTSTRAP_ADMIN_PASSWORD='changeme' 必须 RuntimeError。"""
+    monkeypatch.setenv("JELLYFISH_ENV", "staging")
+    monkeypatch.setattr(settings, "bootstrap_admin_password", "changeme")
+    monkeypatch.setattr(
+        settings,
+        "secret_key",
+        "rotated-secret-key-32bytes-long-not-default-xx",
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        check_security_at_boot()
+    assert "rejected in production-like env" in str(exc_info.value)
+    assert "JELLYFISH_ENV='staging'" in str(exc_info.value)
+
+
+def test_security_checks_reject_changeme_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """production 环境下 BOOTSTRAP_ADMIN_PASSWORD='changeme' 必须 RuntimeError。"""
+    monkeypatch.setenv("JELLYFISH_ENV", "production")
+    monkeypatch.setattr(settings, "bootstrap_admin_password", "changeme")
+    monkeypatch.setattr(
+        settings,
+        "secret_key",
+        "rotated-secret-key-32bytes-long-not-default-xx",
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        check_security_at_boot()
+    assert "BOOTSTRAP_ADMIN_PASSWORD" in str(exc_info.value)
+
+
+def test_security_checks_reject_default_secret_key_in_prod(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """production 环境下默认 SECRET_KEY 必须 RuntimeError（独立于密码检查）。"""
+    monkeypatch.setenv("JELLYFISH_ENV", "prod")
+    monkeypatch.setattr(
+        settings, "bootstrap_admin_password", "rotated-strong-pwd"
+    )
+    # secret_key 显式 reset 到默认占位值（不依赖 import 时的状态）
+    monkeypatch.setattr(
+        settings,
+        "secret_key",
+        "change-me-in-production-please-use-a-random-32byte-key",
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        check_security_at_boot()
+    assert "SECRET_KEY" in str(exc_info.value)
+
+
+def test_security_checks_pass_when_all_overridden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """生产环境 + 全部 default 已被覆盖 → 检查无声通过。"""
+    monkeypatch.setenv("JELLYFISH_ENV", "production")
+    monkeypatch.setattr(
+        settings, "bootstrap_admin_password", "real-strong-pwd-from-secrets"
+    )
+    monkeypatch.setattr(
+        settings,
+        "secret_key",
+        "rotated-secret-key-32bytes-long-not-default-xx",
+    )
+
+    # 不应 raise 任何异常
+    check_security_at_boot()
