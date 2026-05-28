@@ -16,6 +16,9 @@ from app.services.commerce.compliance_check_worker import (
     TASK_KIND as COMPLIANCE_CHECK_TASK_KIND,
     run_compliance_check_task,
 )
+from app.services.commerce.commerce_export_worker import (
+    build_commerce_export_executor,
+)
 from app.services.commerce.cta_writer_worker import build_cta_writer_executor
 from app.services.commerce.hook_writer_worker import build_hook_writer_executor
 from app.services.commerce.product_info_extract_worker import (
@@ -183,4 +186,10 @@ task_executor_registry.register(
         runner=run_shot_consistency_check_task,
         timeout_seconds=SHOT_CONSISTENCY_TIMEOUT_SEC,
     ),
+)
+# P4 W23-T2: 平台导出 worker（slow 队列，1800s 超时），把 chapter_av_export 产出
+# 的"原始成片"按 PlatformExportPreset 转换为平台衍生版本（aspect scale+pad / 水印
+# overlay / 贴纸 overlay / loudnorm / 编码与容器切换），输出落 product_export usage。
+task_executor_registry.register(
+    "commerce_export", build_commerce_export_executor()
 )

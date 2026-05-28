@@ -102,6 +102,11 @@ TASK_KIND_CHAPTER_AV_EXPORT = "chapter_av_export"
 #: P3 W17 T17-7：Decision F 决策树编排，slow 队列。
 TASK_KIND_CHAPTER_AV_PLAN = "chapter_av_plan"
 
+#: 平台导出任务 ``task_kind``，与
+#: ``app.services.commerce.commerce_export_worker`` 注册表同步。
+#: P4 W23-T2：把章节成片按 PlatformExportPreset 转换为平台发布版本，slow 队列。
+TASK_KIND_COMMERCE_EXPORT = "commerce_export"
+
 #: 统一 Celery 入口 task name；所有 worker 通过 task_kind 二级路由。
 _CELERY_ENTRY_TASK = "task.execute"
 
@@ -336,6 +341,30 @@ class CommerceTaskDispatchService:
             queue=_STORY_BATCH_QUEUE,
         )
 
+    async def enqueue_commerce_export(
+        self, body: dict[str, Any]
+    ) -> _EnqueueDescriptor:
+        """落 ``task_kind=commerce_export`` 的 :class:`GenerationTask` 行（``slow`` 队列；不发 broker 消息）。
+
+        W23-T2 平台导出：把章节成片按 PlatformExportPreset 转换出平台衍生版本。
+        单次导出包含 ffmpeg scale+pad / overlay / loudnorm 等链路，整体耗时
+        与 chapter_av_export 同档（3-10 分钟），故走 ``slow`` 队列与 chapter_av_*
+        系列对齐，避免与 fast 队列上的分钟级 worker 争抢消费者。
+
+        Args:
+            body: 平台导出请求 dict（必含 ``variant_id`` + ``preset_id``）。
+
+        Returns:
+            :class:`_EnqueueDescriptor`；调用方必须 commit 后调
+            :py:meth:`dispatch_after_commit`。
+        """
+
+        return await self._prepare_enqueue(
+            task_kind=TASK_KIND_COMMERCE_EXPORT,
+            run_args=body,
+            queue=_STORY_BATCH_QUEUE,
+        )
+
     async def enqueue_story_batch(self, body: dict[str, Any]) -> _EnqueueDescriptor:
         """落 ``task_kind=story_video_batch_generate`` 批量任务行（``slow`` 队列；不发 broker 消息）。
 
@@ -508,6 +537,7 @@ __all__ = [
     "TASK_KIND_ASR_SUBTITLE_GENERATE",
     "TASK_KIND_CHAPTER_AV_EXPORT",
     "TASK_KIND_CHAPTER_AV_PLAN",
+    "TASK_KIND_COMMERCE_EXPORT",
     "TASK_KIND_COMPLIANCE_CHECK",
     "TASK_KIND_PRODUCT_INFO_EXTRACT",
     "TASK_KIND_SHOT_SUBTITLE_RENDER",

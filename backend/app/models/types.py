@@ -220,6 +220,11 @@ class FileUsageKind(str, Enum):
     chapter_master_audio = "chapter_master_audio"
     chapter_master_subtitle = "chapter_master_subtitle"
     chapter_master_dubbed = "chapter_master_dubbed"
+    # === P4 W23 平台导出（commerce_export）扩展 ===
+    # 把章节成片按 PlatformExportPreset 转换出的平台衍生版本（如抖音 9:16
+    # 默认 / TikTok 默认 / 小红书 1:1 等）；与 chapter_master_dubbed 区分：
+    # 后者是"原始成片"，product_export 是"按平台预设衍生的发布版本"。
+    product_export = "product_export"
 
 
 class AudioMixMode(str, Enum):

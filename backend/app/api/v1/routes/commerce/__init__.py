@@ -11,7 +11,13 @@ VoicePackPicker / SubtitleStylePicker 等组件消费 P3 W17/W18 已落地的
 
 from fastapi import APIRouter
 
-from app.api.v1.routes.commerce import outcomes, subtitle_styles, tasks, voice_packs
+from app.api.v1.routes.commerce import (
+    commerce_export,
+    outcomes,
+    subtitle_styles,
+    tasks,
+    voice_packs,
+)
 
 router = APIRouter()
 
@@ -19,5 +25,7 @@ router.include_router(tasks.router, tags=["commerce/tasks"])
 router.include_router(voice_packs.router, tags=["commerce-voice-packs"])
 router.include_router(subtitle_styles.router, tags=["commerce-subtitle-styles"])
 router.include_router(outcomes.router, tags=["commerce-outcomes"])
+# === P4 W23-T2: 平台导出入口（POST /export，slow 队列）===
+router.include_router(commerce_export.router, tags=["commerce/export"])
 
 __all__ = ["router"]
