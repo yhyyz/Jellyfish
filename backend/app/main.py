@@ -87,6 +87,18 @@ async def lifespan(app: FastAPI):
         logging.getLogger(__name__).warning(
             "bootstrap_async_state skipped: %s", exc
         )
+
+    try:
+        from app.services.auth.bootstrap_admin import bootstrap_admin
+
+        async with async_session_maker() as db:
+            await bootstrap_admin(db)
+    except Exception as exc:  # pragma: no cover - 启动期容错
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "bootstrap_admin skipped: %s", exc
+        )
     yield
 
 

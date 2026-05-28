@@ -97,6 +97,23 @@ class Settings(BaseSettings):
     # 仅供应急 / 排障 / power-user 强制导出使用，不应作为长期配置。
     chapter_av_export_bypass_consistency: bool = False
 
+    # === P5 W32 RBAC / JWT 配置 ===
+    # 生产部署必须把 ``SECRET_KEY`` 改成 32+ 字节随机串，否则签名易被重放。
+    # ``ACCESS_TOKEN_EXPIRE_MINUTES`` 控制 access token 生命周期；当前不引入
+    # refresh token，60 分钟既能避免短会话刷新焦虑，又能在密钥泄露时及时缩窗。
+    secret_key: str = "change-me-in-production-please-use-a-random-32byte-key"
+    access_token_expire_minutes: int = 60
+    # Stage-1 双轨开关（W32 过渡期）：``True`` 时仍允许调用方用旧的
+    # ``api_key`` 静态 token 当 admin 通过 ``Authorization: Bearer <api_key>``。
+    # 计划 ≤ 2 周后默认 ``False``，并在 P6+ 阶段彻底删除该 fallback 分支。
+    jwt_fallback_to_static: bool = True
+    # ``bootstrap_admin`` 启动期幂等创建首个 admin 用户（仅当 users 表为空）。
+    # 生产 .env 必须改 ``BOOTSTRAP_ADMIN_PASSWORD``，否则在公网暴露 ``admin /
+    # changeme`` 是即时入侵入口。
+    bootstrap_admin_username: str = "admin"
+    bootstrap_admin_email: str = "admin@jellyfish.local"
+    bootstrap_admin_password: str = "changeme"
+
     def model_post_init(self, __context: object) -> None:
         if not self.celery_broker_url or not str(self.celery_broker_url).strip():
             password_part = f":{self.redis_password}@" if self.redis_password else ""
