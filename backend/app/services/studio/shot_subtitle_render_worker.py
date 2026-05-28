@@ -13,7 +13,10 @@
 
     - ``shot_id`` (str, required): 字幕所属镜头 ID（用于落 SubtitleTrack.shot_id）。
     - ``style_id`` (str, required): 使用的 SubtitleStyle ID（DOUYIN_DEFAULT
-      等系统级或用户自定义）。
+      等系统级或项目级覆盖）。worker 通过
+      :func:`app.services.studio.subtitle_style_service.resolve_for_shot`
+      做"项目级 → 系统级 fallback"两级解析，确保用户中途修改项目覆盖
+      立即生效。
     - ``word_timestamps`` (list[dict], required): 字级时间戳数组，元素含
       ``text`` / ``begin_ms`` / ``end_ms`` 三字段；上游可能是 ``TtsResult.word_timestamps``
       或 ``asr_subtitle_generate`` 任务结果中的同名字段。
@@ -42,7 +45,8 @@
 - 默认超时 ``120s``：纯计算 + 一次 minio 上传，比 TTS / ASR 快得多。
 - ``fast`` 队列：与 TTS / ASR 对齐，避免与视频 / 章节合成 worker 抢占。
 - 渲染逻辑全部在 ``subtitle_renderer`` 纯函数模块，本文件只做编排：
-  解析 run_args → 加载 SubtitleStyle → 切分 cue → 渲染 ASS →
+  解析 run_args → :func:`subtitle_style_service.resolve_for_shot` 做项目级
+  优先 / 系统级 fallback 两级 lookup → 切分 cue → 渲染 ASS →
   上传 minio → 落 SubtitleTrack。
 """
 
@@ -60,13 +64,14 @@ from app.core.db import async_session_maker
 from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.models.studio import FileItem, FileType
-from app.models.subtitle import SubtitleStyle, SubtitleTrack
+from app.models.subtitle import SubtitleTrack
 from app.models.types import SubtitleSource
 from app.services.studio.subtitle_renderer import (
     render_ass,
     split_words_into_cues,
 )
 from app.services.studio.subtitle_safe_zone import check_safe_zone
+from app.services.studio.subtitle_style_service import resolve_for_shot
 from app.services.worker.async_task_support import cancel_if_requested_async
 from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor
 from app.services.worker.task_logging import log_task_event, log_task_failure
@@ -224,11 +229,11 @@ async def run_shot_subtitle_render_task(
                 log_task_event(TASK_KIND, task_id, "cancelled", stage="before_execute")
                 return
 
-            style = await session.get(SubtitleStyle, style_id)
-            if style is None:
-                raise LookupError(
-                    f"SubtitleStyle not found: style_id={style_id}"
-                )
+            style = await resolve_for_shot(
+                db=session,
+                shot_id=shot_id,
+                style_id_hint=style_id,
+            )
 
             warnings = check_safe_zone(style)
 
@@ -248,7 +253,7 @@ async def run_shot_subtitle_render_task(
                 session,
                 ass_text=ass_text,
                 shot_id=shot_id,
-                style_id=style_id,
+                style_id=style.id,
             )
 
             duration_ms = cues[-1].end_ms if cues else 0
@@ -256,7 +261,7 @@ async def run_shot_subtitle_render_task(
             track = SubtitleTrack(
                 id=track_id,
                 shot_id=shot_id,
-                style_id=style_id,
+                style_id=style.id,
                 file_id=file_obj.id,
                 language_code=language_code,
                 format=style.format,
@@ -269,7 +274,7 @@ async def run_shot_subtitle_render_task(
             payload: dict[str, Any] = {
                 "subtitle_track_id": track_id,
                 "file_id": file_obj.id,
-                "style_id": style_id,
+                "style_id": style.id,
                 "language_code": language_code,
                 "source": source.value,
                 "cue_count": len(cues),
