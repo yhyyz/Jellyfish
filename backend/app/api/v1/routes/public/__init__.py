@@ -8,6 +8,7 @@
 按业务模块组织 sub-router：
 
 - ``tasks`` —— 第三方任务状态查询（W24-T3）。
+- ``generate`` —— 第三方生成调用入口（W24-T2）。
 
 未来 wave（如 ``commerce/products/extract`` 公开版、文件下载等）继续
 在此聚合，避免散落在 ``commerce/*`` 内、与 admin 入口耦合到一起。
@@ -15,7 +16,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.routes.public import tasks
+from app.api.v1.routes.public import generate, tasks
 
 router = APIRouter()
 
@@ -24,6 +25,13 @@ router.include_router(
     tasks.router,
     prefix="/commerce/tasks",
     tags=["public/commerce/tasks"],
+)
+
+# /commerce/generate —— 第三方生成调用入口（W24-T2）
+router.include_router(
+    generate.router,
+    prefix="/commerce/generate",
+    tags=["public/commerce/generate"],
 )
 
 __all__ = ["router"]

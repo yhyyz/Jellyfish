@@ -10,6 +10,14 @@
   响应形态。
 """
 
+from app.schemas.public.generate import (
+    PublicGenerateRequest,
+    PublicGenerateResponse,
+)
 from app.schemas.public.task_status import PublicTaskStatusRead
 
-__all__ = ["PublicTaskStatusRead"]
+__all__ = [
+    "PublicGenerateRequest",
+    "PublicGenerateResponse",
+    "PublicTaskStatusRead",
+]
