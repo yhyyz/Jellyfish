@@ -69,7 +69,7 @@ from app.models.studio import (
     Shot,
 )
 from app.models.task_links import GenerationTaskLink
-from app.models.types import AudioStrategy, FileUsageKind
+from app.models.types import AudioMixMode, AudioStrategy, FileUsageKind
 from app.services.studio.chapter_av_export import (
     EXPORT_RELATION_TYPE,
     EXPORT_RESOURCE_TYPE,
@@ -158,6 +158,35 @@ def _coerce_audio_strategy(
         return fallback
 
 
+def _coerce_audio_mix_mode(
+    value: object,
+    *,
+    fallback: AudioMixMode = AudioMixMode.voice_only,
+) -> AudioMixMode:
+    """把 ``run_args['audio_mix_mode']`` 兜底为 enum。
+
+    P5 W31：``ChapterAvExportRequest.audio_mix_mode`` 默认 ``voice_only``，
+    保持 W19 既有行为；调用方显式传 ``voice_bgm`` / ``full`` / ``off``
+    时按枚举映射；脏值（无效字符串）走 fallback 而非 raise，避免 worker
+    在边缘 run_args 上整章节卡死。
+    """
+
+    if isinstance(value, AudioMixMode):
+        return value
+    raw = _coerce_str(value)
+    if not raw:
+        return fallback
+    try:
+        return AudioMixMode(raw)
+    except ValueError:
+        logger.warning(
+            "chapter_av_export 收到未知 audio_mix_mode=%r，fallback=%s",
+            raw,
+            fallback.value,
+        )
+        return fallback
+
+
 async def _download_file_or_raise(
     file_obj: FileItem | None, *, dest: Path, label: str
 ) -> Path:
@@ -176,12 +205,33 @@ async def _resolve_segment_resources(
     session: AsyncSession,
     *,
     chapter_id: str,
-) -> list[tuple[ChapterTimelineSegment, Shot, FileItem, FileItem | None, FileItem | None]]:
+) -> list[
+    tuple[
+        ChapterTimelineSegment,
+        Shot,
+        FileItem,
+        FileItem | None,
+        FileItem | None,
+        FileItem | None,
+        FileItem | None,
+    ]
+]:
     """加载章节内所有 segment 及其依赖 FileItem（按 position 排序）。
 
     返回列表元素为 ``(segment, shot, video_file, ass_file_or_none,
-    tts_audio_file_or_none)``。视频文件缺失抛错（合成必须项），字幕与
-    TTS 缺失允许（worker 内部走降级路径）。
+    tts_audio_file_or_none, bgm_file_or_none, sfx_file_or_none)``。
+    视频文件缺失抛错（合成必须项），其余文件缺失允许（worker 内部走降级
+    路径）：
+
+    - 字幕 (.ass) 缺失：跳过 ``subtitles=`` 滤镜。
+    - TTS 缺失（仅 silent_with_tts 路径）：兜底 ``anullsrc`` 静音。
+    - BGM 缺失（P5 W31 voice_bgm/full 路径）：``build_filter_complex``
+      自动 fallback 到 voice_only 并写 warning。
+    - SFX 缺失（P5 W31 full 路径）：``build_filter_complex`` 跳过
+      ``amerge`` 但保留 sidechain ducking。
+
+    BGM/SFX 引用了 file_id 但 FileItem 行不存在或 storage_key 为空时，
+    本函数把 FileItem 视为 None 并写 warning（与 W31 spec 行为一致）。
     """
 
     seg_rows = (
@@ -195,7 +245,15 @@ async def _resolve_segment_resources(
         raise RuntimeError("章节时间线为空，无法合成")
 
     out: list[
-        tuple[ChapterTimelineSegment, Shot, FileItem, FileItem | None, FileItem | None]
+        tuple[
+            ChapterTimelineSegment,
+            Shot,
+            FileItem,
+            FileItem | None,
+            FileItem | None,
+            FileItem | None,
+            FileItem | None,
+        ]
     ] = []
     for seg in seg_rows:
         shot = await session.get(Shot, seg.shot_id)
@@ -216,23 +274,74 @@ async def _resolve_segment_resources(
         if seg.tts_audio_file_id:
             tts_file = await session.get(FileItem, seg.tts_audio_file_id)
 
-        out.append((seg, shot, video_file, ass_file, tts_file))
+        # P5 W31：BGM/SFX 同样宽容降级——查不到行或 storage_key 缺失视为
+        # None，最终 build_filter_complex 走 voice_only fallback。
+        bgm_file = await _safe_load_optional_file(
+            session, file_id=seg.bgm_file_id, label=f"shot {shot.id} BGM"
+        )
+        sfx_file = await _safe_load_optional_file(
+            session, file_id=seg.sfx_file_id, label=f"shot {shot.id} SFX"
+        )
+
+        out.append((seg, shot, video_file, ass_file, tts_file, bgm_file, sfx_file))
     return out
+
+
+async def _safe_load_optional_file(
+    session: AsyncSession,
+    *,
+    file_id: str | None,
+    label: str,
+) -> FileItem | None:
+    """读取可选 FileItem 行；不存在或 storage_key 缺失时记录 warning 并返回 None。
+
+    封装这一步是为了在 BGM/SFX 缺失时统一走"降级 + warning"路径，让
+    ``_resolve_segment_resources`` 主链路保持线性（避免每个可选文件都重
+    复 if/None 判断）。
+    """
+
+    if not file_id:
+        return None
+    file_obj = await session.get(FileItem, file_id)
+    if file_obj is None:
+        logger.warning("%s 引用的 FileItem 不存在: %s（降级跳过）", label, file_id)
+        return None
+    if not file_obj.storage_key:
+        logger.warning(
+            "%s FileItem %s 缺少 storage_key（降级跳过）", label, file_id
+        )
+        return None
+    return file_obj
 
 
 async def _build_filter_specs(
     *,
     seg_resources: list[
-        tuple[ChapterTimelineSegment, Shot, FileItem, FileItem | None, FileItem | None]
+        tuple[
+            ChapterTimelineSegment,
+            Shot,
+            FileItem,
+            FileItem | None,
+            FileItem | None,
+            FileItem | None,
+            FileItem | None,
+        ]
     ],
     tmp_path: Path,
     audio_strategy_override: AudioStrategy | None,
+    audio_mix_mode: AudioMixMode,
 ) -> tuple[list[SegmentFilterSpec], list[Path], list[Path | None]]:
-    """下载所有视频/TTS 到本地 + 构造 SegmentFilterSpec + 返回 input 文件顺序。
+    """下载所有视频/TTS/BGM/SFX 到本地 + 构造 SegmentFilterSpec + 返回 input 顺序。
 
-    输入顺序约定：``-i video_0 video_1 ... video_N tts_0 tts_1 ... tts_M``。
-    每段 segment 的 ``video_input_index`` 即其 0-based segment 序号，
-    每段 TTS（若存在）顺序追加到视频之后并赋全局递增 input_index。
+    输入顺序约定：
+        ``-i video_0 video_1 ... video_N tts_* bgm_* sfx_*``。
+    每段 segment 的 ``video_input_index`` 即其 0-based segment 序号；TTS、
+    BGM、SFX 全局递增追加在视频之后。
+
+    P5 W31：``audio_mix_mode == AudioMixMode.off`` 时本函数仍下载 BGM/SFX
+    与否对 filter graph 无影响，``build_filter_complex`` 内部直接走
+    anullsrc；为减少 IO 开销，``off`` 模式跳过 BGM/SFX 下载。
+    ``voice_only`` 模式同样跳过 BGM/SFX 下载（filter 不会引用）。
 
     Returns:
         (specs, video_paths, ass_paths)：
@@ -244,12 +353,23 @@ async def _build_filter_specs(
     n_segments = len(seg_resources)
     video_paths: list[Path] = []
     ass_paths: list[Path | None] = []
-    tts_paths: list[Path] = []
+    extra_paths: list[Path] = []
 
     specs: list[SegmentFilterSpec] = []
-    next_tts_input_index = n_segments
+    next_extra_input_index = n_segments
+    # 是否需要拉 BGM/SFX：voice_only / off 模式跳过，节省 IO。
+    need_bgm = audio_mix_mode in (AudioMixMode.voice_bgm, AudioMixMode.full)
+    need_sfx = audio_mix_mode == AudioMixMode.full
 
-    for idx, (seg, shot, video_file, ass_file, tts_file) in enumerate(seg_resources):
+    for idx, (
+        seg,
+        shot,
+        video_file,
+        ass_file,
+        tts_file,
+        bgm_file,
+        sfx_file,
+    ) in enumerate(seg_resources):
         # 下载视频。
         video_dest = tmp_path / f"video_{idx:04d}.mp4"
         await _download_file_or_raise(video_file, dest=video_dest, label=f"shot {shot.id} 视频")
@@ -285,11 +405,32 @@ async def _build_filter_specs(
         if audio_strategy == AudioStrategy.silent_with_tts and tts_file is not None:
             tts_dest = tmp_path / f"tts_{idx:04d}_0.mp3"
             await _download_file_or_raise(tts_file, dest=tts_dest, label=f"shot {shot.id} TTS")
-            tts_paths.append(tts_dest)
+            extra_paths.append(tts_dest)
             tts_clips.append(
-                TtsClipSpec(input_index=next_tts_input_index, offset_ms=0)
+                TtsClipSpec(input_index=next_extra_input_index, offset_ms=0)
             )
-            next_tts_input_index += 1
+            next_extra_input_index += 1
+
+        # P5 W31：仅 voice_bgm / full 模式拉 BGM；仅 full 模式拉 SFX。
+        bgm_input_index: int | None = None
+        if need_bgm and bgm_file is not None:
+            bgm_dest = tmp_path / f"bgm_{idx:04d}.mp3"
+            await _download_file_or_raise(
+                bgm_file, dest=bgm_dest, label=f"shot {shot.id} BGM"
+            )
+            extra_paths.append(bgm_dest)
+            bgm_input_index = next_extra_input_index
+            next_extra_input_index += 1
+
+        sfx_input_index: int | None = None
+        if need_sfx and sfx_file is not None:
+            sfx_dest = tmp_path / f"sfx_{idx:04d}.mp3"
+            await _download_file_or_raise(
+                sfx_file, dest=sfx_dest, label=f"shot {shot.id} SFX"
+            )
+            extra_paths.append(sfx_dest)
+            sfx_input_index = next_extra_input_index
+            next_extra_input_index += 1
 
         specs.append(
             SegmentFilterSpec(
@@ -301,10 +442,15 @@ async def _build_filter_specs(
                 audio_strategy=audio_strategy,
                 ass_path=ass_dest,
                 tts_clips=tuple(tts_clips),
+                audio_mix_mode=audio_mix_mode,
+                bgm_input_index=bgm_input_index,
+                sfx_input_index=sfx_input_index,
+                sfx_offset_ms=0,
+                bgm_ducking_db=float(seg.bgm_ducking_db),
             )
         )
 
-    return specs, video_paths + tts_paths, ass_paths
+    return specs, video_paths + extra_paths, ass_paths
 
 
 async def _run_ffmpeg_av_export(
@@ -469,6 +615,9 @@ async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> 
     audio_strategy_override = (
         _coerce_audio_strategy(override_value) if override_value else None
     )
+    # P5 W31：audio_mix_mode 控制是否在合成阶段混入 BGM / SFX；
+    # 缺省 voice_only 维持 W19 既有行为。
+    audio_mix_mode = _coerce_audio_mix_mode(run_args.get("audio_mix_mode"))
 
     async with async_session_maker() as session:
         try:
@@ -522,6 +671,7 @@ async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> 
                     seg_resources=seg_resources,
                     tmp_path=tmp_path,
                     audio_strategy_override=audio_strategy_override,
+                    audio_mix_mode=audio_mix_mode,
                 )
                 filter_complex = build_filter_complex(
                     specs,
@@ -598,7 +748,7 @@ async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> 
 
             # 把成片指针落到每一段对应的 Shot.dubbed_video_file_id，便于前端
             # 工作室预览时优先取 dubbed 版本。
-            for seg, shot, *_ in seg_resources:
+            for _seg, shot, *_ in seg_resources:
                 shot.dubbed_video_file_id = new_file_id
 
             await store.set_result(
@@ -610,6 +760,7 @@ async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> 
                     "aspect": aspect,
                     "fps": DEFAULT_FPS,
                     "lufs_target": LOUDNORM_I,
+                    "audio_mix_mode": audio_mix_mode.value,
                 },
             )
 
