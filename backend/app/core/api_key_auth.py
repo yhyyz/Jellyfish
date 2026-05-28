@@ -49,12 +49,20 @@ from app.services.api_quota.quota_service import BCRYPT_COST  # re-export for te
 # 常量
 # ---------------------------------------------------------------------------
 
-PUBLIC_PATH_PREFIX = "/public/"
-"""``/public/*`` 路径前缀。
+PUBLIC_PATH_PREFIX: tuple[str, ...] = ("/public/", "/api/v1/public/")
+"""``/public/*`` 与 ``/api/v1/public/*`` 共同走 per-key bcrypt 通道。
 
-任何 ``request.url.path.startswith(PUBLIC_PATH_PREFIX)`` 的请求都会
-走 per-key bcrypt 校验；其它路径继续走 :mod:`app.core.auth` 的静态
-单 key 兼容分支。
+为什么是 tuple 而不是单字符串：
+
+- T24-1 落地时只覆盖根级 ``/public/*``；T24-3 起希望把第三方公开接
+  口收敛进 ``/api/v1/`` 的统一 OpenAPI schema 树（让前端 generated
+  client 与现有 commerce/* 系列保持同源），路由会挂在
+  ``/api/v1/public/*`` 下；
+- 两条前缀的安全模型完全相同（per-key bcrypt + 配额扣减），只是路
+  由挂点不同。用 tuple 让 :func:`is_public_path` 命中任一前缀都走
+  同一条认证管线，避免出现"短路径有保护、长路径无保护"的歧义；
+- 保留 ``/public/*`` 是为了向后兼容已经接入的 SaaS 调用方，移除会
+  造成 4xx 不可恢复的合同破坏。
 """
 
 QUOTA_FREE_PATH_SUFFIXES: tuple[str, ...] = ("/status",)
@@ -82,7 +90,12 @@ QUOTA_EXHAUSTED_RETRY_AFTER_SECONDS = 24 * 60 * 60
 
 
 def is_public_path(path: str) -> bool:
-    """判断请求路径是否走 per-key bcrypt 通道。"""
+    """判断请求路径是否走 per-key bcrypt 通道。
+
+    命中任一 :data:`PUBLIC_PATH_PREFIX` 元组中的前缀即返回 ``True``，
+    使得 ``/public/*`` 与 ``/api/v1/public/*`` 共享同一条认证 + 配额
+    管线。
+    """
 
     return path.startswith(PUBLIC_PATH_PREFIX)
 
@@ -289,9 +302,14 @@ async def enforce_public_request(
     )
     try:
         async with session_maker() as db:
-            await authenticate_request(
+            matched = await authenticate_request(
                 db, plaintext, deduct_quota=deduct
             )
+        # 把命中的配额行附到 request.state，供下游 slowapi 限流器
+        # 按 ``rate_per_minute`` 字段做 per-key 速率隔离（W24-T4）。
+        # 注意：bcrypt hash 本身就是 ``ApiKeyQuota`` 主键，可直接作为
+        # 限流 key 使用，无需再次加密。
+        request.state.api_key_quota = matched
     except HTTPException as exc:
         return JSONResponse(
             status_code=exc.status_code,

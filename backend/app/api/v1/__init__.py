@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1.routes import film, health, llm, studio
 from app.api.v1.routes.commerce import router as commerce_router
+from app.api.v1.routes.public import router as public_router
 from app.api.v1.routes.script import router as script_router
 from app.api.v1.routes.settings import router as settings_router
 from app.api.v1.routes.studio import (
@@ -30,6 +31,13 @@ router.include_router(script_router)
 # race-aware：放在 commerce/script 之后，确保上游路由聚合先就位，
 # 不会因为 import 时序意外覆盖既有 prefix。
 router.include_router(settings_router, prefix="/settings")
+
+# === P4 W24-T3: 第三方公开通道（per-key bcrypt + 配额扣减）===
+# 挂载点 /api/v1/public/*，与根级 /public/* 共享同一条认证管线
+# （:func:`app.core.api_key_auth.is_public_path` 同时命中两种前缀）。
+# race-aware：放在 settings 之后，避免 sibling 任务并行时 router 注册
+# 顺序冲突。
+router.include_router(public_router, prefix="/public")
 
 # === W6-T2: Story-Driven Commerce 入口（独立挂载，避免与 W6-T1/T3 冲突）===
 router.include_router(
