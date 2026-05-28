@@ -36,6 +36,8 @@ dependencies = [
     "celery-redbeat>=2.0",
     "dashscope>=1.25.19",
     "soundfile>=0.13.1",
+    "pwdlib[argon2,bcrypt]>=0.2.1",
+    "pyjwt[crypto]>=2.8.0",
 ]
 
 [project.optional-dependencies]
