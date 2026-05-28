@@ -47,6 +47,31 @@ class ChapterTimelineSegmentWrite(BaseModel):
             "时合成阶段 amix 混入"
         ),
     )
+    bgm_file_id: str | None = Field(
+        None,
+        description=(
+            "P5 W31：本段 BGM 音轨 FileItem ID（usage_kind=bgm_track）。"
+            "AudioMixMode in {voice_bgm, full} 时合成阶段混入；voice_only 忽略；"
+            "为空时 voice_bgm/full 自动 fallback 到 voice_only"
+        ),
+    )
+    sfx_file_id: str | None = Field(
+        None,
+        description=(
+            "P5 W31：本段 SFX 音轨 FileItem ID（usage_kind=sfx_track）。"
+            "仅 AudioMixMode=full 合成阶段通过 amerge 加入；为空时 full 自动"
+            "降级为带 ducking 的 voice_bgm"
+        ),
+    )
+    bgm_ducking_db: float = Field(
+        default=-12.0,
+        ge=-30.0,
+        le=0.0,
+        description=(
+            "P5 W31：full 模式 sidechaincompress 自动 ducking 增益（dB），"
+            "范围 [-30.0, 0.0]，默认 -12.0；voice_bgm 用静态 weights 不读此字段"
+        ),
+    )
 
 
 class ChapterTimelineWrite(BaseModel):
@@ -71,6 +96,20 @@ class ChapterTimelineSegmentRead(BaseModel):
     tts_audio_file_id: str | None = Field(
         None,
         description="P3 W19：本段 TTS 音频 FileItem ID（silent_with_tts 路径混入）",
+    )
+    bgm_file_id: str | None = Field(
+        None,
+        description="P5 W31：本段 BGM FileItem ID（voice_bgm/full 模式混入）",
+    )
+    sfx_file_id: str | None = Field(
+        None,
+        description="P5 W31：本段 SFX FileItem ID（仅 full 模式 amerge 加入）",
+    )
+    bgm_ducking_db: float = Field(
+        default=-12.0,
+        ge=-30.0,
+        le=0.0,
+        description="P5 W31：full 模式 sidechaincompress ducking 增益（dB）",
     )
     clip_status: TimelineClipStatus
     file_id: str | None = None

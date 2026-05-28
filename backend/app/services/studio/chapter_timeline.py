@@ -102,6 +102,10 @@ async def build_timeline_read(db: AsyncSession, chapter_id: str) -> ChapterTimel
         trim_end = seg_row.trim_end_ms if seg_row else None
         sub_fid = seg_row.subtitle_track_file_id if seg_row else None
         tts_fid = seg_row.tts_audio_file_id if seg_row else None
+        # P5 W31：BGM/SFX/ducking 字段透传到 Read 视图，缺省值与 schema 默认对齐。
+        bgm_fid = seg_row.bgm_file_id if seg_row else None
+        sfx_fid = seg_row.sfx_file_id if seg_row else None
+        ducking_db = float(seg_row.bgm_ducking_db) if seg_row else -12.0
         reads.append(
             ChapterTimelineSegmentRead(
                 id=sid,
@@ -111,6 +115,9 @@ async def build_timeline_read(db: AsyncSession, chapter_id: str) -> ChapterTimel
                 trim_end_ms=trim_end,
                 subtitle_track_file_id=sub_fid,
                 tts_audio_file_id=tts_fid,
+                bgm_file_id=bgm_fid,
+                sfx_file_id=sfx_fid,
+                bgm_ducking_db=ducking_db,
                 clip_status=status,
                 file_id=fid,
                 label=shot.title,
@@ -180,6 +187,9 @@ async def replace_timeline_segments(
                 trim_end_ms=row.trim_end_ms,
                 subtitle_track_file_id=row.subtitle_track_file_id,
                 tts_audio_file_id=row.tts_audio_file_id,
+                bgm_file_id=row.bgm_file_id,
+                sfx_file_id=row.sfx_file_id,
+                bgm_ducking_db=row.bgm_ducking_db,
             ),
         )
 
