@@ -1,5 +1,5 @@
 /**
- * AVPreviewPanel —— 分镜工作室「音视频预览」抽屉面板（W20-T4 / W31-T5）。
+ * AVPreviewPanel —— 分镜工作室「音视频预览」抽屉面板（W20-T4 / W31-T5 / W31-T8）。
  *
  * 这是 W20 Wave B 的入口面板：把 Wave A 已完工的 VoicePackPicker /
  * SubtitleStylePicker 嵌进来，同时把"成片预览 / 触发生成 / 跳任务中心"
@@ -10,6 +10,15 @@
  *   - mode ∈ {voice_bgm, full} 时显示 BGM 文件 Select（FileItem with type=audio）
  *   - mode = full 时再显示 SFX 文件 Select + bgm_ducking_db Slider (-30~0 dB)
  *   - 触发 chapter_av_export 时把 audio_mix_mode 直接拼进请求体
+ *
+ * P5 W31-T8：BGM/SFX 选择 + ducking 滑块通过新增的 PATCH 端点真持久化到
+ * ``ChapterTimelineSegment``：
+ *   - BGM/SFX Select onChange 立即 mutate（用户单击即写）
+ *   - ducking Slider 用 antd v5 ``onChangeComplete``（松开手才 mutate），
+ *     避免拖动时高频写库
+ *   - audio_mix_mode 仍然是 ChapterAvExportRequest 入参，**不**触发 PATCH
+ *     （它不属于 segment 持久化字段）
+ *   - mutation 失败 message.error，UI 状态不回滚，让用户重试或修正
  *
  * 视图状态机（按 shot.dubbed_video_file_id 二选一）：
  *   - 已就位 → 主区域 <video controls> 直接播放最终成片
@@ -30,8 +39,8 @@
  *     * 「音色」→ VoicePackPicker（默认 zh-CN）
  *     * 「字幕样式」→ SubtitleStylePicker
  *     * 「音轨混合」(W31) → AudioMixMode 4 段 + 条件 BGM/SFX 选择器 + ducking 滑块
- *   暂用本地 useState 承接选中态；TODO(W20-T5/W31 follow-up): 等项目级
- *   mutation hook 就绪后改为对 StoryProject 与 ChapterTimelineSegment 回写。
+ *   语音/字幕/AudioMixMode 仍是组件本地状态；BGM/SFX/ducking 通过 PATCH
+ *   持久化到 segment（W31-T8）。
  */
 import React, { useMemo, useState } from 'react'
 import {
@@ -46,12 +55,14 @@ import {
   message,
 } from 'antd'
 import { PlayCircleOutlined, UnorderedListOutlined } from '@ant-design/icons'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
 import {
   CommerceTasksService,
+  StudioChaptersService,
   StudioFilesService,
+  type ChapterTimelineSegmentAudioPatch,
   type ShotRead,
 } from '../../../../../services/generated'
 import { resolveAssetUrl } from '../../../assets/utils'
@@ -96,6 +107,15 @@ export interface AVPreviewPanelProps {
   projectId: string
   /** 当前选中镜头；可能为 null（未选 / 加载中均可） */
   shot?: ShotRead | null
+  /**
+   * 当前镜头对应的 ChapterTimelineSegment 主键。
+   *
+   * P5 W31-T8：BGM/SFX/ducking 通过 ``PATCH /api/v1/studio/chapters/{cid}
+   * /timeline/segments/{sid}/audio`` 持久化，需要 segment_id；为空则
+   * BGM/SFX/ducking 选择器仍可视化但不会发起 mutate（用户先要 PUT 一次
+   * timeline 让 segment 落库）。
+   */
+  segmentId?: string | null
   /** 任务入队成功 callback（可选） */
   onTriggerExport?: () => void
 }
@@ -104,15 +124,15 @@ export interface AVPreviewPanelProps {
  * 「音视频预览」抽屉主面板。
  *
  * 内部维护多段本地状态：voicePackId / subtitleStyle / audioMixMode /
- * bgmFileId / sfxFileId / bgmDuckingDb。当前阶段 W31-T5 只做组件级
- * 展示与触发动作，不把所有选择写回 ChapterTimelineSegment；audio_mix_mode
- * 直接通过 chapter_av_export 请求传入 worker 生效，BGM/SFX/ducking 后续
- * 通过 PATCH segment 持久化（TODO W31 follow-up）。
+ * bgmFileId / sfxFileId / bgmDuckingDb。前两段与 audio_mix_mode 仍然只在
+ * 组件内存中（语音 + 字幕 follow-up 持久化、audio_mix_mode 是 export
+ * 入参）；BGM/SFX/ducking 通过 W31-T8 新增的 PATCH 端点真写回 segment。
  */
 export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
   chapterId,
   projectId,
   shot,
+  segmentId,
   onTriggerExport,
 }) => {
   const { t } = useTranslation('commerce')
@@ -195,6 +215,78 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
       message.error(`${t('avPreview.exportFailed')}：${errMsg}`)
     },
   })
+
+  /**
+   * P5 W31-T8：PATCH segment audio mutation。
+   *
+   * 把 BGM/SFX/ducking 偏量更新写回 ``ChapterTimelineSegment``。前端缺少
+   * ``segmentId``（父级未提供，例如 segment 尚未通过 PUT timeline 落库）
+   * 时直接 ``message.warning`` 不发请求，避免 404 噪声。
+   *
+   * onSuccess 失效 ``chapterTimelineKeys.detail(chapterId)``，让任何同级
+   * useQuery (如 useChapterTimeline，未来引入) 自动 refetch；onError 显示
+   * antd ``message.error`` 但不回滚 UI 状态——让用户看到自己刚选的值仍在
+   * 屏幕上，便于纠正后重试。
+   */
+  const queryClient = useQueryClient()
+  const patchSegmentAudio = useMutation({
+    mutationFn: async (patch: ChapterTimelineSegmentAudioPatch) => {
+      if (!segmentId) {
+        throw new Error('segmentId is required for patch')
+      }
+      const res =
+        await StudioChaptersService.patchChapterTimelineSegmentAudioApiV1StudioChaptersChapterIdTimelineSegmentsSegmentIdAudioPatch(
+          {
+            chapterId,
+            segmentId,
+            requestBody: patch,
+          },
+        )
+      return res.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['commerce', 'chapter-timeline', 'detail', chapterId],
+      })
+    },
+    onError: (err) => {
+      const errMsg = err instanceof Error ? err.message : '未知错误'
+      message.error(`${t('avPreview.audioPatchFailed')}：${errMsg}`)
+    },
+  })
+
+  /**
+   * BGM/SFX 选择器变更 → 立即 mutate（无 debounce：选择器是离散事件，
+   * 不像滑块那样产生连续 tick）。``segmentId`` 缺失时仅更新本地 UI，不
+   * 发请求（用户改 mode 后挑文件，segment 还没在 DB 里也很正常）。
+   */
+  const handleBgmChange = (next: string | undefined): void => {
+    setBgmFileId(next)
+    if (segmentId) {
+      patchSegmentAudio.mutate({ bgm_file_id: next ?? null })
+    }
+  }
+  const handleSfxChange = (next: string | undefined): void => {
+    setSfxFileId(next)
+    if (segmentId) {
+      patchSegmentAudio.mutate({ sfx_file_id: next ?? null })
+    }
+  }
+
+  /**
+   * ducking 滑块：``onChange`` 仅更新本地 UI（拖动期间高频，不写库），
+   * ``onAfterChange`` 在用户松开手时触发一次 mutate（antd 5.10 API；
+   * v5.12+ 改名 onChangeComplete，本仓库 5.10 仍用 onAfterChange）。
+   */
+  const handleDuckingChange = (next: number): void => {
+    setBgmDuckingDb(next)
+  }
+  const handleDuckingChangeComplete = (next: number): void => {
+    setBgmDuckingDb(next)
+    if (segmentId) {
+      patchSegmentAudio.mutate({ bgm_ducking_db: next })
+    }
+  }
 
   // TaskCenter 在 layouts/MainLayout 中是常驻浮窗（非路由）；
   // 通过 zustand store 拿到 setOpen 直接打开浮窗即可。
@@ -310,7 +402,7 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
                       style={{ width: '100%' }}
                       placeholder={t('avPreview.bgmPlaceholder')}
                       value={bgmFileId}
-                      onChange={(v) => setBgmFileId(v ?? undefined)}
+                      onChange={(v) => handleBgmChange(v ?? undefined)}
                       options={audioOptions}
                       loading={audioFilesQuery.isLoading}
                       aria-label={t('avPreview.bgmLabel')}
@@ -329,7 +421,7 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
                         style={{ width: '100%' }}
                         placeholder={t('avPreview.sfxPlaceholder')}
                         value={sfxFileId}
-                        onChange={(v) => setSfxFileId(v ?? undefined)}
+                        onChange={(v) => handleSfxChange(v ?? undefined)}
                         options={audioOptions}
                         loading={audioFilesQuery.isLoading}
                         aria-label={t('avPreview.sfxLabel')}
@@ -345,7 +437,10 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
                         max={DUCKING_DB_MAX}
                         step={1}
                         value={bgmDuckingDb}
-                        onChange={(v) => setBgmDuckingDb(v as number)}
+                        onChange={(v) => handleDuckingChange(v as number)}
+                        onAfterChange={(v) =>
+                          handleDuckingChangeComplete(v as number)
+                        }
                         aria-label={t('avPreview.duckingLabel')}
                       />
                     </div>

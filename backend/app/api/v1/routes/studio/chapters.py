@@ -27,12 +27,16 @@ from app.models.task_links import GenerationTaskLink
 from app.schemas.studio.chapter_timeline import (
     ChapterTimelineExportRequest,
     ChapterTimelineRead,
+    ChapterTimelineSegmentAudioPatch,
+    ChapterTimelineSegmentRead,
     ChapterTimelineWrite,
 )
 from app.schemas.studio.projects import ChapterCreate, ChapterRead, ChapterUpdate
 from app.services.studio.chapter_timeline import (
+    SegmentNotFoundError,
     TimelineLayoutConflictError,
     build_timeline_read,
+    patch_segment_audio,
     replace_timeline_segments,
 )
 from app.services.studio.chapter_timeline_export import (
@@ -141,6 +145,44 @@ async def post_chapter_timeline_export(
     await db.commit()
     enqueue_task_execution(task_record.id)
     return created_response(TaskCreated(task_id=task_record.id))
+
+
+@router.patch(
+    "/{chapter_id}/timeline/segments/{segment_id}/audio",
+    response_model=ApiResponse[ChapterTimelineSegmentRead],
+    summary="P5 W31-T8：偏量更新单 segment 的 BGM/SFX/ducking 字段",
+)
+async def patch_chapter_timeline_segment_audio(
+    chapter_id: str,
+    segment_id: str,
+    body: ChapterTimelineSegmentAudioPatch,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ChapterTimelineSegmentRead]:
+    """偏量更新本段 BGM/SFX/ducking 字段（不动 layout_version、不动其它段）。
+
+    与 ``PUT /timeline``（全量替换）的语义区分：
+    - PUT 改顺序、入出点、字幕/TTS/BGM 等任意字段，``layout_version`` +1；
+    - PATCH 只动一段三列，避免乐观锁误冲突，专给 AVPreviewPanel UI 选 BGM
+      / 拖 ducking 滑块时高频写回使用。
+
+    422：``bgm_ducking_db`` 不在 ``[-30, 0]`` 范围内由 Pydantic 自动校验。
+    404：``chapter_id`` 不存在 / segment 不存在 / segment 不属于该 chapter。
+    W19b 事务边界：service 层只 ``flush``，本路由统一 ``commit``，异常时
+    整条请求 rollback。
+    """
+
+    await get_or_404(db, Chapter, chapter_id, detail=entity_not_found("Chapter"))
+    try:
+        data = await patch_segment_audio(
+            db, chapter_id=chapter_id, segment_id=segment_id, body=body
+        )
+    except SegmentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=entity_not_found("ChapterTimelineSegment"),
+        ) from exc
+    await db.commit()
+    return success_response(data)
 
 
 @router.get(

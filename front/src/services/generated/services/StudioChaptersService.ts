@@ -4,11 +4,13 @@
 /* eslint-disable */
 import type { ApiResponse_ChapterRead_ } from '../models/ApiResponse_ChapterRead_';
 import type { ApiResponse_ChapterTimelineRead_ } from '../models/ApiResponse_ChapterTimelineRead_';
+import type { ApiResponse_ChapterTimelineSegmentRead_ } from '../models/ApiResponse_ChapterTimelineSegmentRead_';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_ChapterRead__ } from '../models/ApiResponse_PaginatedData_ChapterRead__';
 import type { ApiResponse_TaskCreated_ } from '../models/ApiResponse_TaskCreated_';
 import type { ChapterCreate } from '../models/ChapterCreate';
 import type { ChapterTimelineExportRequest } from '../models/ChapterTimelineExportRequest';
+import type { ChapterTimelineSegmentAudioPatch } from '../models/ChapterTimelineSegmentAudioPatch';
 import type { ChapterTimelineWrite } from '../models/ChapterTimelineWrite';
 import type { ChapterUpdate } from '../models/ChapterUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -78,6 +80,45 @@ export class StudioChaptersService {
             url: '/api/v1/studio/chapters/{chapter_id}/timeline/export',
             path: {
                 'chapter_id': chapterId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * P5 W31-T8：偏量更新单 segment 的 BGM/SFX/ducking 字段
+     * 偏量更新本段 BGM/SFX/ducking 字段（不动 layout_version、不动其它段）。
+     *
+     * 与 ``PUT /timeline``（全量替换）的语义区分：
+     * - PUT 改顺序、入出点、字幕/TTS/BGM 等任意字段，``layout_version`` +1；
+     * - PATCH 只动一段三列，避免乐观锁误冲突，专给 AVPreviewPanel UI 选 BGM
+     * / 拖 ducking 滑块时高频写回使用。
+     *
+     * 422：``bgm_ducking_db`` 不在 ``[-30, 0]`` 范围内由 Pydantic 自动校验。
+     * 404：``chapter_id`` 不存在 / segment 不存在 / segment 不属于该 chapter。
+     * W19b 事务边界：service 层只 ``flush``，本路由统一 ``commit``，异常时
+     * 整条请求 rollback。
+     * @returns ApiResponse_ChapterTimelineSegmentRead_ Successful Response
+     * @throws ApiError
+     */
+    public static patchChapterTimelineSegmentAudioApiV1StudioChaptersChapterIdTimelineSegmentsSegmentIdAudioPatch({
+        chapterId,
+        segmentId,
+        requestBody,
+    }: {
+        chapterId: string,
+        segmentId: string,
+        requestBody: ChapterTimelineSegmentAudioPatch,
+    }): CancelablePromise<ApiResponse_ChapterTimelineSegmentRead_> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/studio/chapters/{chapter_id}/timeline/segments/{segment_id}/audio',
+            path: {
+                'chapter_id': chapterId,
+                'segment_id': segmentId,
             },
             body: requestBody,
             mediaType: 'application/json',

@@ -23,6 +23,7 @@ export type { ApiResponse_BrandArchetypeRead_ } from './models/ApiResponse_Brand
 export type { ApiResponse_BrandStyleGuideRead_ } from './models/ApiResponse_BrandStyleGuideRead_';
 export type { ApiResponse_ChapterRead_ } from './models/ApiResponse_ChapterRead_';
 export type { ApiResponse_ChapterTimelineRead_ } from './models/ApiResponse_ChapterTimelineRead_';
+export type { ApiResponse_ChapterTimelineSegmentRead_ } from './models/ApiResponse_ChapterTimelineSegmentRead_';
 export type { ApiResponse_CharacterPortraitAnalysisResult_ } from './models/ApiResponse_CharacterPortraitAnalysisResult_';
 export type { ApiResponse_ChartDataResponse_ } from './models/ApiResponse_ChartDataResponse_';
 export type { ApiResponse_ComplianceProfileRead_ } from './models/ApiResponse_ComplianceProfileRead_';
@@ -154,6 +155,7 @@ export type { ChapterStatus } from './models/ChapterStatus';
 export type { ChapterTimelineEncodeMode } from './models/ChapterTimelineEncodeMode';
 export type { ChapterTimelineExportRequest } from './models/ChapterTimelineExportRequest';
 export type { ChapterTimelineRead } from './models/ChapterTimelineRead';
+export type { ChapterTimelineSegmentAudioPatch } from './models/ChapterTimelineSegmentAudioPatch';
 export type { ChapterTimelineSegmentRead } from './models/ChapterTimelineSegmentRead';
 export type { ChapterTimelineSegmentWrite } from './models/ChapterTimelineSegmentWrite';
 export type { ChapterTimelineWrite } from './models/ChapterTimelineWrite';

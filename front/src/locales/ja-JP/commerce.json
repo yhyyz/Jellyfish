@@ -167,7 +167,8 @@
     "duckingLabel": "BGM ducking ゲイン（dB）",
     "exportEnqueued": "生成キューに追加しました",
     "exportFailed": "実行に失敗しました",
-    "exportPending": "生成中…"
+    "exportPending": "生成中…",
+    "audioPatchFailed": "オーディオミックス設定の保存に失敗しました"
   },
   "compliance": {},
   "formula": {},

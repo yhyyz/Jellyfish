@@ -167,7 +167,8 @@
     "duckingLabel": "BGM ducking 게인 (dB)",
     "exportEnqueued": "생성 큐에 추가되었습니다",
     "exportFailed": "실행에 실패했습니다",
-    "exportPending": "생성 중…"
+    "exportPending": "생성 중…",
+    "audioPatchFailed": "오디오 믹스 설정 저장에 실패했습니다"
   },
   "compliance": {},
   "formula": {},

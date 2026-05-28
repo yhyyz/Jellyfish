@@ -22,6 +22,7 @@ from app.services.studio.chapter_timeline_trim import (
 )
 from app.schemas.studio.chapter_timeline import (
     ChapterTimelineRead,
+    ChapterTimelineSegmentAudioPatch,
     ChapterTimelineSegmentRead,
     ChapterTimelineWrite,
     TimelineClipStatus,
@@ -206,3 +207,91 @@ async def replace_timeline_segments(
 
     await db.flush()
     return await build_timeline_read(db, chapter_id)
+
+
+class SegmentNotFoundError(Exception):
+    """目标 segment 不存在或不属于指定 chapter（路由层映射 404）。"""
+
+
+async def patch_segment_audio(
+    db: AsyncSession,
+    *,
+    chapter_id: str,
+    segment_id: str,
+    body: ChapterTimelineSegmentAudioPatch,
+) -> ChapterTimelineSegmentRead:
+    """P5 W31-T8：偏量更新指定 segment 的 BGM / SFX / ducking 字段。
+
+    为什么独立于 ``replace_timeline_segments`` 存在：
+        前者是"全量替换章节时间线"，每次调用要重发所有 segment（layout
+        版本号 +1，重置顺序）；本函数只动一行的三个 audio 列，避免
+        AVPreviewPanel 用户改 BGM 时把整章 layout_version 往前推、把其他
+        客户端的乐观锁失效。
+
+    只读取请求体中实际出现的字段（``model_dump(exclude_unset=True)``），
+    保证未传字段保留 segment 现值；显式传 ``null`` 才清空对应列。
+
+    事务边界（W19b commit-then-flush）：
+        本函数只 ``flush`` 不 ``commit``——commit 由路由层在响应前统一执行，
+        与 ``put_chapter_timeline`` 行为对称，便于异常时整条请求 rollback。
+
+    Args:
+        db: 异步 ORM 会话。
+        chapter_id: 路径参数中的章节 ID，用于校验 segment 归属。
+        segment_id: 待更新的 ``ChapterTimelineSegment`` 主键。
+        body: ``ChapterTimelineSegmentAudioPatch``，仅更新已传字段。
+
+    Returns:
+        刷新后的 ``ChapterTimelineSegmentRead``，含 BGM/SFX/ducking 最终值
+        与 clip_status 等展示字段（与 ``build_timeline_read`` 保持一致）。
+
+    Raises:
+        SegmentNotFoundError: segment 不存在或 ``chapter_id`` 不匹配。
+    """
+
+    seg = await db.get(ChapterTimelineSegment, segment_id)
+    if seg is None or seg.chapter_id != chapter_id:
+        raise SegmentNotFoundError(
+            f"segment 不属于该章节: chapter_id={chapter_id}, segment_id={segment_id}"
+        )
+
+    update = body.model_dump(exclude_unset=True)
+    if "bgm_file_id" in update:
+        seg.bgm_file_id = update["bgm_file_id"]
+    if "sfx_file_id" in update:
+        seg.sfx_file_id = update["sfx_file_id"]
+    if "bgm_ducking_db" in update and update["bgm_ducking_db"] is not None:
+        seg.bgm_ducking_db = float(update["bgm_ducking_db"])
+
+    await db.flush()
+    await db.refresh(seg)
+
+    # 解析 clip_status / file_id（与 build_timeline_read 同源逻辑，但只看
+    # 本段对应的 shot 而非全章节，省一轮 ORM 扫描）。
+    shot = await db.get(Shot, seg.shot_id)
+    if shot is None:
+        raise SegmentNotFoundError(
+            f"segment 关联 shot 不存在: shot_id={seg.shot_id}"
+        )
+    files_by_id: dict[str, FileItem] = {}
+    if shot.generated_video_file_id:
+        file_obj = await db.get(FileItem, shot.generated_video_file_id)
+        if file_obj is not None:
+            files_by_id[file_obj.id] = file_obj
+    clip_status, file_id = _clip_status_and_file_id(shot, files_by_id)
+
+    return ChapterTimelineSegmentRead(
+        id=seg.id,
+        shot_id=seg.shot_id,
+        position=int(seg.position),
+        trim_start_ms=seg.trim_start_ms,
+        trim_end_ms=seg.trim_end_ms,
+        subtitle_track_file_id=seg.subtitle_track_file_id,
+        tts_audio_file_id=seg.tts_audio_file_id,
+        bgm_file_id=seg.bgm_file_id,
+        sfx_file_id=seg.sfx_file_id,
+        bgm_ducking_db=float(seg.bgm_ducking_db),
+        clip_status=clip_status,
+        file_id=file_id,
+        label=shot.title,
+    )

@@ -26,11 +26,12 @@
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import {
   CommerceTasksService,
+  StudioChaptersService,
   StudioFilesService,
   type ShotRead,
 } from '../../../../../../services/generated'
@@ -111,6 +112,8 @@ function renderPanel(ui: React.ReactNode) {
 let mockedEnqueueAvExport: any
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockedListFiles: any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockedPatchSegmentAudio: any
 
 beforeEach(() => {
   mockedEnqueueAvExport = vi.spyOn(
@@ -121,15 +124,33 @@ beforeEach(() => {
     StudioFilesService,
     'listFilesApiApiV1StudioFilesGet',
   )
+  mockedPatchSegmentAudio = vi.spyOn(
+    StudioChaptersService,
+    'patchChapterTimelineSegmentAudioApiV1StudioChaptersChapterIdTimelineSegmentsSegmentIdAudioPatch',
+  )
   // 默认返回空列表，单个测试可以覆写。
   mockedListFiles.mockResolvedValue({
     data: { items: [], total: 0, page: 1, page_size: 50 },
+  })
+  // P5 W31-T8 默认 PATCH 成功，单个测试覆写为 reject 验证错误路径。
+  mockedPatchSegmentAudio.mockResolvedValue({
+    data: {
+      id: 'seg-1',
+      shot_id: 'shot-1',
+      position: 0,
+      bgm_file_id: null,
+      sfx_file_id: null,
+      bgm_ducking_db: -12,
+      clip_status: 'ready',
+      label: '镜头 1',
+    },
   })
 })
 
 afterEach(() => {
   mockedEnqueueAvExport.mockRestore()
   mockedListFiles.mockRestore()
+  mockedPatchSegmentAudio.mockRestore()
 })
 
 describe('AVPreviewPanel', () => {
@@ -331,5 +352,245 @@ describe('AVPreviewPanel', () => {
     expect(mockedListFiles).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: 'proj-10' }),
     )
+  })
+
+  // -------- W31-T8 PATCH segment audio mutation 接通 --------
+
+  it('case 11 (W31-T8): voice_bgm 模式选 BGM → patchSegmentAudio 立即调用，参数含 bgm_file_id', async () => {
+    const shot = makeShot()
+    mockedListFiles.mockResolvedValue({
+      data: {
+        items: [{ id: 'bgm-99', name: 'song.mp3', type: 'audio' }],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    renderPanel(
+      <AVPreviewPanel
+        chapterId="chap-11"
+        projectId="proj-11"
+        segmentId="seg-11"
+        shot={shot}
+      />,
+    )
+    fireEvent.click(
+      screen.getByRole('radio', {
+        name: 'avPreview.audioMixMode.voice_bgm.label',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(mockedListFiles).toHaveBeenCalled()
+    })
+
+    // antd Select 在 jsdom 下 aria-label 同时落到外层 Form-style div 与 inner
+    // combobox 上，screen.getByLabelText 会拿到多个匹配项；scoped 到 testid
+    // div 后用 role=combobox 精确锁定真正的 Select trigger。
+    const bgmRow = screen.getByTestId('av-preview-bgm-row')
+    const bgmCombobox = within(bgmRow).getByRole('combobox')
+    fireEvent.mouseDown(bgmCombobox)
+    await waitFor(() => {
+      expect(screen.getByText('song.mp3')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('song.mp3'))
+
+    await waitFor(() => {
+      expect(mockedPatchSegmentAudio).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedPatchSegmentAudio).toHaveBeenCalledWith({
+      chapterId: 'chap-11',
+      segmentId: 'seg-11',
+      requestBody: expect.objectContaining({ bgm_file_id: 'bgm-99' }),
+    })
+  })
+
+  it('case 12 (W31-T8): full 模式拖 ducking 滑块 + 松开 → onAfterChange 触发 mutate', async () => {
+    const shot = makeShot()
+    renderPanel(
+      <AVPreviewPanel
+        chapterId="chap-12"
+        projectId="proj-12"
+        segmentId="seg-12"
+        shot={shot}
+      />,
+    )
+
+    fireEvent.click(
+      screen.getByRole('radio', {
+        name: 'avPreview.audioMixMode.full.label',
+      }),
+    )
+
+    // antd Slider (rc-slider 10.3.1) 内部 onKeyDown 用 ``e.which || e.keyCode``
+    // 判断方向键，并在同一回调里同步触发 onChange + onAfterChange。
+    // 必须传 keyCode=37 (LEFT)，``key: 'ArrowLeft'`` 不会被识别。
+    const duckingRow = screen.getByTestId('av-preview-ducking-row')
+    const slider = within(duckingRow).getByRole('slider')
+    fireEvent.keyDown(slider, { key: 'ArrowLeft', keyCode: 37, which: 37 })
+
+    await waitFor(() => {
+      expect(mockedPatchSegmentAudio).toHaveBeenCalled()
+    })
+    const lastCall = mockedPatchSegmentAudio.mock.calls.at(-1)?.[0]
+    expect(lastCall.chapterId).toBe('chap-12')
+    expect(lastCall.segmentId).toBe('seg-12')
+    expect(lastCall.requestBody).toHaveProperty('bgm_ducking_db')
+    expect(typeof lastCall.requestBody.bgm_ducking_db).toBe('number')
+  })
+
+  it('case 13 (W31-T8): segmentId 缺失时改 BGM 不发请求（避免 404 噪声）', async () => {
+    const shot = makeShot()
+    mockedListFiles.mockResolvedValue({
+      data: {
+        items: [{ id: 'bgm-x', name: 'x.mp3', type: 'audio' }],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    renderPanel(
+      <AVPreviewPanel chapterId="chap-13" projectId="proj-13" shot={shot} />,
+    )
+    fireEvent.click(
+      screen.getByRole('radio', {
+        name: 'avPreview.audioMixMode.voice_bgm.label',
+      }),
+    )
+    await waitFor(() => {
+      expect(mockedListFiles).toHaveBeenCalled()
+    })
+
+    const bgmRow = screen.getByTestId('av-preview-bgm-row')
+    const bgmCombobox = within(bgmRow).getByRole('combobox')
+    fireEvent.mouseDown(bgmCombobox)
+    await waitFor(() => {
+      expect(screen.getByText('x.mp3')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('x.mp3'))
+
+    // 给 react-query 一个 microtask 机会，确认确实没 fire mutate（segmentId 为空兜底）
+    await new Promise((r) => setTimeout(r, 50))
+    expect(mockedPatchSegmentAudio).not.toHaveBeenCalled()
+  })
+
+  it('case 14 (W31-T8): mutate reject → message.error，UI 状态不回滚', async () => {
+    const shot = makeShot()
+    mockedListFiles.mockResolvedValue({
+      data: {
+        items: [{ id: 'bgm-fail', name: 'fail.mp3', type: 'audio' }],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    mockedPatchSegmentAudio.mockRejectedValue(new Error('boom'))
+
+    renderPanel(
+      <AVPreviewPanel
+        chapterId="chap-14"
+        projectId="proj-14"
+        segmentId="seg-14"
+        shot={shot}
+      />,
+    )
+    fireEvent.click(
+      screen.getByRole('radio', {
+        name: 'avPreview.audioMixMode.voice_bgm.label',
+      }),
+    )
+    await waitFor(() => {
+      expect(mockedListFiles).toHaveBeenCalled()
+    })
+
+    const bgmRow = screen.getByTestId('av-preview-bgm-row')
+    const bgmCombobox = within(bgmRow).getByRole('combobox')
+    fireEvent.mouseDown(bgmCombobox)
+    await waitFor(() => {
+      expect(screen.getByText('fail.mp3')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('fail.mp3'))
+
+    await waitFor(() => {
+      expect(mockedPatchSegmentAudio).toHaveBeenCalled()
+    })
+    // UI 上选中值不被回滚 —— Select 的 value 由本地 state 持有，不受
+    // mutation 失败影响。这是设计契约：让用户能纠正后重试。
+    expect(screen.getAllByText('fail.mp3').length).toBeGreaterThan(0)
+  })
+
+  it('case 15 (W31-T8): audio_mix_mode toggle 不触发 patchSegmentAudio (mode 是 export 入参)', async () => {
+    const shot = makeShot()
+    renderPanel(
+      <AVPreviewPanel
+        chapterId="chap-15"
+        projectId="proj-15"
+        segmentId="seg-15"
+        shot={shot}
+      />,
+    )
+    fireEvent.click(
+      screen.getByRole('radio', {
+        name: 'avPreview.audioMixMode.voice_bgm.label',
+      }),
+    )
+    fireEvent.click(
+      screen.getByRole('radio', {
+        name: 'avPreview.audioMixMode.full.label',
+      }),
+    )
+    fireEvent.click(
+      screen.getByRole('radio', { name: 'avPreview.audioMixMode.off.label' }),
+    )
+
+    // 给一个 microtask 机会，确认确实没发起 PATCH
+    await new Promise((r) => setTimeout(r, 50))
+    expect(mockedPatchSegmentAudio).not.toHaveBeenCalled()
+  })
+
+  it('case 16 (W31-T8): full 模式选 SFX → patchSegmentAudio 调用，参数含 sfx_file_id', async () => {
+    const shot = makeShot()
+    mockedListFiles.mockResolvedValue({
+      data: {
+        items: [{ id: 'sfx-zap', name: 'zap.mp3', type: 'audio' }],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    renderPanel(
+      <AVPreviewPanel
+        chapterId="chap-16"
+        projectId="proj-16"
+        segmentId="seg-16"
+        shot={shot}
+      />,
+    )
+    fireEvent.click(
+      screen.getByRole('radio', {
+        name: 'avPreview.audioMixMode.full.label',
+      }),
+    )
+    await waitFor(() => {
+      expect(mockedListFiles).toHaveBeenCalled()
+    })
+
+    const sfxRow = screen.getByTestId('av-preview-sfx-row')
+    const sfxCombobox = within(sfxRow).getByRole('combobox')
+    fireEvent.mouseDown(sfxCombobox)
+    await waitFor(() => {
+      // SFX dropdown 与 BGM dropdown 共享 audioOptions —— getAllByText 兜底
+      expect(screen.getAllByText('zap.mp3').length).toBeGreaterThan(0)
+    })
+    fireEvent.click(screen.getAllByText('zap.mp3')[0])
+
+    await waitFor(() => {
+      expect(mockedPatchSegmentAudio).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedPatchSegmentAudio).toHaveBeenCalledWith({
+      chapterId: 'chap-16',
+      segmentId: 'seg-16',
+      requestBody: expect.objectContaining({ sfx_file_id: 'sfx-zap' }),
+    })
   })
 })

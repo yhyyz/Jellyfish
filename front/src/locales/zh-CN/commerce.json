@@ -167,7 +167,8 @@
     "duckingLabel": "BGM ducking 增益（dB）",
     "exportEnqueued": "已加入生成队列",
     "exportFailed": "触发失败",
-    "exportPending": "正在生成中…"
+    "exportPending": "正在生成中…",
+    "audioPatchFailed": "保存音轨配置失败"
   },
   "compliance": {},
   "formula": {},
