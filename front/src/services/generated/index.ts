@@ -38,6 +38,7 @@ export type { ApiResponse_list_ShotExtractedCandidateRead__ } from './models/Api
 export type { ApiResponse_list_ShotExtractedDialogueCandidateRead__ } from './models/ApiResponse_list_ShotExtractedDialogueCandidateRead__';
 export type { ApiResponse_list_ShotRuntimeSummaryRead__ } from './models/ApiResponse_list_ShotRuntimeSummaryRead__';
 export type { ApiResponse_list_StoryFormulaRead__ } from './models/ApiResponse_list_StoryFormulaRead__';
+export type { ApiResponse_list_StoryOutcomeRead__ } from './models/ApiResponse_list_StoryOutcomeRead__';
 export type { ApiResponse_list_StoryProjectRead__ } from './models/ApiResponse_list_StoryProjectRead__';
 export type { ApiResponse_list_StoryVariantRead__ } from './models/ApiResponse_list_StoryVariantRead__';
 export type { ApiResponse_list_SubtitleStyleRead__ } from './models/ApiResponse_list_SubtitleStyleRead__';
@@ -92,6 +93,7 @@ export type { ApiResponse_ShotRead_ } from './models/ApiResponse_ShotRead_';
 export type { ApiResponse_ShotVideoPromptPreviewRead_ } from './models/ApiResponse_ShotVideoPromptPreviewRead_';
 export type { ApiResponse_ShotVideoReadinessRead_ } from './models/ApiResponse_ShotVideoReadinessRead_';
 export type { ApiResponse_StoryFormulaRead_ } from './models/ApiResponse_StoryFormulaRead_';
+export type { ApiResponse_StoryOutcomeRead_ } from './models/ApiResponse_StoryOutcomeRead_';
 export type { ApiResponse_StoryProjectRead_ } from './models/ApiResponse_StoryProjectRead_';
 export type { ApiResponse_StoryVariantRead_ } from './models/ApiResponse_StoryVariantRead_';
 export type { ApiResponse_StudioScriptExtractionDraft_ } from './models/ApiResponse_StudioScriptExtractionDraft_';
@@ -295,6 +297,9 @@ export type { ShotVideoReadinessRead } from './models/ShotVideoReadinessRead';
 export type { StoryFormulaBeatRead } from './models/StoryFormulaBeatRead';
 export type { StoryFormulaRead } from './models/StoryFormulaRead';
 export type { StoryFormulaStructureRead } from './models/StoryFormulaStructureRead';
+export type { StoryOutcomeCreate } from './models/StoryOutcomeCreate';
+export type { StoryOutcomeRead } from './models/StoryOutcomeRead';
+export type { StoryOutcomeUpdate } from './models/StoryOutcomeUpdate';
 export type { StoryProjectConfigUpdate } from './models/StoryProjectConfigUpdate';
 export type { StoryProjectCreate } from './models/StoryProjectCreate';
 export type { StoryProjectRead } from './models/StoryProjectRead';
@@ -334,6 +339,7 @@ export type { VideoGenerationTaskRequest } from './models/VideoGenerationTaskReq
 export type { VideoPromptPreviewResponse } from './models/VideoPromptPreviewResponse';
 export type { VoicePackRead } from './models/VoicePackRead';
 
+export { CommerceOutcomesService } from './services/CommerceOutcomesService';
 export { CommerceSubtitleStylesService } from './services/CommerceSubtitleStylesService';
 export { CommerceTasksService } from './services/CommerceTasksService';
 export { CommerceVoicePacksService } from './services/CommerceVoicePacksService';

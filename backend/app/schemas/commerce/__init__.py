@@ -12,6 +12,11 @@ W20-T0b 起补充 P3 W17/W18 配套的只读 DTO：
 此处仅承载与 commerce HTTP 接口直接相关的 Pydantic 模型，避免与任务层耦合。
 """
 
+from app.schemas.commerce.outcome import (
+    StoryOutcomeCreate,
+    StoryOutcomeRead,
+    StoryOutcomeUpdate,
+)
 from app.schemas.commerce.product import (
     ProductCreate,
     ProductImageCreate,
@@ -34,6 +39,9 @@ __all__ = [
     "ProductImageRead",
     "ProductRead",
     "ProductUpdate",
+    "StoryOutcomeCreate",
+    "StoryOutcomeRead",
+    "StoryOutcomeUpdate",
     "SubtitleStyleRead",
     "VoicePackRead",
 ]

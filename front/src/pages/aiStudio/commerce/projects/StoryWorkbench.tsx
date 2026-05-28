@@ -41,11 +41,12 @@ import {
   Row,
   Space,
   Spin,
+  Tabs,
   Tag,
   Tooltip,
   message,
 } from 'antd'
-import { ArrowLeftOutlined, EditOutlined, PlayCircleOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, BarChartOutlined, EditOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useStoryProjectDetail } from './queries'
 import {
@@ -69,6 +70,8 @@ import { ComplianceWarningBanner } from './components/ComplianceWarningBanner'
 import { ShotTimelineStrip } from './components/ShotTimelineStrip'
 import { VariantList } from './components/VariantList'
 import { AVPreviewPanel } from './components/AVPreviewPanel'
+import { OutcomeEntryForm } from './components/OutcomeEntryForm'
+import { OutcomeList } from './components/OutcomeList'
 import { useQuery } from '@tanstack/react-query'
 
 /** Platform 枚举 → 中文展示 */
@@ -197,6 +200,12 @@ const StoryWorkbench: React.FC = () => {
   // 严守 AGENTS.md 「工作室 = 生成」边界：抽屉只承担成片预览 / 触发
   // chapter_av_export / 跳任务中心，不掺资产或对白提取确认能力。
   const [avDrawerOpen, setAvDrawerOpen] = useState(false)
+
+  // ---------- 投放效果抽屉（W22-T1） ----------
+  // 在变体维度展示投放后真实数据；与 AV 预览抽屉解耦，便于后续单独
+  // 演化为「投放复盘」业务面板。Tabs 区分录入和列表视图，避免一次性
+  // 把表单与表格塞在同一屏。
+  const [outcomeDrawerOpen, setOutcomeDrawerOpen] = useState(false)
 
   // 构造章节兜底：如果项目尚无章节，commerce/script-generate 需要 chapter_id。
   // P1 简化：取项目下第一个章节；没有则提示用户先创建章节。
@@ -342,7 +351,16 @@ const StoryWorkbench: React.FC = () => {
       <ProjectHeader project={project} primaryProduct={primaryProduct} />
 
       {/* AV 预览抽屉触发按钮：放在项目头与中部三栏之间，与浮动 CTA 解耦。 */}
-      <div className="mb-2 flex justify-end">
+      <div className="mb-2 flex justify-end gap-2">
+        <Tooltip title="打开投放效果抽屉（手动录入 / 列表）">
+          <Button
+            icon={<BarChartOutlined />}
+            onClick={() => setOutcomeDrawerOpen(true)}
+            disabled={!activeVariant}
+          >
+            投放效果
+          </Button>
+        </Tooltip>
         <Tooltip title="打开音视频预览抽屉（成片播放 / 触发 chapter_av_export）">
           <Button
             icon={<PlayCircleOutlined />}
@@ -426,6 +444,42 @@ const StoryWorkbench: React.FC = () => {
           />
         ) : (
           <Empty description="项目尚无章节，无法发起音视频合成" />
+        )}
+      </Drawer>
+
+      {/* 投放效果抽屉（W22-T1）：用 Tabs 区分录入与列表视图。
+          只有在 activeVariant 存在时才允许打开抽屉（按钮已 disabled）。 */}
+      <Drawer
+        title={activeVariant ? `投放效果 · ${activeVariant.id.slice(0, 8)}` : '投放效果'}
+        placement="right"
+        width={720}
+        open={outcomeDrawerOpen}
+        onClose={() => setOutcomeDrawerOpen(false)}
+        destroyOnClose
+      >
+        {activeVariant ? (
+          <Tabs
+            defaultActiveKey="list"
+            items={[
+              {
+                key: 'list',
+                label: '列表',
+                children: <OutcomeList variantId={activeVariant.id} />,
+              },
+              {
+                key: 'entry',
+                label: '录入',
+                children: (
+                  <OutcomeEntryForm
+                    variantId={activeVariant.id}
+                    onSuccess={() => message.info('已刷新列表，可切到「列表」tab 查看')}
+                  />
+                ),
+              },
+            ]}
+          />
+        ) : (
+          <Empty description="尚未选择任何变体" />
         )}
       </Drawer>
     </div>
