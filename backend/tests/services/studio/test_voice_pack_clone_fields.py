@@ -75,9 +75,16 @@ def _setup_pre_0018_schema(engine: Engine) -> None:
 
     SQLite 不支持原生 DROP COLUMN with FK；这里把表复制到独立 MetaData 上
     并在复制时跳过 0018 列，避免污染共享 ``Base.metadata``。
+
+    W30 在 ``subtitle_styles`` 表上加了 ``project_id`` 列（0019）；upgrade
+    路径从 0017 推到当前 head 时会经过 0019。为避免 0019 的 batch_alter_table
+    在已经存在 ``project_id`` 列的 fixture 上做无意义的重排，这里同样把
+    ``subtitle_styles.project_id`` 列、对应 FK 与索引剥掉，让 fixture 真实
+    模拟 0017 时刻的 schema。
     """
     fresh = MetaData()
-    skip_cols = set(NEW_COLUMNS_0018)
+    skip_voice_pack_cols = set(NEW_COLUMNS_0018)
+    skip_subtitle_styles_cols = {"project_id"}
 
     for source in Base.metadata.sorted_tables:
         copy_target = source.to_metadata(
@@ -85,10 +92,29 @@ def _setup_pre_0018_schema(engine: Engine) -> None:
             referred_schema_fn=lambda _t, _to_schema, _ck, referred_schema: referred_schema,
         )
         if source.name == "voice_packs":
-            for col_name in skip_cols:
+            for col_name in skip_voice_pack_cols:
                 if col_name in copy_target.columns:
                     col = copy_target.columns[col_name]
                     copy_target._columns.remove(col)  # type: ignore[attr-defined]  # pylint: disable=protected-access
+        if source.name == "subtitle_styles":
+            for col_name in skip_subtitle_styles_cols:
+                if col_name in copy_target.columns:
+                    col = copy_target.columns[col_name]
+                    copy_target._columns.remove(col)  # type: ignore[attr-defined]  # pylint: disable=protected-access
+            stale_fks = [
+                fk
+                for fk in list(copy_target.foreign_key_constraints)
+                if any(c.name in skip_subtitle_styles_cols for c in fk.columns)
+            ]
+            for fk in stale_fks:
+                copy_target.constraints.discard(fk)
+            stale_indexes = [
+                ix
+                for ix in list(copy_target.indexes)
+                if any(c.name in skip_subtitle_styles_cols for c in ix.columns)
+            ]
+            for ix in stale_indexes:
+                copy_target.indexes.discard(ix)
 
     fresh.create_all(bind=engine)
 
@@ -155,10 +181,14 @@ def test_upgrade_head_adds_five_columns(baseline_engine: Engine) -> None:
 
 
 def test_downgrade_removes_five_columns(baseline_engine: Engine) -> None:
-    """downgrade -1 (head 0018 -> 0017) 后必须干净移除 5 个新列。"""
+    """downgrade 至 0017 后必须干净移除 0018 引入的 5 个新列。
+
+    head 已被 W30 推进到 0019；这里显式 downgrade 到 0017 而不是 ``-1``，
+    确保校验的是 0018 自身的升降级闭环，不被 0019 的中间态干扰。
+    """
     cfg = _make_alembic_config(str(baseline_engine.url))
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, "0017")
 
     cols = _table_columns(baseline_engine, "voice_packs")
     for col in NEW_COLUMNS_0018:
