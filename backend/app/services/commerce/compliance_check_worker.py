@@ -38,14 +38,20 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chains.agents.commerce.compliance_checker_agent import ComplianceCheckerAgent
+from app.config import settings
 from app.core.contracts.story import ComplianceReport
 from app.core.db import async_session_maker
 from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
+from app.integrations.notifications.email import SmtpConfig
 from app.models.compliance import ComplianceFinding
 from app.models.story_formula import StoryVariant
 from app.models.types import ComplianceRegion, ComplianceSeverity, ProductCategory
 from app.services.llm.resolver import build_default_text_llm
+from app.services.notifications.compliance_dispatcher import (
+    BlockerFindingPayload,
+    dispatch_blocker_findings,
+)
 from app.services.worker.task_logging import log_task_event, log_task_failure
 
 
@@ -194,7 +200,7 @@ async def _persist_findings(
     *,
     variant_id: str,
     report: ComplianceReport,
-) -> None:
+) -> list[ComplianceFinding]:
     """把 :class:`ComplianceReport` 全量写入 ``compliance_findings`` 并
     同步 :class:`StoryVariant.compliance_score`。
 
@@ -208,32 +214,40 @@ async def _persist_findings(
           ``DateTime`` 默认行为）。
         - ``compliance_score`` 仅在 variant 真实存在时刷新；缺失时由
           调用方在装载阶段就抛错（``_load_variant_or_raise``）。
+        - 返回新建的 ORM 实体列表，便于调用方在 commit 之后基于自增 ID
+          触发后置链路（W26-T1：BLOCKER 告警 dispatcher）。
 
     Args:
         session: 当前 worker 的 async session。
         variant_id: ``compliance_findings.variant_id`` 外键值。
         report: 来自 :meth:`ComplianceCheckerAgent.a_check` 的检查结果。
+
+    Returns:
+        本次写入的 :class:`ComplianceFinding` ORM 实例列表（顺序与
+        ``report.findings`` 一一对应）。
     """
 
     detected_at = datetime.now(timezone.utc)
+    persisted: list[ComplianceFinding] = []
     for finding in report.findings:
-        session.add(
-            ComplianceFinding(
-                variant_id=variant_id,
-                severity=_severity_to_enum(finding.severity),
-                rule_id=finding.rule_id,
-                rule_kind=finding.rule_kind,
-                description=finding.description,
-                location=finding.location,
-                suggested_fix=finding.suggested_fix,
-                is_resolved=False,
-                detected_at=detected_at,
-            )
+        row = ComplianceFinding(
+            variant_id=variant_id,
+            severity=_severity_to_enum(finding.severity),
+            rule_id=finding.rule_id,
+            rule_kind=finding.rule_kind,
+            description=finding.description,
+            location=finding.location,
+            suggested_fix=finding.suggested_fix,
+            is_resolved=False,
+            detected_at=detected_at,
         )
+        session.add(row)
+        persisted.append(row)
 
     variant = await session.get(StoryVariant, variant_id)
     if variant is not None:
         variant.compliance_score = report.score
+    return persisted
 
 
 def _summarize_counts(report: ComplianceReport) -> tuple[int, int, int]:
@@ -243,6 +257,68 @@ def _summarize_counts(report: ComplianceReport) -> tuple[int, int, int]:
     warning = sum(1 for f in report.findings if f.severity == "warning")
     info = sum(1 for f in report.findings if f.severity == "info")
     return blocker, warning, info
+
+
+async def _fire_blocker_dispatch(
+    *,
+    variant_id: str,
+    persisted_findings: list[ComplianceFinding],
+) -> None:
+    """把已落库的 BLOCKER finding 异步 fan-out 到通知渠道（W26-T1）。
+
+    遵循 W19b chain dispatch 契约：调用本函数前必须已 ``commit()``。
+    本函数把每条 BLOCKER finding 包成 :class:`BlockerFindingPayload`，
+    交给 :func:`dispatch_blocker_findings` 并发执行；dispatcher 内部
+    自行兜底所有异常，本函数永不向上抛错。
+
+    构造 SMTP 配置走 :class:`Settings`：未配置 ``SMTP_HOST`` 时 email
+    渠道会在 dispatcher 中被判失败，仅 Slack 渠道继续生效。
+    """
+
+    blockers = [f for f in persisted_findings if f.severity == ComplianceSeverity.blocker]
+    if not blockers:
+        return
+
+    smtp_config: SmtpConfig | None = None
+    smtp_sender: str | None = None
+    if settings.smtp_host:
+        smtp_config = SmtpConfig(
+            host=settings.smtp_host,
+            port=settings.smtp_port,
+            username=settings.smtp_username,
+            password=settings.smtp_password,
+            use_tls=settings.smtp_use_tls,
+            start_tls=settings.smtp_start_tls,
+            sender=settings.smtp_sender or settings.smtp_username,
+        )
+        smtp_sender = settings.smtp_sender or settings.smtp_username
+
+    payloads = [
+        BlockerFindingPayload(
+            finding_id=row.id,
+            severity=str(row.severity.value if hasattr(row.severity, "value") else row.severity),
+            rule_id=row.rule_id,
+            rule_kind=row.rule_kind,
+            description=row.description,
+            variant_id=variant_id,
+            profile_id=None,
+            location=row.location,
+            suggested_fix=row.suggested_fix,
+        )
+        for row in blockers
+    ]
+
+    try:
+        await dispatch_blocker_findings(
+            payloads,
+            smtp_config=smtp_config,
+            smtp_sender=smtp_sender,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "blocker dispatch unexpected failure (suppressed)",
+            extra={"variant_id": variant_id, "blocker_count": len(blockers)},
+        )
 
 
 def _build_output_payload(
@@ -374,7 +450,9 @@ async def run_compliance_check_task(  # pylint: disable=too-many-locals
                 brand_aliases=brand_aliases,
             )
 
-            await _persist_findings(session, variant_id=variant_id, report=report)
+            persisted_findings = await _persist_findings(
+                session, variant_id=variant_id, report=report
+            )
             await store.set_progress(task_id, 80)
 
             output = _build_output_payload(variant_id=variant_id, report=report)
@@ -389,6 +467,11 @@ async def run_compliance_check_task(  # pylint: disable=too-many-locals
                 variant_id=variant_id,
                 score=report.score,
                 findings_count=len(report.findings),
+            )
+
+            await _fire_blocker_dispatch(
+                variant_id=variant_id,
+                persisted_findings=persisted_findings,
             )
         except Exception as exc:  # noqa: BLE001
             await session.rollback()

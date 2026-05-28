@@ -65,6 +65,17 @@ class Settings(BaseSettings):
     # 可选：对外访问基址（CDN 或自定义域名），为空则使用 S3 自带 URL 或预签名 URL
     s3_public_base_url: str | None = None
 
+    # SMTP（W26-T1：合规 BLOCKER 告警 email 通道）
+    # SMTP_HOST/PORT 缺省时 email 渠道会直接判失败（仅 Slack 投递）；
+    # SMTP_USE_TLS / SMTP_START_TLS 互斥：直连 TLS（465）vs STARTTLS（587）。
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = False
+    smtp_start_tls: bool = True
+    smtp_sender: str | None = None
+
     def model_post_init(self, __context: object) -> None:
         if not self.celery_broker_url or not str(self.celery_broker_url).strip():
             password_part = f":{self.redis_password}@" if self.redis_password else ""

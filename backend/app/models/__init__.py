@@ -5,6 +5,7 @@ from app.models.api_quota import ApiKeyQuota
 from app.models.base import TimestampMixin
 from app.models.brand_archetype import BrandArchetype
 from app.models.compliance import ComplianceFinding, ComplianceProfile
+from app.models.notification_channel import NotificationChannel, NotificationDelivery
 from app.models.cta_pattern import CtaPattern
 from app.models.hook_pattern import HookPattern
 from app.models.llm import Model, ModelSettings, Provider
@@ -87,6 +88,8 @@ __all__ = [
     "GenerationTaskLink",
     "ComplianceProfile",
     "ComplianceFinding",
+    "NotificationChannel",
+    "NotificationDelivery",
     "StoryFormula",
     "StoryVariant",
     "StoryOutcome",
