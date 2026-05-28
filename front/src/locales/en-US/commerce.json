@@ -61,5 +61,10 @@
     "exportEnqueued": "Enqueued in the generation queue",
     "exportFailed": "Failed to trigger",
     "exportPending": "Generating…"
-  }
+  },
+  "compliance": {},
+  "formula": {},
+  "hook": {},
+  "cta": {},
+  "archetype": {}
 }

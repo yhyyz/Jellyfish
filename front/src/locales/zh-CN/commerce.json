@@ -61,5 +61,10 @@
     "exportEnqueued": "已加入生成队列",
     "exportFailed": "触发失败",
     "exportPending": "正在生成中…"
-  }
+  },
+  "compliance": {},
+  "formula": {},
+  "hook": {},
+  "cta": {},
+  "archetype": {}
 }
