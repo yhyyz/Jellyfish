@@ -34,7 +34,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db
+from app.dependencies import get_db, require_admin
 from app.schemas.commerce.subtitle_styles import (
     ProjectSubtitleStyleCreateInput,
     ProjectSubtitleStyleUpdateInput,
@@ -121,6 +121,7 @@ async def list_project_subtitle_styles_endpoint(
     response_model=ApiResponse[SubtitleStyleRead],
     status_code=status.HTTP_201_CREATED,
     summary="创建项目级覆盖字幕样式",
+    dependencies=[Depends(require_admin)],
 )
 async def create_project_subtitle_style_endpoint(
     project_id: str,
@@ -145,6 +146,7 @@ async def create_project_subtitle_style_endpoint(
     "/projects/{project_id}/subtitle-styles/{style_id}",
     response_model=ApiResponse[SubtitleStyleRead],
     summary="更新项目级覆盖字幕样式",
+    dependencies=[Depends(require_admin)],
 )
 async def update_project_subtitle_style_endpoint(
     project_id: str,
@@ -170,6 +172,7 @@ async def update_project_subtitle_style_endpoint(
     "/projects/{project_id}/subtitle-styles/{style_id}",
     response_model=ApiResponse[None],
     summary="删除项目级覆盖字幕样式（重置为系统模板）",
+    dependencies=[Depends(require_admin)],
 )
 async def delete_project_subtitle_style_endpoint(
     project_id: str,

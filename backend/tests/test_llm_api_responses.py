@@ -8,12 +8,31 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db, require_admin
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider, ProviderStatus
+from app.models.types import UserRole
+from app.models.user import User
 from tests.support.llm_api_app import build_llm_only_app
 
-# 仅挂载 /api/v1/llm，避免导入 app.main 时连带加载 film 路由与 Celery。
 llm_app = build_llm_only_app()
+
+
+def _bypass_admin() -> User:
+    """覆盖 ``require_admin``：W32-T7 后 LLM 写端点要 admin token，
+    本模块聚焦响应壳契约，不重复测 RBAC。"""
+
+    return User(
+        id="__test_admin__",
+        username="__test_admin__",
+        email="test-admin@jellyfish.local",
+        hashed_password="",
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+
+
+llm_app.dependency_overrides[get_current_user] = _bypass_admin
+llm_app.dependency_overrides[require_admin] = _bypass_admin
 
 
 @pytest.fixture
@@ -136,6 +155,8 @@ def test_create_provider_returns_created_envelope(client: TestClient) -> None:
         )
     finally:
         llm_app.dependency_overrides.clear()
+        llm_app.dependency_overrides[get_current_user] = _bypass_admin
+        llm_app.dependency_overrides[require_admin] = _bypass_admin
 
     assert response.status_code == 201
     body = response.json()
@@ -154,6 +175,8 @@ def test_get_provider_not_found_returns_api_response(client: TestClient) -> None
         response = client.get("/api/v1/llm/providers/missing")
     finally:
         llm_app.dependency_overrides.clear()
+        llm_app.dependency_overrides[get_current_user] = _bypass_admin
+        llm_app.dependency_overrides[require_admin] = _bypass_admin
 
     assert response.status_code == 404
     assert response.json() == {
@@ -172,6 +195,8 @@ def test_delete_provider_returns_empty_envelope(client: TestClient) -> None:
         response = client.delete("/api/v1/llm/providers/p-delete")
     finally:
         llm_app.dependency_overrides.clear()
+        llm_app.dependency_overrides[get_current_user] = _bypass_admin
+        llm_app.dependency_overrides[require_admin] = _bypass_admin
 
     assert response.status_code == 200
     assert response.json() == {"code": 200, "message": "success", "data": None, "meta": None}
@@ -191,6 +216,8 @@ def test_create_provider_validation_error_returns_api_response(client: TestClien
         )
     finally:
         llm_app.dependency_overrides.clear()
+        llm_app.dependency_overrides[get_current_user] = _bypass_admin
+        llm_app.dependency_overrides[require_admin] = _bypass_admin
 
     assert response.status_code == 422
     body = response.json()
@@ -262,6 +289,8 @@ def test_get_video_generation_options_returns_ratio_capability(client: TestClien
         response = client.get("/api/v1/llm/video-generation-options")
     finally:
         llm_app.dependency_overrides.clear()
+        llm_app.dependency_overrides[get_current_user] = _bypass_admin
+        llm_app.dependency_overrides[require_admin] = _bypass_admin
 
     assert response.status_code == 200
     body = response.json()
@@ -281,6 +310,8 @@ def test_get_image_generation_options_returns_ratio_size_profiles(client: TestCl
         response = client.get("/api/v1/llm/image-generation-options")
     finally:
         llm_app.dependency_overrides.clear()
+        llm_app.dependency_overrides[get_current_user] = _bypass_admin
+        llm_app.dependency_overrides[require_admin] = _bypass_admin
 
     assert response.status_code == 200
     body = response.json()

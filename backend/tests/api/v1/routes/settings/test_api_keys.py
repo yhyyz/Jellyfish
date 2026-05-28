@@ -31,8 +31,35 @@ from sqlalchemy.ext.asyncio import (
 import app.models  # noqa: F401  pylint: disable=unused-import
 
 from app.core.db import Base
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db, require_admin
 from app.main import app
+from app.models.types import UserRole
+from app.models.user import User
+
+
+def _bypass_admin_dep() -> User:
+    """覆盖 ``require_admin`` 依赖，让 pre-existing 测试无需 mint JWT。
+
+    P5 W32-T7 在 ``/api/v1/settings/api-keys`` 路由层加了 ``require_admin``
+    守卫；本测试模块聚焦 CRUD 契约本身（plaintext 仅本次返回 / 列表过滤等),
+    不重复测 RBAC（那些用例放在 ``tests/api/v1/test_admin_endpoints_rbac.py``）,
+    因此在 dependency_overrides 里把守卫替换成虚拟 admin user。
+    """
+
+    return User(
+        id="__test_admin__",
+        username="__test_admin__",
+        email="test-admin@jellyfish.local",
+        hashed_password="",
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+
+
+def _install_auth_overrides() -> None:
+    """同时覆盖 ``get_current_user`` 与 ``require_admin``，确保子依赖也走假 user。"""
+    app.dependency_overrides[get_current_user] = _bypass_admin_dep
+    app.dependency_overrides[require_admin] = _bypass_admin_dep
 
 
 async def _build_engine() -> tuple[
@@ -74,6 +101,7 @@ async def test_create_api_key_returns_plaintext_in_response_only(
     """
     sessionmaker, engine = await _build_engine()
     app.dependency_overrides[get_db] = _make_override(sessionmaker)
+    _install_auth_overrides()
     try:
         response = client.post(
             "/api/v1/settings/api-keys",
@@ -118,6 +146,7 @@ async def test_list_api_keys_excludes_revoked_by_default(
     """List endpoint defaults to active-only; revoked keys disappear."""
     sessionmaker, engine = await _build_engine()
     app.dependency_overrides[get_db] = _make_override(sessionmaker)
+    _install_auth_overrides()
     try:
         # Seed two keys.
         first = client.post(
@@ -168,6 +197,7 @@ async def test_revoke_unknown_hash_returns_404(client: TestClient) -> None:
     """Revoking a hash that does not exist returns 404, not 200."""
     sessionmaker, engine = await _build_engine()
     app.dependency_overrides[get_db] = _make_override(sessionmaker)
+    _install_auth_overrides()
     try:
         response = client.post(
             "/api/v1/settings/api-keys/revoke",
@@ -190,6 +220,7 @@ async def test_revoke_unknown_hash_returns_404(client: TestClient) -> None:
 async def test_usage_endpoint_returns_counters(client: TestClient) -> None:
     sessionmaker, engine = await _build_engine()
     app.dependency_overrides[get_db] = _make_override(sessionmaker)
+    _install_auth_overrides()
     try:
         created = client.post(
             "/api/v1/settings/api-keys",

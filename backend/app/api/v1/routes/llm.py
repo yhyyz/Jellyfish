@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db
+from app.dependencies import get_db, require_admin
 from app.models.llm import ModelCategoryKey
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, success_response
 from app.schemas.llm import (
@@ -119,6 +119,7 @@ async def get_video_generation_options(
 
 @router.post(
     "/providers",
+    dependencies=[Depends(require_admin)],
     response_model=ApiResponse[ProviderRead],
     status_code=status.HTTP_201_CREATED,
     summary="创建模型供应商",
@@ -146,6 +147,7 @@ async def get_provider(
 
 @router.patch(
     "/providers/{provider_id}",
+    dependencies=[Depends(require_admin)],
     response_model=ApiResponse[ProviderRead],
     summary="更新模型供应商",
 )
@@ -160,6 +162,7 @@ async def update_provider(
 
 @router.delete(
     "/providers/{provider_id}",
+    dependencies=[Depends(require_admin)],
     response_model=ApiResponse[None],
     status_code=status.HTTP_200_OK,
     summary="删除模型供应商",
@@ -205,6 +208,7 @@ async def list_models(
 
 @router.post(
     "/models",
+    dependencies=[Depends(require_admin)],
     response_model=ApiResponse[ModelRead],
     status_code=status.HTTP_201_CREATED,
     summary="创建模型",
@@ -265,6 +269,7 @@ async def get_model(
 
 @router.patch(
     "/models/{model_id}",
+    dependencies=[Depends(require_admin)],
     response_model=ApiResponse[ModelRead],
     summary="更新模型",
 )
@@ -279,6 +284,7 @@ async def update_model(
 
 @router.delete(
     "/models/{model_id}",
+    dependencies=[Depends(require_admin)],
     response_model=ApiResponse[None],
     status_code=status.HTTP_200_OK,
     summary="删除模型",
@@ -308,6 +314,7 @@ async def get_model_settings(
 
 @router.put(
     "/model-settings",
+    dependencies=[Depends(require_admin)],
     response_model=ApiResponse[ModelSettingsRead],
     summary="更新模型全局设置（单例）",
 )

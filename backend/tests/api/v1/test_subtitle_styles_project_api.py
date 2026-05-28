@@ -43,11 +43,33 @@ import app.models.task_links  # noqa: F401  pylint: disable=unused-import
 import app.models.voice_pack  # noqa: F401  pylint: disable=unused-import
 
 from app.core.db import Base
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db, require_admin
 from app.main import app
 from app.models.studio_projects import Project
 from app.models.subtitle import SubtitleStyle
 from app.models.types import SubtitleAlignment, SubtitleFormat
+from app.models.user import User
+from app.models.types import UserRole as _UserRoleAlias
+
+
+def _bypass_admin_dep() -> User:
+    """覆盖 ``require_admin``：W32-T7 后写端点要 admin token，但本模块聚焦
+    业务契约（系统 immutable / 同 project name 唯一 / FK 校验等），不重复测 RBAC。"""
+
+    return User(
+        id="__test_admin__",
+        username="__test_admin__",
+        email="test-admin@jellyfish.local",
+        hashed_password="",
+        role=_UserRoleAlias.ADMIN,
+        is_active=True,
+    )
+
+
+def _install_auth_overrides() -> None:
+    """同时覆盖 ``get_current_user`` 与 ``require_admin``。"""
+    app.dependency_overrides[get_current_user] = _bypass_admin_dep
+    app.dependency_overrides[require_admin] = _bypass_admin_dep
 
 
 def _build_system_style(
@@ -176,6 +198,7 @@ async def test_post_creates_project_subtitle_style_returns_201(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         res = client.post(
             "/api/v1/commerce/projects/proj-1/subtitle-styles",
@@ -206,6 +229,7 @@ async def test_post_returns_404_when_project_missing(
     """target project 不存在 → 404。"""
     session_local, engine = await _build_engine()
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         res = client.post(
             "/api/v1/commerce/projects/no-such-project/subtitle-styles",
@@ -225,6 +249,7 @@ async def test_post_returns_409_on_name_conflict(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         first = client.post(
             "/api/v1/commerce/projects/proj-1/subtitle-styles",
@@ -255,6 +280,7 @@ async def test_patch_updates_project_style_returns_200(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         post = client.post(
             "/api/v1/commerce/projects/proj-1/subtitle-styles",
@@ -283,6 +309,7 @@ async def test_patch_returns_403_for_system_style(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         res = client.patch(
             "/api/v1/commerce/projects/proj-1/subtitle-styles/douyin_default",
@@ -312,6 +339,7 @@ async def test_patch_returns_404_when_style_belongs_to_other_project(
         )
         await session.commit()
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         post = client.post(
             "/api/v1/commerce/projects/proj-1/subtitle-styles",
@@ -337,6 +365,7 @@ async def test_patch_returns_409_on_rename_conflict(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         a = client.post(
             "/api/v1/commerce/projects/proj-1/subtitle-styles",
@@ -372,6 +401,7 @@ async def test_delete_removes_project_style_returns_200(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         post = client.post(
             "/api/v1/commerce/projects/proj-1/subtitle-styles",
@@ -400,6 +430,7 @@ async def test_delete_returns_403_for_system_style(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         res = client.delete(
             "/api/v1/commerce/projects/proj-1/subtitle-styles/douyin_default"
@@ -418,6 +449,7 @@ async def test_delete_returns_404_when_style_missing(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         res = client.delete(
             "/api/v1/commerce/projects/proj-1/subtitle-styles/no-such-style"
@@ -441,6 +473,7 @@ async def test_get_merged_view_overrides_system_with_project(
     session_local, engine = await _build_engine()
     await _seed_project_and_system_style(session_local)
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         client.post(
             "/api/v1/commerce/projects/proj-1/subtitle-styles",
@@ -475,6 +508,7 @@ async def test_get_merged_view_returns_404_for_missing_project(
     """GET 不存在的 project → 404。"""
     session_local, engine = await _build_engine()
     app.dependency_overrides[get_db] = _make_override(session_local)
+    _install_auth_overrides()
     try:
         res = client.get(
             "/api/v1/commerce/projects/no-such-project/subtitle-styles"

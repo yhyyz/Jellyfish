@@ -26,7 +26,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db
+from app.dependencies import get_db, require_admin
 from app.schemas.common import ApiResponse, created_response, success_response
 from app.schemas.settings.api_key import (
     ApiKeyCreateRequest,
@@ -42,7 +42,7 @@ from app.services.api_quota.quota_service import (
     revoke_api_key,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.post(
