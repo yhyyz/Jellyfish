@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -90,6 +90,36 @@ class ChapterTimelineSegment(Base, TimestampMixin):
         comment=(
             "P3 W19：本段 TTS 合成音频 FileItem；audio_strategy=silent_with_tts "
             "时合成阶段 amix 混入，keep_native 时为 NULL"
+        ),
+    )
+    bgm_file_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("files.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment=(
+            "P5 W31：本段 BGM 音轨 FileItem（usage_kind=bgm_track），"
+            "voice_bgm / full 模式合成时混入；voice_only 忽略"
+        ),
+    )
+    sfx_file_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("files.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment=(
+            "P5 W31：本段 SFX 音轨 FileItem（usage_kind=sfx_track），"
+            "仅 full 模式合成时通过 amerge 加入"
+        ),
+    )
+    bgm_ducking_db: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=-12.0,
+        server_default="-12.0",
+        comment=(
+            "P5 W31：full 模式 sidechaincompress 自动 ducking 增益（dB），"
+            "范围 [-30.0, 0.0]，默认 -12.0；voice_bgm 用静态 weights 不读此列"
         ),
     )
     # 历史 SQL 已存在无默认值版本；这里补 ORM 侧默认，避免 INSERT 依赖 DB default。
