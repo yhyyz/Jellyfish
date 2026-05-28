@@ -140,6 +140,31 @@
     "viewTaskCenter": "查看任务中心",
     "voicePanel": "音色",
     "subtitlePanel": "字幕样式",
+    "audioMixModePanel": "音轨混合配置",
+    "audioMixModeLabel": "音轨混合模式",
+    "audioMixMode": {
+      "off": {
+        "label": "静音",
+        "hint": "完全静音输出，仅画面 + 字幕"
+      },
+      "voice_only": {
+        "label": "仅语音",
+        "hint": "仅保留语音轨（W19 默认）"
+      },
+      "voice_bgm": {
+        "label": "语音+BGM",
+        "hint": "语音 + 背景音乐 amix 混音（BGM 静态衰减 -8dB）"
+      },
+      "full": {
+        "label": "完整",
+        "hint": "语音 + BGM (sidechain 自动 ducking) + SFX 完整混音"
+      }
+    },
+    "bgmLabel": "BGM 音轨",
+    "bgmPlaceholder": "选择项目下的 BGM 音频文件",
+    "sfxLabel": "SFX 音效",
+    "sfxPlaceholder": "选择项目下的 SFX 音频文件",
+    "duckingLabel": "BGM ducking 增益（dB）",
     "exportEnqueued": "已加入生成队列",
     "exportFailed": "触发失败",
     "exportPending": "正在生成中…"

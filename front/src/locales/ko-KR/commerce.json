@@ -140,6 +140,31 @@
     "viewTaskCenter": "작업 센터 열기",
     "voicePanel": "보이스",
     "subtitlePanel": "자막 스타일",
+    "audioMixModePanel": "오디오 믹스",
+    "audioMixModeLabel": "오디오 믹스 모드",
+    "audioMixMode": {
+      "off": {
+        "label": "음소거",
+        "hint": "완전 무음 출력, 화면 + 자막만"
+      },
+      "voice_only": {
+        "label": "보이스만",
+        "hint": "보이스 트랙만 유지 (W19 기본값)"
+      },
+      "voice_bgm": {
+        "label": "보이스+BGM",
+        "hint": "보이스 + BGM amix 믹싱 (BGM 정적 -8dB 감쇠)"
+      },
+      "full": {
+        "label": "풀",
+        "hint": "보이스 + BGM (sidechain 자동 ducking) + SFX 풀 믹스"
+      }
+    },
+    "bgmLabel": "BGM 트랙",
+    "bgmPlaceholder": "프로젝트의 BGM 오디오 파일 선택",
+    "sfxLabel": "SFX 효과음",
+    "sfxPlaceholder": "프로젝트의 SFX 오디오 파일 선택",
+    "duckingLabel": "BGM ducking 게인 (dB)",
     "exportEnqueued": "생성 큐에 추가되었습니다",
     "exportFailed": "실행에 실패했습니다",
     "exportPending": "생성 중…"

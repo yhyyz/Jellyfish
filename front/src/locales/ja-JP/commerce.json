@@ -140,6 +140,31 @@
     "viewTaskCenter": "タスクセンターを開く",
     "voicePanel": "音声",
     "subtitlePanel": "字幕スタイル",
+    "audioMixModePanel": "音声ミックス",
+    "audioMixModeLabel": "音声ミックスモード",
+    "audioMixMode": {
+      "off": {
+        "label": "ミュート",
+        "hint": "完全無音出力、映像 + 字幕のみ"
+      },
+      "voice_only": {
+        "label": "音声のみ",
+        "hint": "音声トラックのみ（W19 デフォルト）"
+      },
+      "voice_bgm": {
+        "label": "音声 + BGM",
+        "hint": "音声 + BGM の amix ミックス（BGM 静的 -8dB 減衰）"
+      },
+      "full": {
+        "label": "フル",
+        "hint": "音声 + BGM（sidechain 自動 ducking）+ SFX フルミックス"
+      }
+    },
+    "bgmLabel": "BGM トラック",
+    "bgmPlaceholder": "プロジェクト配下の BGM 音声ファイルを選択",
+    "sfxLabel": "SFX 効果音",
+    "sfxPlaceholder": "プロジェクト配下の SFX 音声ファイルを選択",
+    "duckingLabel": "BGM ducking ゲイン（dB）",
     "exportEnqueued": "生成キューに追加しました",
     "exportFailed": "実行に失敗しました",
     "exportPending": "生成中…"

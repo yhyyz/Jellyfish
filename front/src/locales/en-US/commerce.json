@@ -140,6 +140,31 @@
     "viewTaskCenter": "Open task center",
     "voicePanel": "Voice",
     "subtitlePanel": "Subtitle style",
+    "audioMixModePanel": "Audio mix",
+    "audioMixModeLabel": "Audio mix mode",
+    "audioMixMode": {
+      "off": {
+        "label": "Mute",
+        "hint": "Silent output, picture + subtitles only"
+      },
+      "voice_only": {
+        "label": "Voice only",
+        "hint": "Voice track only (W19 default)"
+      },
+      "voice_bgm": {
+        "label": "Voice + BGM",
+        "hint": "Voice + background music amix (BGM static -8dB)"
+      },
+      "full": {
+        "label": "Full",
+        "hint": "Voice + BGM (sidechain auto ducking) + SFX full mix"
+      }
+    },
+    "bgmLabel": "BGM track",
+    "bgmPlaceholder": "Pick a BGM audio file from the project",
+    "sfxLabel": "SFX track",
+    "sfxPlaceholder": "Pick an SFX audio file from the project",
+    "duckingLabel": "BGM ducking gain (dB)",
     "exportEnqueued": "Enqueued in the generation queue",
     "exportFailed": "Failed to trigger",
     "exportPending": "Generating…"
