@@ -34,6 +34,8 @@ dependencies = [
     "aiohttp>=3.13.5",
     "bcrypt>=4.0",
     "celery-redbeat>=2.0",
+    "dashscope>=1.25.19",
+    "soundfile>=0.13.1",
 ]
 
 [project.optional-dependencies]
