@@ -1,20 +1,28 @@
-"""字幕样式只读响应 schemas（W20-T0b，P3 W18 配套）。
+"""字幕样式只读响应 schemas（W20-T0b，P3 W18 配套）+ 项目级 CRUD（W30-T3）。
 
-本模块对应 :class:`app.models.subtitle.SubtitleStyle`，仅暴露列表读取
-所需的 DTO，不提供 Create/Update/Delete：
+本模块对应 :class:`app.models.subtitle.SubtitleStyle`：
 
-- 系统级样式（``is_system=True``）由
-  :func:`app.services.studio.builtin_subtitle_styles.bootstrap_builtin_subtitle_styles`
-  在启动期幂等 seed（DOUYIN_DEFAULT / TIKTOK_VIRAL / REELS_LOWER_THIRD
-  三套），应用层接口不允许新增/编辑/删除；
-- 项目级覆盖样式的写入路径将在后续 wave 由专门的项目设置面板暴露，
-  本模块同样只读。
+- :class:`SubtitleStyleRead`：只读列表/详情 DTO，供 ``GET`` 路径与
+  W30 ``GET /commerce/projects/{project_id}/subtitle-styles`` merged 视图
+  共用。
+- :class:`ProjectSubtitleStyleCreateInput` / :class:`ProjectSubtitleStyleUpdateInput`：
+  W30 项目级 CRUD 写入 DTO，仅暴露用户可编辑字段，不接受 ``id`` /
+  ``project_id`` / ``is_system`` / ``sort_order`` / ``created_at`` /
+  ``updated_at`` 等服务端管理字段。
 
 字段语义遵循 ASS v4+ Style 行规范（``[V4+ Styles] Format`` 字段顺序），
 仅做语义化命名转换。``alignment`` 在 ORM 中以语义化字符串枚举（``bottom_center``
-等）存储，本 schema 暴露为 ASS numpad int（1-9），便于前端预览组件直接
+等）存储，本模块对外暴露为 ASS numpad int（1-9），便于前端预览组件直接
 匹配 ASS 渲染坐标系（参见
 :class:`app.models.types.SubtitleAlignment` 注释中的 numpad 映射）。
+
+写入路径设计：
+    - 系统级行（``project_id IS NULL``）只读，POST/PATCH/DELETE 一律 403；
+      系统级 seed 由
+      :func:`app.services.studio.builtin_subtitle_styles.bootstrap_builtin_subtitle_styles`
+      在启动期幂等管理。
+    - 项目级覆盖（``project_id`` 非空）走 W30 新引入的 CRUD；同 project
+      内 ``name`` 唯一（service 层 enforce），跨 project 允许重名。
 """
 
 from __future__ import annotations
@@ -114,8 +122,128 @@ class SubtitleStyleRead(BaseModel):
         description="系统级样式标记，true 时不可被用户删除",
     )
     sort_order: int = Field(..., description="UI 列表显示顺序（升序）")
+    project_id: str | None = Field(
+        None,
+        description="项目级覆盖归属的项目 ID；NULL=系统级 seed，非 NULL=该项目自定义",
+    )
     created_at: datetime = Field(..., description="入库时间")
     updated_at: datetime = Field(..., description="最近一次更新时间")
 
 
-__all__ = ["SubtitleStyleRead"]
+class ProjectSubtitleStyleCreateInput(BaseModel):
+    """项目级 SubtitleStyle 写入 DTO（W30-T3 POST 入参）。
+
+    仅暴露用户可编辑字段；``id`` / ``project_id`` / ``is_system`` /
+    ``sort_order`` / ``created_at`` / ``updated_at`` 等服务端管理字段
+    在 service 层注入，不允许调用方传入。
+
+    校验由 service 层做 ``(project_id, name)`` 唯一性 enforce；schema
+    层只做基础形态约束（必填、长度、numeric 范围）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=255, description="展示名称")
+    description: str | None = Field(
+        None, max_length=2048, description="样式描述（适用平台、视觉特点等）"
+    )
+    language_code: str = Field(
+        "zh-CN", min_length=2, max_length=16, description="主语言代码"
+    )
+    format: str = Field(
+        "ass",
+        description="字幕文件格式：ass / srt / vtt",
+        pattern=r"^(ass|srt|vtt)$",
+    )
+    font_family: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="主字体 family name（ASS Fontname）",
+    )
+    font_size: int = Field(..., ge=16, le=200, description="字号（脚本像素）")
+    primary_colour: str = Field(
+        "&H00FFFFFF",
+        description="主填充色 &HAABBGGRR",
+        pattern=r"^&H[0-9A-Fa-f]{8}$",
+    )
+    secondary_colour: str = Field(
+        "&H00FFFFFF",
+        description="预高亮色 &HAABBGGRR",
+        pattern=r"^&H[0-9A-Fa-f]{8}$",
+    )
+    outline_colour: str = Field(
+        "&H00000000",
+        description="描边色 &HAABBGGRR",
+        pattern=r"^&H[0-9A-Fa-f]{8}$",
+    )
+    back_colour: str = Field(
+        "&H80000000",
+        description="阴影色 &HAABBGGRR",
+        pattern=r"^&H[0-9A-Fa-f]{8}$",
+    )
+    bold: bool = Field(True, description="是否粗体")
+    italic: bool = Field(False, description="是否斜体")
+    border_style: int = Field(
+        1, ge=1, le=3, description="ASS BorderStyle：1=描边+阴影 / 3=实心矩形盒"
+    )
+    outline: float = Field(3.0, ge=0.0, le=20.0, description="描边宽度（像素）")
+    shadow: float = Field(1.0, ge=0.0, le=20.0, description="阴影偏移（像素）")
+    alignment: int = Field(
+        2,
+        ge=1,
+        le=9,
+        description=(
+            "ASS Alignment numpad（1-9）：1=底左 / 2=底中 / 3=底右 / "
+            "4=中左 / 5=中中 / 6=中右 / 7=顶左 / 8=顶中 / 9=顶右"
+        ),
+    )
+    margin_l: int = Field(60, ge=0, le=2000, description="左边距（像素）")
+    margin_r: int = Field(60, ge=0, le=2000, description="右边距（像素）")
+    margin_v: int = Field(200, ge=0, le=2000, description="垂直边距（像素）")
+    play_res_x: int = Field(1080, ge=64, le=8192, description="ASS PlayResX")
+    play_res_y: int = Field(1920, ge=64, le=8192, description="ASS PlayResY")
+    font_fallback_chain: list[str] | None = Field(
+        None, description="字体回退链 list[str]"
+    )
+
+
+class ProjectSubtitleStyleUpdateInput(BaseModel):
+    """项目级 SubtitleStyle 更新 DTO（W30-T3 PATCH 入参）。
+
+    所有字段均 optional，service 层只更新 explicit 提供的字段（``model_dump
+    (exclude_unset=True)``）；不允许把项目级行的 ``project_id`` / ``id`` /
+    ``is_system`` 改写。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = Field(None, max_length=2048)
+    language_code: str | None = Field(None, min_length=2, max_length=16)
+    format: str | None = Field(None, pattern=r"^(ass|srt|vtt)$")
+    font_family: str | None = Field(None, min_length=1, max_length=128)
+    font_size: int | None = Field(None, ge=16, le=200)
+    primary_colour: str | None = Field(None, pattern=r"^&H[0-9A-Fa-f]{8}$")
+    secondary_colour: str | None = Field(None, pattern=r"^&H[0-9A-Fa-f]{8}$")
+    outline_colour: str | None = Field(None, pattern=r"^&H[0-9A-Fa-f]{8}$")
+    back_colour: str | None = Field(None, pattern=r"^&H[0-9A-Fa-f]{8}$")
+    bold: bool | None = None
+    italic: bool | None = None
+    border_style: int | None = Field(None, ge=1, le=3)
+    outline: float | None = Field(None, ge=0.0, le=20.0)
+    shadow: float | None = Field(None, ge=0.0, le=20.0)
+    alignment: int | None = Field(None, ge=1, le=9)
+    margin_l: int | None = Field(None, ge=0, le=2000)
+    margin_r: int | None = Field(None, ge=0, le=2000)
+    margin_v: int | None = Field(None, ge=0, le=2000)
+    play_res_x: int | None = Field(None, ge=64, le=8192)
+    play_res_y: int | None = Field(None, ge=64, le=8192)
+    font_fallback_chain: list[str] | None = None
+
+
+__all__ = [
+    "ProjectSubtitleStyleCreateInput",
+    "ProjectSubtitleStyleUpdateInput",
+    "SubtitleStyleRead",
+]
