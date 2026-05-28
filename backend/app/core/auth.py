@@ -47,6 +47,7 @@ SKIP_PATHS: set[str] = {
     "/openapi.json",
     "/health",
     "/api/v1/health",
+    "/api/v1/login/access-token",
 }
 
 
