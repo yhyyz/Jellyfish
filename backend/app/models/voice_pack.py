@@ -1,8 +1,10 @@
-"""音色包 + TTS 缓存模型（P3 W17 引入）。
+"""音色包 + TTS 缓存模型（P3 W17 引入；P5 W29 扩自定义 voice clone 字段）。
 
 包含两张表：
 - voice_packs：跨镜头/项目复用的 TTS 音色定义；启动期由 builtin_voice_packs
   幂等 seed 系统级音色（is_system=True），用户也可上传自定义 voice clone。
+  P5 W29 起新增 5 列承载 voice clone 状态（target_model / region /
+  clone_status / sample_audio_oss_key / cloned_at），见 alembic 0018。
 - tts_cache：(text, voice_pack_id, speed) 三元组 sha256 hash 缓存，命中即复用
   既有合成音频，避免重复调用供应商（D15 决策）。
 
@@ -12,11 +14,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -28,7 +32,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.base import TimestampMixin
-from app.models.types import VoiceGender, VoiceProvider
+from app.models.types import VoiceCloneStatus, VoiceGender, VoiceProvider, VoiceRegion
 
 
 class VoicePack(Base, TimestampMixin):
@@ -119,6 +123,37 @@ class VoicePack(Base, TimestampMixin):
         default=0,
         server_default="0",
         comment="UI 列表显示顺序（升序）",
+    )
+    # === P5 W29 自定义 voice clone 字段（见 alembic 0018）===
+    target_model: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        default=None,
+        comment="DashScope 锁死的合成模型（cosyvoice-v3.5-plus 等）；系统行可为 NULL",
+    )
+    region: Mapped[VoiceRegion | None] = mapped_column(
+        String(32),
+        nullable=True,
+        default=None,
+        comment="DashScope 区域端点：cn-beijing / ap-singapore；同一 voice 不能跨区使用",
+    )
+    clone_status: Mapped[VoiceCloneStatus | None] = mapped_column(
+        String(32),
+        nullable=True,
+        default=None,
+        comment="voice clone 状态：deploying / ready / failed / deleted",
+    )
+    sample_audio_oss_key: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        default=None,
+        comment="用户上传 voice sample 在 minio bucket 内的 object key（仅自定义音色）",
+    )
+    cloned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+        comment="voice clone 完成时间戳；仅 ready 状态有意义",
     )
 
     __table_args__ = (

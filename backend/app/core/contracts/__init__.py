@@ -25,6 +25,14 @@ from app.core.contracts.tts import (
     TtsWordTimestamp,
 )
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
+from app.core.contracts.voice_pack_contracts import (
+    ALLOWED_AUDIO_FORMATS,
+    ALLOWED_TARGET_MODELS,
+    AudioMetadataValidation,
+    CustomVoiceCreateRequest,
+    CustomVoiceCreateResponse,
+    CustomVoiceStatusResponse,
+)
 
 __all__ = [
     "ProviderConfig",
@@ -48,4 +56,11 @@ __all__ = [
     "TtsWordTimestamp",
     "TtsCacheKey",
     "TtsVoiceCapability",
+    "ALLOWED_AUDIO_FORMATS",
+    "ALLOWED_TARGET_MODELS",
+    "AudioMetadataValidation",
+    "CustomVoiceCreateRequest",
+    "CustomVoiceCreateResponse",
+    "CustomVoiceStatusResponse",
 ]
+
