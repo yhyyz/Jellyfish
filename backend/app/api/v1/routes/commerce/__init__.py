@@ -16,6 +16,7 @@ from app.api.v1.routes.commerce import (
     commerce_export,
     outcomes,
     outcomes_import,
+    shot_consistency,
     subtitle_styles,
     tasks,
     voice_packs,
@@ -32,5 +33,7 @@ router.include_router(outcomes_import.router, tags=["commerce-outcomes-import"])
 router.include_router(analytics.router, tags=["commerce-analytics"])
 # === P4 W23-T2: 平台导出入口（POST /export，slow 队列）===
 router.include_router(commerce_export.router, tags=["commerce/export"])
+# === P4 W27-T3: 分镜一致性证据只读端点 ===
+router.include_router(shot_consistency.router, tags=["commerce-shot-consistency"])
 
 __all__ = ["router"]

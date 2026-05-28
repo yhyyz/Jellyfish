@@ -72,6 +72,7 @@ import { VariantList } from './components/VariantList'
 import { AVPreviewPanel } from './components/AVPreviewPanel'
 import { OutcomeEntryForm } from './components/OutcomeEntryForm'
 import { OutcomeList } from './components/OutcomeList'
+import { ConsistencyReviewDrawer } from './components/ConsistencyReviewDrawer'
 import { useQuery } from '@tanstack/react-query'
 
 /** Platform 枚举 → 中文展示 */
@@ -206,6 +207,12 @@ const StoryWorkbench: React.FC = () => {
   // 演化为「投放复盘」业务面板。Tabs 区分录入和列表视图，避免一次性
   // 把表单与表格塞在同一屏。
   const [outcomeDrawerOpen, setOutcomeDrawerOpen] = useState(false)
+
+  // ---------- 视觉一致性审阅抽屉（W27-T3） ----------
+  // 由 ShotTimelineStrip 中 ConsistencyBadge 点击触发；只承载只读评估
+  // 信息（score / 抽样帧 / 参考图），不重新计算 score、不暴露 sidecar
+  // debug。关闭时清空 shotId，避免下次打开看到旧数据。
+  const [consistencyShotId, setConsistencyShotId] = useState<string | null>(null)
 
   // 构造章节兜底：如果项目尚无章节，commerce/script-generate 需要 chapter_id。
   // P1 简化：取项目下第一个章节；没有则提示用户先创建章节。
@@ -401,7 +408,10 @@ const StoryWorkbench: React.FC = () => {
       </Row>
 
       {/* 底部时间轴 */}
-      <ShotTimelineStrip variant={activeVariant} />
+      <ShotTimelineStrip
+        variant={activeVariant}
+        onConsistencyClick={(shotId) => setConsistencyShotId(shotId)}
+      />
 
       {/* 浮动 CTA */}
       <Affix offsetBottom={20}>
@@ -482,6 +492,14 @@ const StoryWorkbench: React.FC = () => {
           <Empty description="尚未选择任何变体" />
         )}
       </Drawer>
+
+      {/* 视觉一致性审阅抽屉（W27-T3）：由 ShotTimelineStrip 上的
+          ConsistencyBadge 点击触发；shotId 缺失时不渲染。 */}
+      <ConsistencyReviewDrawer
+        open={consistencyShotId !== null}
+        onClose={() => setConsistencyShotId(null)}
+        shotId={consistencyShotId}
+      />
     </div>
   )
 }

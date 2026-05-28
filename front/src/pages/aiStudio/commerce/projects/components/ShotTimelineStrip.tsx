@@ -11,23 +11,37 @@
  * - 镜头宽度策略：`max(80, duration_sec * 8)`，下限保证短镜头仍可读，
  *   线性缩放保证长镜头视觉占比更大。
  * - 没有镜头时直接 return null，避免渲染空 Card 占据底部空间。
+ * - W27-T3：当 breakdown shot 携带 `shot_id` / `consistency_score` 时，
+ *   叠加 ``ConsistencyBadge``；点击徽章透传 shot_id 给上层（典型用法：
+ *   打开 ``ConsistencyReviewDrawer``）。
  */
 import React from 'react'
 import { Card, Tag } from 'antd'
 import type { StoryVariantRead } from '../../../../../services/generated'
+import { ConsistencyBadge } from './ConsistencyBadge'
 
 export interface ShotTimelineStripProps {
   /** 当前激活变体；为空或没镜头时不渲染 */
   variant: StoryVariantRead | null
+  /**
+   * W27-T3：点击 ConsistencyBadge 回调。
+   * 仅在 breakdown shot 携带 shot_id 时触发，参数为 shot_id。
+   */
+  onConsistencyClick?: (shotId: string) => void
 }
 
 /**
  * 单镜头精简结构（与 ScriptEditor 一致）；可选字段全部用 ?? 兜底。
+ *
+ * W27-T3 扩展：``shot_id`` / ``consistency_score`` 字段，与后端 Shot 模型
+ * 对齐；breakdown 中存在时直接渲染色档徽章。
  */
 type StripShot = {
+  shot_id?: string | null
   duration_sec?: number
   is_brand_mention?: boolean
   product_focus_level?: 'none' | 'background' | 'foreground' | 'hero' | string
+  consistency_score?: number | null
 }
 
 type StripBreakdown = {
@@ -37,7 +51,10 @@ type StripBreakdown = {
 /**
  * 镜头时间轴条主组件。
  */
-export const ShotTimelineStrip: React.FC<ShotTimelineStripProps> = ({ variant }) => {
+export const ShotTimelineStrip: React.FC<ShotTimelineStripProps> = ({
+  variant,
+  onConsistencyClick,
+}) => {
   const breakdown = (variant?.script_breakdown ?? null) as StripBreakdown | null
   const shots = breakdown?.shots ?? []
   if (!shots.length) return null
@@ -48,6 +65,9 @@ export const ShotTimelineStrip: React.FC<ShotTimelineStripProps> = ({ variant })
         {shots.map((shot, i) => {
           const dur = shot.duration_sec ?? 3
           const width = Math.max(80, dur * 8)
+          const hasConsistency =
+            (shot.shot_id !== undefined && shot.shot_id !== null) ||
+            shot.consistency_score !== undefined
           return (
             <div
               key={i}
@@ -65,6 +85,20 @@ export const ShotTimelineStrip: React.FC<ShotTimelineStripProps> = ({ variant })
                 <Tag color="gold" className="mt-1 text-[11px]">
                   Hero
                 </Tag>
+              ) : null}
+              {hasConsistency ? (
+                <div className="mt-1">
+                  <ConsistencyBadge
+                    score={shot.consistency_score ?? null}
+                    shotId={shot.shot_id ?? undefined}
+                    onClick={
+                      shot.shot_id && onConsistencyClick
+                        ? (id) => id && onConsistencyClick(id)
+                        : undefined
+                    }
+                    showScore={false}
+                  />
+                </div>
               ) : null}
             </div>
           )
