@@ -12,11 +12,36 @@
  * - vi.spyOn 接管 4 个 generated service 方法。
  */
 import React from 'react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 void React
+
+beforeAll(() => {
+  if (!window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    })
+  }
+  if (!(globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver) {
+    ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  }
+})
 
 vi.mock('@ant-design/charts', () => ({
   Column: ({ data }: { data: unknown[] }) => (
@@ -176,6 +201,6 @@ describe('AnalyticsPage', () => {
   it('case 4: 顶部 Segmented metric 选择器存在并显示默认 GMV', () => {
     renderPage()
     expect(document.querySelector('.ant-segmented')).toBeInTheDocument()
-    expect(screen.getByText('GMV')).toBeInTheDocument()
+    expect(screen.getAllByText('GMV').length).toBeGreaterThanOrEqual(1)
   })
 })

@@ -22,6 +22,11 @@ from app.schemas.commerce.analytics import (
     AnalyticsMetric,
     ChartDataPoint,
     ChartDataResponse,
+    KpiRange,
+    KpiSummary,
+    VariantAggregateListResponse,
+    VariantSortBy,
+    VariantSortDir,
 )
 from app.schemas.common import ApiResponse, success_response
 from app.services.commerce.analytics_service import AnalyticsService
@@ -97,6 +102,58 @@ async def get_analytics_by_platform(
     """``platform`` 直接落在 outcome 上；不需要 join StoryVariant。"""
     payload = await _aggregate(db, AnalyticsDimension.platform, metric)
     return success_response(payload)
+
+
+@router.get(
+    "/analytics/kpis",
+    response_model=ApiResponse[KpiSummary],
+    summary="顶部 KPI 卡片摘要（GMV / ROI / 完播率 / 加购率）",
+)
+async def get_analytics_kpis(
+    range_: KpiRange = Query(
+        KpiRange.last_30d,
+        alias="range",
+        description="时间窗口：7d / 30d / 90d",
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[KpiSummary]:
+    """W22-T4：4 张 KPI 卡片所需窗口聚合。
+
+    ROI 当前永远 None（StoryVariant 缺 ``estimated_cost`` 字段，DESIGN GAP）。
+    其他指标空窗口返回 None，前端展示 "N/A" 区分"无数据"与"真为 0"。
+    """
+    service = AnalyticsService(db)
+    payload = await service.get_kpis(range_)
+    return success_response(payload)
+
+
+@router.get(
+    "/analytics/variants",
+    response_model=ApiResponse[VariantAggregateListResponse],
+    summary="变体级聚合对比表（server-side 排序+分页）",
+)
+async def list_analytics_variants(
+    offset: int = Query(0, ge=0, description="分页偏移"),
+    limit: int = Query(20, ge=1, le=100, description="分页大小（最大 100）"),
+    sort_by: VariantSortBy = Query(VariantSortBy.gmv, description="排序字段"),
+    sort_dir: VariantSortDir = Query(VariantSortDir.desc, description="排序方向"),
+    range_: KpiRange | None = Query(
+        None, alias="range", description="可选时间窗口；缺省则不限制"
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[VariantAggregateListResponse]:
+    """W22-T4：变体级聚合 + 服务端分页 + 排序枚举（防 SQL 注入）。"""
+    service = AnalyticsService(db)
+    rows, total = await service.list_variant_aggregates(
+        offset=offset,
+        limit=limit,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        range_=range_,
+    )
+    return success_response(
+        VariantAggregateListResponse(items=rows, total=total, offset=offset, limit=limit)
+    )
 
 
 __all__ = ["router"]
