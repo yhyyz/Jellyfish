@@ -12,9 +12,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CommerceTasksService,
+  StudioBrandStyleGuidesService,
   StudioProductsService,
 } from '../../../../services/generated'
 import type {
+  BrandStyleGuideRead,
+  BrandStyleGuideUpsert,
   ProductCreate,
   ProductExtractRequest,
   ProductImageCreate,
@@ -243,6 +246,99 @@ export function useExtractProductFromText() {
       })
       if (!res.data) throw new Error('empty enqueue response')
       return res.data
+    },
+  })
+}
+
+// ====================================================================
+// W25-T3: BrandStyleGuide 1:1 per-Product CRUD hooks
+// ====================================================================
+
+/**
+ * BrandStyleGuide query key factory；与 productKeys 隔离，便于按商品维度
+ * 失效缓存（``brandStyleGuideKeys.detail(productId)``）。
+ */
+export const brandStyleGuideKeys = {
+  all: ['commerce', 'brand-style-guides'] as const,
+  detail: (productId: string) =>
+    [...brandStyleGuideKeys.all, productId] as const,
+}
+
+/**
+ * 拉取指定商品的品牌话术规范。
+ *
+ * 后端约定：
+ * - 商品不存在 → 404 Product；
+ * - 商品存在但规范不存在 → 404 BrandStyleGuide。
+ *
+ * 调用方应该把 404 BrandStyleGuide 视作"尚未创建"空态，而不是错误。本 hook
+ * 把错误原样抛出，由组件按 `error.status === 404` 分支处理。
+ */
+export function useBrandStyleGuide(productId: string | null | undefined) {
+  return useQuery<BrandStyleGuideRead>({
+    queryKey: productId
+      ? brandStyleGuideKeys.detail(productId)
+      : ['commerce', 'brand-style-guides', 'noop'],
+    queryFn: async () => {
+      if (!productId) throw new Error('productId is required')
+      const res =
+        await StudioBrandStyleGuidesService.getBrandStyleGuideApiV1StudioProductsProductIdBrandStyleGuideGet(
+          { productId },
+        )
+      if (!res.data) throw new Error('empty brand style guide response')
+      return res.data
+    },
+    enabled: !!productId,
+    // 404 不重试（404=尚未创建，是预期态）
+    retry: false,
+  })
+}
+
+/**
+ * 创建或部分更新品牌话术规范（POST upsert）。
+ *
+ * 成功后失效该商品的规范缓存，让下次 `useBrandStyleGuide` 拉到最新值。
+ */
+export function useUpsertBrandStyleGuide() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      productId,
+      body,
+    }: {
+      productId: string
+      body: BrandStyleGuideUpsert
+    }): Promise<BrandStyleGuideRead> => {
+      const res =
+        await StudioBrandStyleGuidesService.upsertBrandStyleGuideApiV1StudioProductsProductIdBrandStyleGuidePost(
+          { productId, requestBody: body },
+        )
+      if (!res.data) throw new Error('empty brand style guide upsert response')
+      return res.data
+    },
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({
+        queryKey: brandStyleGuideKeys.detail(vars.productId),
+      })
+    },
+  })
+}
+
+/**
+ * 清空品牌话术规范（DELETE）。后端不做软删，删除后再创建是合法的。
+ */
+export function useDeleteBrandStyleGuide() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (productId: string): Promise<void> => {
+      await StudioBrandStyleGuidesService.deleteBrandStyleGuideApiV1StudioProductsProductIdBrandStyleGuideDelete(
+        { productId },
+      )
+    },
+    onSuccess: (_data, productId) => {
+      void qc.invalidateQueries({
+        queryKey: brandStyleGuideKeys.detail(productId),
+      })
     },
   })
 }

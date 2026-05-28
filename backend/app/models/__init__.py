@@ -4,6 +4,7 @@ from app.core.db import Base
 from app.models.api_quota import ApiKeyQuota
 from app.models.base import TimestampMixin
 from app.models.brand_archetype import BrandArchetype
+from app.models.brand_style_guide import BrandStyleGuide
 from app.models.compliance import ComplianceFinding, ComplianceProfile
 from app.models.notification_channel import NotificationChannel, NotificationDelivery
 from app.models.cta_pattern import CtaPattern
@@ -96,6 +97,7 @@ __all__ = [
     "HookPattern",
     "CtaPattern",
     "BrandArchetype",
+    "BrandStyleGuide",
     "Product",
     "ProductImage",
     "ProjectProductLink",

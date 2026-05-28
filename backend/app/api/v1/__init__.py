@@ -7,6 +7,7 @@ from app.api.v1.routes.commerce import router as commerce_router
 from app.api.v1.routes.script import router as script_router
 from app.api.v1.routes.studio import (
     brand_archetypes,
+    brand_style_guides,
     cta_patterns,
     hook_patterns,
     story_formulas,
@@ -55,4 +56,15 @@ router.include_router(
     brand_archetypes.router,
     prefix="/studio/brand-archetypes",
     tags=["studio/brand-archetypes"],
+)
+
+# === W25-T3: BrandStyleGuide 1:1 per-Product 子资源 CRUD ===
+# 独立挂载于 /studio 前缀下；route 内部已声明
+# `/products/{product_id}/brand-style-guide` 完整子路径，
+# 不复用 studio.router 的 /products 前缀（race-aware：与 sibling 任务 T25-1 /
+# T25-2 并行时避免 router 注册顺序冲突）。
+router.include_router(
+    brand_style_guides.router,
+    prefix="/studio",
+    tags=["studio/brand-style-guides"],
 )

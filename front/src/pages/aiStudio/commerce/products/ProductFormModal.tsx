@@ -21,9 +21,11 @@ import {
   Select,
   Space,
   Switch,
+  Tabs,
   message,
 } from 'antd'
 import type { ProductCategory, ProductCreate, ProjectStyle, ProjectVisualStyle } from '../../../../services/generated'
+import { BrandStyleGuideForm } from './components/BrandStyleGuideForm'
 import { useCreateProduct, useUpdateProduct, type ProductRead } from './queries'
 
 type Props = {
@@ -175,97 +177,147 @@ export const ProductFormModal: React.FC<Props> = ({
       open={open}
       onCancel={onCancel}
       footer={null}
-      width={640}
+      width={720}
       destroyOnClose
     >
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleSubmit}
-        initialValues={{
-          visual_style: '现实',
-          style: '真人都市',
-          category: 'other',
-          health_disclaimer_required: false,
-        }}
-      >
-        <Form.Item
-          name="name"
-          label="商品名称"
-          rules={[{ required: true, message: '请输入商品名称' }]}
-        >
-          <Input placeholder="例如：XYZ 美白精华液 50ml" maxLength={120} />
-        </Form.Item>
-
-        <Form.Item name="brand" label="品牌">
-          <Input placeholder="例如：CleanLab" maxLength={64} />
-        </Form.Item>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-          <Form.Item name="category" label="类目">
-            <Select options={CATEGORY_OPTIONS} placeholder="选择品类" />
-          </Form.Item>
-          <Form.Item name="visual_style" label="视觉风格">
-            <Select options={VISUAL_STYLE_OPTIONS} />
-          </Form.Item>
-        </div>
-
-        <Form.Item
-          name="style"
-          label="项目题材"
-          rules={[{ required: true, message: '请选择项目题材' }]}
-        >
-          <Select options={PROJECT_STYLE_OPTIONS} />
-        </Form.Item>
-
-        <Form.Item name="description" label="商品描述">
-          <Input.TextArea rows={3} placeholder="一句话描述商品的核心卖点" />
-        </Form.Item>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-          <Form.Item name="price_anchor" label="价格锚点">
-            <InputNumber min={0} step={0.01} className="w-full" placeholder="例如：199.00" />
-          </Form.Item>
-          <Form.Item name="sku" label="SKU">
-            <Input placeholder="可选；用于内部对账" maxLength={64} />
-          </Form.Item>
-        </div>
-
-        <Form.Item name="selling_points" label="核心卖点（多选）">
-          <Select mode="tags" placeholder="输入后回车添加" tokenSeparators={[',', '，']} />
-        </Form.Item>
-
-        <Form.Item name="pain_points_solved" label="解决的痛点（多选）">
-          <Select mode="tags" placeholder="输入后回车添加" tokenSeparators={[',', '，']} />
-        </Form.Item>
-
-        <Form.Item name="catchphrases" label="标语 / catchphrase（多选）">
-          <Select mode="tags" placeholder="输入后回车添加" tokenSeparators={[',', '，']} />
-        </Form.Item>
-
-        <Form.Item name="competitor_names" label="竞品名称（多选）">
-          <Select mode="tags" placeholder="输入后回车添加" tokenSeparators={[',', '，']} />
-        </Form.Item>
-
-        <Form.Item
-          name="health_disclaimer_required"
-          label="是否需要健康类免责声明"
-          valuePropName="checked"
-          tooltip="健康类商品建议开启；合规检查会强制提示"
-        >
-          <Switch />
-        </Form.Item>
-
-        <Form.Item>
-          <Space className="w-full justify-end">
-            <Button onClick={onCancel}>取消</Button>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              {mode === 'create' ? '创建' : '保存'}
-            </Button>
-          </Space>
-        </Form.Item>
-      </Form>
+      {mode === 'edit' && initial ? (
+        <Tabs
+          defaultActiveKey="basic"
+          items={[
+            {
+              key: 'basic',
+              label: '基础信息',
+              children: (
+                <BasicInfoForm
+                  form={form}
+                  submitting={submitting}
+                  onCancel={onCancel}
+                  onFinish={handleSubmit}
+                  mode={mode}
+                />
+              ),
+            },
+            {
+              key: 'brand-style-guide',
+              label: '品牌话术规范',
+              children: <BrandStyleGuideForm productId={initial.id} />,
+            },
+          ]}
+        />
+      ) : (
+        <BasicInfoForm
+          form={form}
+          submitting={submitting}
+          onCancel={onCancel}
+          onFinish={handleSubmit}
+          mode={mode}
+        />
+      )}
     </Modal>
+  )
+}
+
+/**
+ * BasicInfoForm —— 商品基础信息表单（从主组件抽出，便于在 Tabs 与单一入口之间复用）。
+ *
+ * 接收主组件的 ``form`` 实例，避免 Form 状态分裂；仅承担 UI 渲染与
+ * "保存 / 取消" 按钮联动，不持有任何业务副作用。
+ */
+const BasicInfoForm: React.FC<{
+  form: ReturnType<typeof Form.useForm<FormValues>>[0]
+  submitting: boolean
+  onCancel: () => void
+  onFinish: (values: FormValues) => Promise<void> | void
+  mode: 'create' | 'edit'
+}> = ({ form, submitting, onCancel, onFinish, mode }) => {
+  return (
+    <Form
+      form={form}
+      layout="vertical"
+      onFinish={onFinish}
+      initialValues={{
+        visual_style: '现实',
+        style: '真人都市',
+        category: 'other',
+        health_disclaimer_required: false,
+      }}
+    >
+      <Form.Item
+        name="name"
+        label="商品名称"
+        rules={[{ required: true, message: '请输入商品名称' }]}
+      >
+        <Input placeholder="例如：XYZ 美白精华液 50ml" maxLength={120} />
+      </Form.Item>
+
+      <Form.Item name="brand" label="品牌">
+        <Input placeholder="例如：CleanLab" maxLength={64} />
+      </Form.Item>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+        <Form.Item name="category" label="类目">
+          <Select options={CATEGORY_OPTIONS} placeholder="选择品类" />
+        </Form.Item>
+        <Form.Item name="visual_style" label="视觉风格">
+          <Select options={VISUAL_STYLE_OPTIONS} />
+        </Form.Item>
+      </div>
+
+      <Form.Item
+        name="style"
+        label="项目题材"
+        rules={[{ required: true, message: '请选择项目题材' }]}
+      >
+        <Select options={PROJECT_STYLE_OPTIONS} />
+      </Form.Item>
+
+      <Form.Item name="description" label="商品描述">
+        <Input.TextArea rows={3} placeholder="一句话描述商品的核心卖点" />
+      </Form.Item>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+        <Form.Item name="price_anchor" label="价格锚点">
+          <InputNumber min={0} step={0.01} className="w-full" placeholder="例如：199.00" />
+        </Form.Item>
+        <Form.Item name="sku" label="SKU">
+          <Input placeholder="可选；用于内部对账" maxLength={64} />
+        </Form.Item>
+      </div>
+
+      <Form.Item name="selling_points" label="核心卖点（多选）">
+        <Select mode="tags" placeholder="输入后回车添加" tokenSeparators={[',', '，']} />
+      </Form.Item>
+
+      <Form.Item name="pain_points_solved" label="解决的痛点（多选）">
+        <Select mode="tags" placeholder="输入后回车添加" tokenSeparators={[',', '，']} />
+      </Form.Item>
+
+      <Form.Item name="catchphrases" label="标语 / catchphrase（多选）">
+        <Select mode="tags" placeholder="输入后回车添加" tokenSeparators={[',', '，']} />
+      </Form.Item>
+
+      <Form.Item name="competitor_names" label="竞品名称（多选）">
+        <Select mode="tags" placeholder="输入后回车添加" tokenSeparators={[',', '，']} />
+      </Form.Item>
+
+      <Form.Item
+        name="health_disclaimer_required"
+        label="是否需要健康类免责声明"
+        valuePropName="checked"
+        tooltip="健康类商品建议开启；合规检查会强制提示"
+      >
+        <Switch />
+      </Form.Item>
+
+      <Form.Item>
+        <Space className="w-full justify-end">
+          <Button onClick={onCancel}>取消</Button>
+          <Button type="primary" htmlType="submit" loading={submitting}>
+            {mode === 'create' ? '创建' : '保存'}
+          </Button>
+        </Space>
+      </Form.Item>
+    </Form>
   )
 }
 
