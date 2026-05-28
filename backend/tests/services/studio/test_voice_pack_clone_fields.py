@@ -81,10 +81,16 @@ def _setup_pre_0018_schema(engine: Engine) -> None:
     在已经存在 ``project_id`` 列的 fixture 上做无意义的重排，这里同样把
     ``subtitle_styles.project_id`` 列、对应 FK 与索引剥掉，让 fixture 真实
     模拟 0017 时刻的 schema。
+
+    W31 又在 ``chapter_timeline_segments`` 表上加了 ``bgm_file_id`` /
+    ``sfx_file_id`` / ``bgm_ducking_db`` 三列（0020）；同样必须从 fixture
+    schema 中剔除，否则 0020 batch_alter_table 重排已存在列时会触发
+    SQLAlchemy ``CircularDependencyError``。
     """
     fresh = MetaData()
     skip_voice_pack_cols = set(NEW_COLUMNS_0018)
     skip_subtitle_styles_cols = {"project_id"}
+    skip_segment_cols = {"bgm_file_id", "sfx_file_id", "bgm_ducking_db"}
 
     for source in Base.metadata.sorted_tables:
         copy_target = source.to_metadata(
@@ -112,6 +118,25 @@ def _setup_pre_0018_schema(engine: Engine) -> None:
                 ix
                 for ix in list(copy_target.indexes)
                 if any(c.name in skip_subtitle_styles_cols for c in ix.columns)
+            ]
+            for ix in stale_indexes:
+                copy_target.indexes.discard(ix)
+        if source.name == "chapter_timeline_segments":
+            for col_name in skip_segment_cols:
+                if col_name in copy_target.columns:
+                    col = copy_target.columns[col_name]
+                    copy_target._columns.remove(col)  # type: ignore[attr-defined]  # pylint: disable=protected-access
+            stale_fks = [
+                fk
+                for fk in list(copy_target.foreign_key_constraints)
+                if any(c.name in skip_segment_cols for c in fk.columns)
+            ]
+            for fk in stale_fks:
+                copy_target.constraints.discard(fk)
+            stale_indexes = [
+                ix
+                for ix in list(copy_target.indexes)
+                if any(c.name in skip_segment_cols for c in ix.columns)
             ]
             for ix in stale_indexes:
                 copy_target.indexes.discard(ix)

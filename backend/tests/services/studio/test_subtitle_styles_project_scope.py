@@ -44,6 +44,15 @@ import app.models.voice_pack  # noqa: F401  pylint: disable=unused-import,wrong-
 NEW_COLUMN_0019: str = "project_id"
 NEW_INDEX_0019: str = "ix_subtitle_styles_project_id"
 
+# 0020 (P5 W31) 在 chapter_timeline_segments 上新增的列与索引名；
+# 本测试 fixture 在 pre-0019 schema 中也要把它们一起 strip，否则 alembic
+# 0019→0020 升级会与已存在的 ORM 列冲突。
+NEW_COLUMNS_0020: set[str] = {"bgm_file_id", "sfx_file_id", "bgm_ducking_db"}
+NEW_INDEXES_0020: set[str] = {
+    "ix_chapter_timeline_segments_bgm_file_id",
+    "ix_chapter_timeline_segments_sfx_file_id",
+}
+
 
 def _alembic_dir() -> Path:
     """返回 ``backend/alembic`` 的绝对路径。"""
@@ -59,13 +68,14 @@ def _make_alembic_config(db_url: str) -> Config:
 
 
 def _setup_pre_0019_schema(engine: Engine) -> None:
-    """搭建 "pre-0019" 状态：建出当前完整 ORM schema，再丢掉 0019 引入的列。
+    """搭建 "pre-0019" 状态：建出当前完整 ORM schema，再丢掉 0019 + 0020 引入的列。
 
     SQLite 不支持原生 DROP COLUMN with FK；这里把表复制到独立 MetaData 上
-    并在复制时跳过 0019 列与对应 FK 约束，避免污染共享 ``Base.metadata``。
+    并在复制时跳过 0019 / 0020 列与对应 FK 约束，避免污染共享 ``Base.metadata``。
     """
     fresh = MetaData()
-    skip_cols = {NEW_COLUMN_0019}
+    skip_cols_subtitle = {NEW_COLUMN_0019}
+    skip_cols_segment = NEW_COLUMNS_0020
 
     for source in Base.metadata.sorted_tables:
         copy_target = source.to_metadata(
@@ -73,26 +83,38 @@ def _setup_pre_0019_schema(engine: Engine) -> None:
             referred_schema_fn=lambda _t, _to_schema, _ck, referred_schema: referred_schema,
         )
         if source.name == "subtitle_styles":
-            for col_name in skip_cols:
-                if col_name in copy_target.columns:
-                    col = copy_target.columns[col_name]
-                    copy_target._columns.remove(col)  # type: ignore[attr-defined]  # pylint: disable=protected-access
-            stale_fks = [
-                fk
-                for fk in list(copy_target.foreign_key_constraints)
-                if any(c.name in skip_cols for c in fk.columns)
-            ]
-            for fk in stale_fks:
-                copy_target.constraints.discard(fk)
-            stale_indexes = [
-                ix
-                for ix in list(copy_target.indexes)
-                if any(c.name in skip_cols for c in ix.columns)
-            ]
-            for ix in stale_indexes:
-                copy_target.indexes.discard(ix)
+            _strip_columns(copy_target, skip_cols_subtitle)
+        elif source.name == "chapter_timeline_segments":
+            _strip_columns(copy_target, skip_cols_segment)
 
     fresh.create_all(bind=engine)
+
+
+def _strip_columns(table: object, skip_cols: set[str]) -> None:
+    """在拷贝出来的 Table 上原地剔除指定列、对应 FK 与索引。
+
+    封装这一步是因为 0019 与 0020 都需要"复制 ORM Table → 跳过未来列"的
+    同款逻辑（仅作用于不同的表 + 不同的列集）；抽出来避免把 fixture 写
+    成两份 ~30 行的拷贝。
+    """
+    columns = getattr(table, "columns")
+    constraints = getattr(table, "constraints")
+    fks = getattr(table, "foreign_key_constraints")
+    indexes = getattr(table, "indexes")
+    for col_name in skip_cols:
+        if col_name in columns:
+            col = columns[col_name]
+            table._columns.remove(col)  # type: ignore[attr-defined]  # pylint: disable=protected-access
+    stale_fks = [
+        fk for fk in list(fks) if any(c.name in skip_cols for c in fk.columns)
+    ]
+    for fk in stale_fks:
+        constraints.discard(fk)
+    stale_indexes = [
+        ix for ix in list(indexes) if any(c.name in skip_cols for c in ix.columns)
+    ]
+    for ix in stale_indexes:
+        indexes.discard(ix)
 
 
 def _stamp_version(engine: Engine, version: str) -> None:
@@ -169,10 +191,14 @@ def test_upgrade_head_adds_project_id_column(baseline_engine: Engine) -> None:
 
 
 def test_downgrade_removes_project_id_column(baseline_engine: Engine) -> None:
-    """downgrade -1 (head 0019 -> 0018) 后必须干净移除 project_id 列与索引。"""
+    """downgrade 到 0018 后必须干净移除 project_id 列与索引。
+
+    原 W30 测试用 ``downgrade -1`` 假设 head==0019；W31 引入 0020 后 head 改
+    变，需要显式指定 target=0018 才能回到"0019 之前"。
+    """
     cfg = _make_alembic_config(str(baseline_engine.url))
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, "0018")
 
     cols = _table_columns(baseline_engine, "subtitle_styles")
     assert NEW_COLUMN_0019 not in cols, (
