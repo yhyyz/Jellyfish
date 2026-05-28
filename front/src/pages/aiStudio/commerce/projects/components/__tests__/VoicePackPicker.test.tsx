@@ -21,9 +21,11 @@ import {
 } from '../../../../../../services/generated'
 import { VoicePackPicker } from '../VoicePackPicker'
 
-// spyOn 的精确返回类型与 MockInstance<unknown> 之间存在 TS 兼容差，
-// 测试内只关心 mock API（mockResolvedValue / mockRejectedValueOnce 等），
-// 这里用 any 作为别名故意放宽。
+// 尝试过 MockInstance<typeof ...method> 与 ReturnType<typeof vi.spyOn<...>>，
+// 但 vitest 2.x 的 MockInstance<T> 约束 T extends (...args: any) => any，
+// 而 OpenAPI 生成的方法签名（带可选 options 对象）以及静态类成员的 vi.spyOn
+// 第二个泛型参数都无法满足该约束（TS2344）。在 vitest 升级或生成器换型之前
+// 保留 any 别名 —— 测试只用 mock API（mockResolvedValue / mockRejectedValueOnce）。
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockedListVoicePacks: any
 

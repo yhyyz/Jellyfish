@@ -62,15 +62,15 @@ const QUALITY_LEVELS: AssetQualityLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'ULTRA']
  *   API；保留该字段是为父级回调时透出便利，并与未来上传/调度接入对齐。
  * - `images`：当前商品已落库的图片列表；通常来源于 `useProductDetail` 返回。
  * - `onUpload`：点击空槽时触发，参数为 (角度, 质量)，由父级弹起上传交互。
- * - `onSelectPrimary`：点击非主图星标触发，参数为 image.id 的字符串形式，
- *   由父级调用后端“切换主图”接口；后端 ProductImageRead.id 实际为 number，
- *   组件统一以字符串透出，便于与 URL/弹窗 router state 复用。
+ * - `onSelectPrimary`：点击非主图星标触发，参数为 image.id（number），
+ *   由父级调用后端“切换主图”接口；类型与 ProductImageRead.id 直接对齐，
+ *   避免无谓的 String() 转换。
  */
 export interface ProductImageGridProps {
   productId: string
   images: ProductImageRead[]
   onUpload: (angle: AssetViewAngle, quality: AssetQualityLevel) => void
-  onSelectPrimary: (imageId: string) => void
+  onSelectPrimary: (imageId: number) => void
 }
 
 /**
@@ -85,7 +85,7 @@ export interface ProductImageGridProps {
  * @param quality 当前槽位归属的质量等级；同上。
  * @param image 命中时传入的 ProductImageRead；未命中传 undefined。
  * @param onUpload 空槽点击回调。
- * @param onSelectPrimary 非主图星标点击回调（imageId 已转字符串）。
+ * @param onSelectPrimary 非主图星标点击回调（imageId 为 number，与后端 schema 一致）。
  */
 const ImageSlot: React.FC<{
   angle: AssetViewAngle
@@ -116,7 +116,7 @@ const ImageSlot: React.FC<{
 
   // 已填充：复用 DisplayImageCard，并叠加星标按钮做主图切换。
   const imageUrl = image.file_id ? resolveAssetUrl(image.file_id) : undefined
-  const imageId = String(image.id)
+  const imageId = image.id
   // 主图态使用金色 StarFilled，非主图使用灰色 StarOutlined；
   // 主图自身无需再次切换，因此 onClick 仅在非主图时回调。
   const starClassName = image.is_primary

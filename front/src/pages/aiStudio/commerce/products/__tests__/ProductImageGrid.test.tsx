@@ -147,6 +147,6 @@ describe('ProductImageGrid', () => {
     await user.click(screen.getByTestId('primary-star-7'))
 
     expect(onSelectPrimary).toHaveBeenCalledTimes(1)
-    expect(onSelectPrimary).toHaveBeenCalledWith('7')
+    expect(onSelectPrimary).toHaveBeenCalledWith(7)
   })
 })
