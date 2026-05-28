@@ -35,6 +35,8 @@ const VoicePackLibrary = lazy(() => import('./pages/aiStudio/commerce/voicePacks
 const SubtitleStyleLibrary = lazy(() => import('./pages/aiStudio/commerce/subtitleStyles/SubtitleStyleLibrary'))
 // W23-T1：多平台导出预设库（P4 Wave A）
 const PlatformExportPresetLibrary = lazy(() => import('./pages/aiStudio/commerce/exportPresets/PlatformExportPresetLibrary'))
+// W22-T3：A/B 数据归因可视化（P4 Wave B）；含 ant-design/charts 的重 chunk，独立 lazy 加载
+const AnalyticsPage = lazy(() => import('./pages/aiStudio/commerce/analytics/AnalyticsPage'))
 
 /** 兼容旧链接 `/projects/:projectId/chapters` → 工作台章节 Tab */
 function NavigateToWorkbenchChaptersTab() {
@@ -77,6 +79,7 @@ const App: React.FC = () => {
           <Route path="commerce/voice-packs" element={<Suspense fallback={<PageSkeleton />}><VoicePackLibrary /></Suspense>} />
           <Route path="commerce/subtitle-styles" element={<Suspense fallback={<PageSkeleton />}><SubtitleStyleLibrary /></Suspense>} />
           <Route path="commerce/export-presets" element={<Suspense fallback={<PageSkeleton />}><PlatformExportPresetLibrary /></Suspense>} />
+          <Route path="commerce/analytics" element={<Suspense fallback={<PageSkeleton />}><AnalyticsPage /></Suspense>} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>
