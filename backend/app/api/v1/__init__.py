@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.v1.routes import film, health, llm, studio
 from app.api.v1.routes.commerce import router as commerce_router
 from app.api.v1.routes.script import router as script_router
+from app.api.v1.routes.settings import router as settings_router
 from app.api.v1.routes.studio import (
     brand_archetypes,
     brand_style_guides,
@@ -23,6 +24,11 @@ router.include_router(llm.router, prefix="/llm", tags=["llm"])
 router.include_router(studio.router, prefix="/studio")
 router.include_router(commerce_router, prefix="/commerce")
 router.include_router(script_router)
+
+# === P4 W24-T1: settings/api-keys admin（per-key 配额管理）===
+# race-aware：放在 commerce/script 之后，确保上游路由聚合先就位，
+# 不会因为 import 时序意外覆盖既有 prefix。
+router.include_router(settings_router, prefix="/settings")
 
 # === W6-T2: Story-Driven Commerce 入口（独立挂载，避免与 W6-T1/T3 冲突）===
 router.include_router(
