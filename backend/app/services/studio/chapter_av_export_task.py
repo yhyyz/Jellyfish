@@ -52,9 +52,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal
 
+from fastapi import HTTPException, status as http_status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings, settings as app_settings
 from app.core import storage
 from app.core.db import async_session_maker
 from app.core.task_manager import SqlAlchemyTaskStore
@@ -368,6 +370,88 @@ async def _run_ffmpeg_av_export(
         raise RuntimeError(f"ffmpeg chapter_av_export 失败: {msg}")
 
 
+#: 一致性前置门：consistency_status 视为合格的取值集合。
+#:
+#: ``pass`` / ``warning`` 直接放行；``None`` 兜底视为 warning（避免 W27 之前
+#: 未跑过 threshold_engine 的旧数据卡死导出主流程）。``fail`` 是唯一会触发
+#: 422 阻塞的取值。
+_CONSISTENCY_GATE_OK: frozenset[str | None] = frozenset({"pass", "warning", None})
+
+#: 422 detail.code：前端可据此识别"是一致性前置门拦截，而非通用 422"。
+CONSISTENCY_GATE_ERROR_CODE = "consistency_gates_failed"
+
+
+def _assert_consistency_gates_pass(
+    chapter_id: str,
+    shots: list[Shot],
+    settings: Settings | None = None,
+) -> None:
+    """章节级 AV 合成前置门：消耗的所有 shots 一致性必须 ≥ warning。
+
+    为什么存在：
+        T27-2 已为 :class:`Shot` 落了 ``consistency_status`` 字段；导出 worker
+        会把每个 shot 的视频喂进 ffmpeg 合成最终成片，若任一 shot 被 DINOv2
+        判为 ``fail`` 仍参与合成，最终交付物会带瑕疵。本前置门把"质量门"
+        前移到入队/启动阶段，让用户先把 ``fail`` 的 shot 重生为 ≥ warning，
+        而不是等成片渲染完再返工。
+
+    判定规则（与 W27-T2 :mod:`threshold_engine` 对齐）：
+        - ``shot.consistency_status == "fail"`` → 收集进 ``failing_shot_ids``
+        - ``shot.consistency_status in {"pass", "warning"}`` → 放行
+        - ``shot.consistency_status is None`` → 兜底视为 warning，**不**阻塞
+          （避免 W27 之前未跑过 threshold_engine 的旧数据全部卡死）
+
+    Args:
+        chapter_id: 目标章节 ID，仅用于错误响应中回显。
+        shots: 该章节按 timeline 顺序参与合成的 :class:`Shot` 列表；调用方
+            负责加载（worker 走 ``_resolve_segment_resources``，路由层可走
+            其它查询）。空列表直接放行——空章节无 fail 也无可阻塞对象。
+        settings: 应用配置（可注入便于测试）；缺省取全局 :data:`app_settings`。
+            ``settings.chapter_av_export_bypass_consistency=True`` 时整个前置
+            门会被跳过（应急通道，env: ``CHAPTER_AV_EXPORT_BYPASS_CONSISTENCY=1``）。
+
+    Raises:
+        HTTPException: 任一 shot 的 ``consistency_status == "fail"``。响应
+            ``status_code=422``，``detail`` 为带结构化字段的 dict::
+
+                {
+                    "code": "consistency_gates_failed",
+                    "chapter_id": "<chapter_id>",
+                    "failing_shot_ids": ["<shot_id_1>", ...],
+                    "message": "<人类可读提示>",
+                }
+
+            前端可据 ``failing_shot_ids`` 触发批量 regen（借
+            :func:`enqueue_video_generation` chain）。
+    """
+
+    effective_settings = settings if settings is not None else app_settings
+
+    # 显式 bypass：power-user / 排障应急通道。一旦开启，整个前置门短路。
+    if effective_settings.chapter_av_export_bypass_consistency:
+        return
+
+    failing_shot_ids: list[str] = [
+        shot.id for shot in shots if shot.consistency_status not in _CONSISTENCY_GATE_OK
+    ]
+
+    if not failing_shot_ids:
+        return
+
+    raise HTTPException(
+        status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={
+            "code": CONSISTENCY_GATE_ERROR_CODE,
+            "chapter_id": chapter_id,
+            "failing_shot_ids": failing_shot_ids,
+            "message": (
+                f"章节 {chapter_id} 中有 {len(failing_shot_ids)} 个镜头视觉一致性"
+                "判定为 fail，请先重生这些镜头后再发起 AV 合成"
+            ),
+        },
+    )
+
+
 async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> None:
     """异步 runner：合成章节"配音 + 字幕"成片。
 
@@ -414,6 +498,14 @@ async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> 
             seg_resources = await _resolve_segment_resources(
                 session, chapter_id=chapter_id
             )
+
+            # W27-T4 一致性前置门：消耗的所有 shots 必须 ≥ warning，否则直接
+            # 抛 422 短路，由外层异常路径写 failed + str(HTTPException) 入 error。
+            _assert_consistency_gates_pass(
+                chapter_id,
+                [shot for _seg, shot, *_ in seg_resources],
+            )
+
             await store.set_progress(task_id, _LOAD_PROGRESS)
             await session.commit()
 

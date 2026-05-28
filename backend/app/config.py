@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     dinov2_sidecar_retries: int = 3
     dinov2_sidecar_retry_backoff_s: float = 1.5
 
+    # chapter_av_export 一致性前置门绕过开关（W27-T4）
+    # 默认 OFF：所有消耗 shots 的 ``consistency_status`` 必须 ≥ warning，否则
+    # 入队/启动阶段直接 422 阻塞，提示先把 fail 的 shot 重生。
+    # 设为 True（env: CHAPTER_AV_EXPORT_BYPASS_CONSISTENCY=1）后跳过该前置门，
+    # 仅供应急 / 排障 / power-user 强制导出使用，不应作为长期配置。
+    chapter_av_export_bypass_consistency: bool = False
+
     def model_post_init(self, __context: object) -> None:
         if not self.celery_broker_url or not str(self.celery_broker_url).strip():
             password_part = f":{self.redis_password}@" if self.redis_password else ""
