@@ -45,6 +45,7 @@ from app.services.studio.shot_subtitle_render_worker import (
 )
 from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.studio.tts_generate_worker import build_tts_generate_executor
+from app.services.studio.voice_clone_poll_task import build_voice_clone_poll_executor
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
 from app.services.visual_consistency.consistency_worker import (
     DEFAULT_TIMEOUT_SEC as SHOT_CONSISTENCY_TIMEOUT_SEC,
@@ -192,4 +193,9 @@ task_executor_registry.register(
 # overlay / 贴纸 overlay / loudnorm / 编码与容器切换），输出落 product_export usage。
 task_executor_registry.register(
     "commerce_export", build_commerce_export_executor()
+)
+# P5 W29-T5: 自定义音色训练轮询 worker（fast 队列，600s 超时），轮询 DashScope
+# query_voice 直到 OK / UNDEPLOYED / 超时；与 tts_generate 同队列对齐。
+task_executor_registry.register(
+    "voice_clone_poll", build_voice_clone_poll_executor()
 )

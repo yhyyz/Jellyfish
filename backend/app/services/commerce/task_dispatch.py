@@ -140,6 +140,13 @@ TASK_KIND_VIDEO_GENERATION = "video_generation"
 #: 走 ``fast`` 队列。video 成功后由 generated_video worker 链式派发。
 TASK_KIND_SHOT_CONSISTENCY_CHECK = "shot_consistency_check"
 
+#: P5 W29 自定义音色训练轮询任务 ``task_kind``，与
+#: ``app.services.studio.voice_clone_poll_task`` 注册表同步。
+#: DashScope ``create_voice`` 是异步训练；HTTP / 管理脚本调完 create 后
+#: 由本任务接力轮询 ``query_voice`` 直到 ``ready`` / ``failed`` / 超时。
+#: 属分钟级（典型 30-60s，最长 5min），走 ``fast`` 队列。
+TASK_KIND_VOICE_CLONE_POLL = "voice_clone_poll"
+
 #: 统一 Celery 入口 task name；所有 worker 通过 task_kind 二级路由。
 _CELERY_ENTRY_TASK = "task.execute"#: 默认投递队列：3 个 commerce/* 任务均属分钟级，与 worker SLA 对齐。
 _DEFAULT_QUEUE = "fast"
@@ -517,6 +524,35 @@ class CommerceTaskDispatchService:
             run_args=body,
         )
 
+    async def enqueue_voice_clone_poll(
+        self, body: dict[str, Any]
+    ) -> _EnqueueDescriptor:
+        """落 ``task_kind=voice_clone_poll`` 的 :class:`GenerationTask` 行（``fast`` 队列；不发 broker 消息）。
+
+        P5 W29：DashScope ``create_voice`` 异步训练，HTTP / 管理脚本调完
+        create 后由本任务接力轮询 ``query_voice`` 直到 ``ready`` / ``failed``
+        / 超时（5 分钟）。
+
+        与 W17 的 ``tts_generate`` 同档，属分钟级任务走 ``fast`` 队列；
+        worker 内部用 ``asyncio.sleep(POLL_INTERVAL_SEC)`` 而不是 Celery
+        retry，避免每次 retry 都丢一次 GenerationTask 历史。
+
+        Args:
+            body: 至少包含 ``voice_pack_id``；worker 内部据此读 ORM 行的
+                ``provider_voice_id`` / ``region``。
+
+        Returns:
+            :class:`_EnqueueDescriptor`；调用方（HTTP route / management
+            script）必须先 ``await session.commit()`` 让 :class:`VoicePack`
+            行先落库，再调 :py:meth:`dispatch_after_commit`，否则 worker
+            会拉到消息后 ``db.get(VoicePack)`` 拿到 ``None`` 导致轮询直接失败。
+        """
+
+        return await self._prepare_enqueue(
+            task_kind=TASK_KIND_VOICE_CLONE_POLL,
+            run_args=body,
+        )
+
     async def enqueue_story_batch(self, body: dict[str, Any]) -> _EnqueueDescriptor:
         """落 ``task_kind=story_video_batch_generate`` 批量任务行（``slow`` 队列；不发 broker 消息）。
 
@@ -701,4 +737,5 @@ __all__ = [
     "TASK_KIND_STORY_VIDEO_BATCH_GENERATE",
     "TASK_KIND_TTS_GENERATE",
     "TASK_KIND_VIDEO_GENERATION",
+    "TASK_KIND_VOICE_CLONE_POLL",
 ]
