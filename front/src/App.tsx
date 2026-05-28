@@ -8,6 +8,9 @@ import ProjectLobby from './pages/aiStudio/project/ProjectLobby'
 import ProjectWorkbench from './pages/aiStudio/project/ProjectWorkbench'
 import RoleDetailPage from './pages/aiStudio/project/ProjectWorkbench/RoleDetailPage'
 import { PageSkeleton } from './components/PageSkeleton'
+import { AuthProvider } from './contexts/AuthContext'
+import { ProtectedRoute } from './router/ProtectedRoute'
+import LoginPage from './pages/auth/LoginPage'
 import './App.css'
 
 // 路由级懒加载：大页面拆分为独立 chunk，减小首屏 bundle 体积
@@ -49,44 +52,65 @@ function NavigateToWorkbenchChaptersTab() {
 const App: React.FC = () => {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Navigate to="/projects" replace />} />
-          <Route path="projects" element={<ProjectLobby />} />
-          <Route path="projects/:projectId" element={<ProjectWorkbench />} />
-          <Route path="projects/:projectId/chapters" element={<NavigateToWorkbenchChaptersTab />} />
-          <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/prep/*" element={<Navigate to="../shots" replace />} />
-          <Route path="projects/:projectId/chapters/:chapterId/studio" element={<Suspense fallback={<PageSkeleton />}><ChapterStudio /></Suspense>} />
-          <Route path="projects/:projectId/chapters/:chapterId/shots/:shotId/edit" element={<Suspense fallback={<PageSkeleton />}><ChapterShotEditPage /></Suspense>} />
-          <Route path="projects/:projectId/chapters/:chapterId/shots" element={<Suspense fallback={<PageSkeleton />}><ChapterShotsPage /></Suspense>} />
-          <Route path="projects/:projectId/chapters/:chapterId/prep-drafts" element={<Navigate to="../shots" replace />} />
-          <Route path="projects/:projectId/chapters/:chapterId/timeline" element={<Suspense fallback={<PageSkeleton />}><VideoEditor /></Suspense>} />
-          <Route path="projects/:projectId/editor" element={<Suspense fallback={<PageSkeleton />}><VideoEditor /></Suspense>} />
-          <Route path="assets" element={<Suspense fallback={<PageSkeleton />}><AssetManager /></Suspense>} />
-          <Route path="assets/actors/:actorImageId/edit" element={<Suspense fallback={<PageSkeleton />}><ActorAssetEditPage /></Suspense>} />
-          <Route path="assets/scenes/:sceneId/edit" element={<Suspense fallback={<PageSkeleton />}><SceneAssetEditPage /></Suspense>} />
-          <Route path="assets/props/:propId/edit" element={<Suspense fallback={<PageSkeleton />}><PropAssetEditPage /></Suspense>} />
-          <Route path="assets/costumes/:costumeId/edit" element={<Suspense fallback={<PageSkeleton />}><CostumeAssetEditPage /></Suspense>} />
-          <Route path="prompts" element={<Suspense fallback={<PageSkeleton />}><PromptTemplateManager /></Suspense>} />
-          <Route path="files" element={<Suspense fallback={<PageSkeleton />}><FileManager /></Suspense>} />
-          <Route path="agents/:id/edit" element={<Suspense fallback={<PageSkeleton />}><AgentEdit /></Suspense>} />
-          <Route path="agents" element={<Suspense fallback={<PageSkeleton />}><AgentManagement /></Suspense>} />
-          <Route path="models" element={<Suspense fallback={<PageSkeleton />}><ModelManagement /></Suspense>} />
-          <Route path="commerce/products" element={<Suspense fallback={<PageSkeleton />}><ProductLibrary /></Suspense>} />
-          <Route path="commerce/projects" element={<Suspense fallback={<PageSkeleton />}><StoryProjectLobby /></Suspense>} />
-          <Route path="commerce/projects/:projectId" element={<Suspense fallback={<PageSkeleton />}><StoryWorkbench /></Suspense>} />
-          <Route path="commerce/compliance" element={<Suspense fallback={<PageSkeleton />}><ComplianceCenter /></Suspense>} />
-          <Route path="commerce/formulas" element={<Suspense fallback={<PageSkeleton />}><FormulaLibrary /></Suspense>} />
-          <Route path="commerce/voice-packs" element={<Suspense fallback={<PageSkeleton />}><VoicePackLibrary /></Suspense>} />
-          <Route path="commerce/subtitle-styles" element={<Suspense fallback={<PageSkeleton />}><SubtitleStyleLibrary /></Suspense>} />
-          <Route path="commerce/export-presets" element={<Suspense fallback={<PageSkeleton />}><PlatformExportPresetLibrary /></Suspense>} />
-          <Route path="commerce/analytics" element={<Suspense fallback={<PageSkeleton />}><AnalyticsPage /></Suspense>} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="settings/api-keys" element={<Suspense fallback={<PageSkeleton />}><ApiKeysPage /></Suspense>} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/403"
+            element={
+              <div style={{ padding: 64, textAlign: 'center' }}>
+                <h2>403 - Access Denied</h2>
+                <a href="/">Back to home</a>
+              </div>
+            }
+          />
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<Navigate to="/projects" replace />} />
+            <Route path="projects" element={<ProjectLobby />} />
+            <Route path="projects/:projectId" element={<ProjectWorkbench />} />
+            <Route path="projects/:projectId/chapters" element={<NavigateToWorkbenchChaptersTab />} />
+            <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
+            <Route path="projects/:projectId/chapters/:chapterId/prep/*" element={<Navigate to="../shots" replace />} />
+            <Route path="projects/:projectId/chapters/:chapterId/studio" element={<Suspense fallback={<PageSkeleton />}><ChapterStudio /></Suspense>} />
+            <Route path="projects/:projectId/chapters/:chapterId/shots/:shotId/edit" element={<Suspense fallback={<PageSkeleton />}><ChapterShotEditPage /></Suspense>} />
+            <Route path="projects/:projectId/chapters/:chapterId/shots" element={<Suspense fallback={<PageSkeleton />}><ChapterShotsPage /></Suspense>} />
+            <Route path="projects/:projectId/chapters/:chapterId/prep-drafts" element={<Navigate to="../shots" replace />} />
+            <Route path="projects/:projectId/chapters/:chapterId/timeline" element={<Suspense fallback={<PageSkeleton />}><VideoEditor /></Suspense>} />
+            <Route path="projects/:projectId/editor" element={<Suspense fallback={<PageSkeleton />}><VideoEditor /></Suspense>} />
+            <Route path="assets" element={<Suspense fallback={<PageSkeleton />}><AssetManager /></Suspense>} />
+            <Route path="assets/actors/:actorImageId/edit" element={<Suspense fallback={<PageSkeleton />}><ActorAssetEditPage /></Suspense>} />
+            <Route path="assets/scenes/:sceneId/edit" element={<Suspense fallback={<PageSkeleton />}><SceneAssetEditPage /></Suspense>} />
+            <Route path="assets/props/:propId/edit" element={<Suspense fallback={<PageSkeleton />}><PropAssetEditPage /></Suspense>} />
+            <Route path="assets/costumes/:costumeId/edit" element={<Suspense fallback={<PageSkeleton />}><CostumeAssetEditPage /></Suspense>} />
+            <Route path="prompts" element={<Suspense fallback={<PageSkeleton />}><PromptTemplateManager /></Suspense>} />
+            <Route path="files" element={<Suspense fallback={<PageSkeleton />}><FileManager /></Suspense>} />
+            <Route path="agents/:id/edit" element={<Suspense fallback={<PageSkeleton />}><AgentEdit /></Suspense>} />
+            <Route path="agents" element={<Suspense fallback={<PageSkeleton />}><AgentManagement /></Suspense>} />
+            <Route path="models" element={<Suspense fallback={<PageSkeleton />}><ModelManagement /></Suspense>} />
+            <Route path="commerce/products" element={<Suspense fallback={<PageSkeleton />}><ProductLibrary /></Suspense>} />
+            <Route path="commerce/projects" element={<Suspense fallback={<PageSkeleton />}><StoryProjectLobby /></Suspense>} />
+            <Route path="commerce/projects/:projectId" element={<Suspense fallback={<PageSkeleton />}><StoryWorkbench /></Suspense>} />
+            <Route path="commerce/compliance" element={<Suspense fallback={<PageSkeleton />}><ComplianceCenter /></Suspense>} />
+            <Route path="commerce/formulas" element={<Suspense fallback={<PageSkeleton />}><FormulaLibrary /></Suspense>} />
+            <Route path="commerce/voice-packs" element={<Suspense fallback={<PageSkeleton />}><VoicePackLibrary /></Suspense>} />
+            <Route path="commerce/subtitle-styles" element={<Suspense fallback={<PageSkeleton />}><SubtitleStyleLibrary /></Suspense>} />
+            <Route path="commerce/export-presets" element={<Suspense fallback={<PageSkeleton />}><PlatformExportPresetLibrary /></Suspense>} />
+            <Route path="commerce/analytics" element={<Suspense fallback={<PageSkeleton />}><AnalyticsPage /></Suspense>} />
+            <Route path="settings" element={<Settings />} />
+            <Route
+              path="settings/api-keys"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <Suspense fallback={<PageSkeleton />}>
+                    <ApiKeysPage />
+                  </Suspense>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

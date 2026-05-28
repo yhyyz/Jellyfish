@@ -28,7 +28,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const LOCALES_DIR = path.resolve(__dirname, '../src/locales')
-const NAMESPACES = ['common', 'layout', 'settings', 'notFound', 'commerce'] as const
+const NAMESPACES = ['common', 'layout', 'settings', 'notFound', 'commerce', 'auth'] as const
 const REFERENCE_LOCALE = 'zh-CN'
 const TARGET_LOCALES = ['en-US', 'ja-JP', 'ko-KR'] as const
 
