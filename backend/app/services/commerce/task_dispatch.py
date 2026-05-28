@@ -107,6 +107,24 @@ TASK_KIND_CHAPTER_AV_PLAN = "chapter_av_plan"
 #: P4 W23-T2：把章节成片按 PlatformExportPreset 转换为平台发布版本，slow 队列。
 TASK_KIND_COMMERCE_EXPORT = "commerce_export"
 
+#: P2 W12 hook 改写任务 ``task_kind``，与
+#: ``app.services.commerce.hook_writer_worker`` 注册表同步。
+#: 对已有 :class:`StoryVariant` 的 ``opening_hook`` 做 in-place patch，
+#: 走 ``fast`` 队列（分钟级 LLM 调用）。
+TASK_KIND_HOOK_WRITER = "hook_writer"
+
+#: P2 W12 CTA 改写任务 ``task_kind``，与
+#: ``app.services.commerce.cta_writer_worker`` 注册表同步。
+#: 对已有 :class:`StoryVariant` 的 ``cta_text`` 做 in-place patch，
+#: 走 ``fast`` 队列（分钟级 LLM 调用）。
+TASK_KIND_CTA_WRITER = "cta_writer"
+
+#: P2 W12 品牌人格改写任务 ``task_kind``，与
+#: ``app.services.commerce.archetype_rewrite_worker`` 注册表同步。
+#: 对已有 :class:`StoryVariant` 的全脚本对白做 in-place patch（保留结构），
+#: 走 ``fast`` 队列。
+TASK_KIND_ARCHETYPE_REWRITE = "archetype_rewrite"
+
 #: 统一 Celery 入口 task name；所有 worker 通过 task_kind 二级路由。
 _CELERY_ENTRY_TASK = "task.execute"
 
@@ -365,6 +383,73 @@ class CommerceTaskDispatchService:
             queue=_STORY_BATCH_QUEUE,
         )
 
+    async def enqueue_hook_writer(self, body: dict[str, Any]) -> _EnqueueDescriptor:
+        """落 ``task_kind=hook_writer`` 的 :class:`GenerationTask` 行（``fast`` 队列；不发 broker 消息）。
+
+        P2 W12：对已有 :class:`StoryVariant` 的 ``opening_hook`` 做 in-place
+        patch（不创建新 variant 行）。属于分钟级 LLM 调用，与其它 commerce
+        single-task 一致走 ``fast`` 队列。
+
+        Args:
+            body: hook 改写请求 dict，至少包含 ``variant_id`` /
+                ``pattern_id`` / ``pattern_type`` / ``product_name``。
+
+        Returns:
+            :class:`_EnqueueDescriptor`；调用方必须 commit 后调
+            :py:meth:`dispatch_after_commit`。
+        """
+
+        return await self._prepare_enqueue(
+            task_kind=TASK_KIND_HOOK_WRITER,
+            run_args=body,
+        )
+
+    async def enqueue_cta_writer(self, body: dict[str, Any]) -> _EnqueueDescriptor:
+        """落 ``task_kind=cta_writer`` 的 :class:`GenerationTask` 行（``fast`` 队列；不发 broker 消息）。
+
+        P2 W12：对已有 :class:`StoryVariant` 的 ``cta_text`` 做 in-place
+        patch（不创建新 variant 行）。属于分钟级 LLM 调用，走 ``fast`` 队列。
+
+        Args:
+            body: CTA 改写请求 dict，至少包含 ``variant_id`` /
+                ``pattern_id`` / ``hardness`` / ``urgency_type`` /
+                ``product_name``。
+
+        Returns:
+            :class:`_EnqueueDescriptor`；调用方必须 commit 后调
+            :py:meth:`dispatch_after_commit`。
+        """
+
+        return await self._prepare_enqueue(
+            task_kind=TASK_KIND_CTA_WRITER,
+            run_args=body,
+        )
+
+    async def enqueue_archetype_rewrite(
+        self, body: dict[str, Any]
+    ) -> _EnqueueDescriptor:
+        """落 ``task_kind=archetype_rewrite`` 的 :class:`GenerationTask` 行（``fast`` 队列；不发 broker 消息）。
+
+        P2 W12：按指定 ``archetype`` + ``tone_grid`` 重写已有
+        :class:`StoryVariant` 的全脚本对白与旁白文本（保留镜头结构）。
+        虽然脚本级改写 LLM 上下文较长，但仍属分钟级，与其它 commerce
+        single-task 一致走 ``fast`` 队列；超时由 worker 内部统一控制。
+
+        Args:
+            body: 改写请求 dict，至少包含 ``variant_id`` / ``archetype`` /
+                ``archetype_description`` / ``tone_grid``，可选
+                ``words_to_avoid`` / ``preferred_vocab``。
+
+        Returns:
+            :class:`_EnqueueDescriptor`；调用方必须 commit 后调
+            :py:meth:`dispatch_after_commit`。
+        """
+
+        return await self._prepare_enqueue(
+            task_kind=TASK_KIND_ARCHETYPE_REWRITE,
+            run_args=body,
+        )
+
     async def enqueue_story_batch(self, body: dict[str, Any]) -> _EnqueueDescriptor:
         """落 ``task_kind=story_video_batch_generate`` 批量任务行（``slow`` 队列；不发 broker 消息）。
 
@@ -534,11 +619,14 @@ class CommerceTaskDispatchService:
 
 __all__ = [
     "CommerceTaskDispatchService",
+    "TASK_KIND_ARCHETYPE_REWRITE",
     "TASK_KIND_ASR_SUBTITLE_GENERATE",
     "TASK_KIND_CHAPTER_AV_EXPORT",
     "TASK_KIND_CHAPTER_AV_PLAN",
     "TASK_KIND_COMMERCE_EXPORT",
     "TASK_KIND_COMPLIANCE_CHECK",
+    "TASK_KIND_CTA_WRITER",
+    "TASK_KIND_HOOK_WRITER",
     "TASK_KIND_PRODUCT_INFO_EXTRACT",
     "TASK_KIND_SHOT_SUBTITLE_RENDER",
     "TASK_KIND_STORY_SCRIPT_GENERATE",
