@@ -66,7 +66,22 @@ const App: React.FC = () => {
               </div>
             }
           />
-          <Route path="/" element={<MainLayout />}>
+          {/*
+            P5 W32-followup-2 (Manual QA Bug A 修复)：
+            把整个主路由 / 子树用 ProtectedRoute 包住，未登录用户访问 /projects
+            等任意主功能都会先被守卫拦到 /login。/login 与 /403 路由位于此守卫
+            之外（这两条本身就是给未登录 / 被拒用户看的），不要纳入。
+            /settings/api-keys 与 /settings/users 内部仍保留 requiredRole='admin'
+            的二层守卫：外层=任何已登录、内层=仅 admin。
+          */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<Navigate to="/projects" replace />} />
             <Route path="projects" element={<ProjectLobby />} />
             <Route path="projects/:projectId" element={<ProjectWorkbench />} />

@@ -16,20 +16,43 @@ import { useAppStore } from '../store/useAppStore'
 import { useTranslation } from 'react-i18next'
 import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
+// P5 W32-followup-2 (Manual QA Bug B 修复)：
+// 头部 user dropdown 之前用 useAppStore.user（hardcode 'Admin / 系统管理员'），
+// 与真实登录态完全脱节。改为读 AuthContext.user，显示真实 username + role。
+// useAppStore.user 字段保留不删，避免影响仍依赖它的旧消费者；后续 P6 清理。
+import { useAuth } from '../contexts/AuthContext'
 
 const { Header, Sider, Content } = Layout
 
 const MainLayout: React.FC = () => {
   const { t, i18n } = useTranslation('layout')
+  // 角色翻译复用 auth ns（roles.admin / roles.member / roles.viewer）。
+  const { t: tAuth } = useTranslation('auth')
   const location = useLocation()
   const navigate = useNavigate()
   const { token } = theme.useToken()
 
   const collapsed = useAppStore((state) => state.siderCollapsed)
   const toggleCollapsed = useAppStore((state) => state.toggleSider)
-  const user = useAppStore((state) => state.user)
   const language = useAppStore((state) => state.language)
   const setLanguage = useAppStore((state) => state.setLanguage)
+  // 真实登录用户（外层 ProtectedRoute 已确保进入此组件时 user 非空）。
+  const { user, logout } = useAuth()
+
+  /**
+   * 把后端 role enum 映射为本地化展示文本。
+   * - admin  -> 系统管理员 / Administrator / 管理者 / 관리자
+   * - member -> 成员 / Member / メンバー / 멤버
+   * - viewer -> 访客 / Viewer / 閲覧者 / 뷰어
+   * 未知 role 兜底显示原始字符串，保证视觉不破坏。
+   */
+  const roleLabel = useMemo<string>(() => {
+    if (!user) return ''
+    const key = `roles.${user.role}`
+    const translated = tAuth(key)
+    // i18next 缺 key 时返回原 key 字符串，做兜底处理：直接用 user.role 原文。
+    return translated === key ? user.role : translated
+  }, [user, tAuth])
 
   const selectedKeys = useMemo(() => {
     if (location.pathname === '/projects' || location.pathname.startsWith('/projects/')) return ['projects']
@@ -174,7 +197,8 @@ const MainLayout: React.FC = () => {
       key: 'logout',
       label: t('user.logout'),
       onClick: () => {
-        // 这里保留占位，实际项目中可接入登录逻辑
+        logout()
+        navigate('/login', { replace: true })
       },
     },
   ]
@@ -285,8 +309,10 @@ const MainLayout: React.FC = () => {
               <div className="flex items-center gap-2 cursor-pointer">
                 <Avatar size={32} icon={<UserOutlined />} />
                 <div className="hidden md:flex flex-col leading-tight">
-                  <span className="text-sm font-medium text-gray-800">{user.name}</span>
-                  <span className="text-xs text-gray-500">{user.role}</span>
+                  <span className="text-sm font-medium text-gray-800">
+                    {user?.username ?? ''}
+                  </span>
+                  <span className="text-xs text-gray-500">{roleLabel}</span>
                 </div>
               </div>
             </Dropdown>
