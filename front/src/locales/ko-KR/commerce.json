@@ -122,5 +122,13 @@
       "fileMissing": "먼저 오디오 샘플을 업로드해 주세요",
       "submitGeneric": "생성에 실패했습니다. 잠시 후 다시 시도하세요"
     }
+  },
+  "overseasVoicePacks": {
+    "en_warm_male": "따뜻한 남성 (영어)",
+    "en_bright_female": "밝은 여성 (영어)",
+    "ja_calm_male": "차분한 남성 (일본어)",
+    "ja_friendly_female": "친근한 여성 (일본어)",
+    "ko_deep_male": "깊이 있는 남성 (한국어)",
+    "ko_soft_female": "부드러운 여성 (한국어)"
   }
 }

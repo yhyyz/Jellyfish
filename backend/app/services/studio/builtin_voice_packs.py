@@ -1,10 +1,18 @@
-"""系统级音色包 seed（P3 W17 引入）。
+"""系统级音色包 seed（P3 W17 引入；P5 W29 加海外音色 spec 注册表）。
 
 为什么存在：
     P3 W17 起 TTS 链路统一走 ``VoicePack`` 抽象，前端音色选择器与
-    后端 dispatcher 都依赖一份“系统默认可用”的内置音色清单。该
+    后端 dispatcher 都依赖一份"系统默认可用"的内置音色清单。该
     清单不应依赖人工 SQL，而要随应用启动自动到位（与
     ``builtin_prompts`` 风格保持一致）。
+
+    P5 W29 起新增"海外档"概念：与 zh-CN 内置档（``_BUILTIN``）并列，
+    在 :data:`OVERSEAS_VOICE_SPECS` 维护 6 条 en/ja/ko 海外音色 spec，
+    供 ``backend/scripts/seed_overseas_voice_packs.py`` 走
+    :mod:`app.services.studio.voice_clone_service` 同管线创建（用户禁
+    止"绕过平台契约"——即不允许直接 INSERT 一个未经 DashScope 验证的
+    voice_id）。本模块**不会** 在 startup 自动 seed 海外档，只负责
+    集中维护 spec 列表，让脚本与未来管理面板有单一可信源。
 
 做什么：
     ``bootstrap_builtin_voice_packs(db)`` 在应用启动时被调用：
@@ -13,7 +21,7 @@
         UPDATE 名称 / 描述 / 性别 / 排序 / archetype hint，相同则跳过；
       * 全部标记 ``is_system=True``，业务侧不允许删除；
       * ``sort_order`` 按枚举顺序递增（中性 0、男 10、女 20、少年 30、
-        中年 40、老者 50），便于前端按“风格档”分组展示。
+        中年 40、老者 50），便于前端按"风格档"分组展示。
 
 幂等性契约：
     SELECT id WHERE id=spec.id
@@ -246,6 +254,109 @@ def _gender_equals(left: object, right: VoiceGender) -> bool:
     return str(left) == right.value
 
 
+# ---------------------------------------------------------------------------
+# 海外音色 spec 注册表（P5 W29 引入；不在 startup 自动 seed）
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _OverseasVoiceSpec:
+    """海外档音色 spec（不可变；与 zh-CN ``_BuiltinVoicePackSpec`` 并列）。
+
+    与 ``_BuiltinVoicePackSpec`` 的区别：
+        - ``provider_voice_id`` 不在此列举：海外档由
+          ``backend/scripts/seed_overseas_voice_packs.py`` 走 voice_clone_service
+          同管线动态创建后填回 DB，确保 ID 真实来自 DashScope；
+        - 多了 ``language_code`` / ``language_hint`` / ``prefix`` 字段，对应
+          DashScope create_voice 入参。
+
+    Attributes:
+        id: VoicePack 主键；命名约定 ``cosyvoice_v3_<lang>_<archetype>``。
+        name: UI 展示名称（多语言）。
+        prefix: DashScope create_voice 用的 ≤10 字符 slug（仅英数字下划线）。
+        language_code: 与 ``VoicePack.language_code`` 一致（``en-US`` / ``ja-JP`` / ``ko-KR``）。
+        language_hint: DashScope 接受的 ISO 码（``en`` / ``ja`` / ``ko``）。
+        gender: 性别枚举。
+        description: 用户可见的简短说明。
+    """
+
+    id: str
+    name: str
+    prefix: str
+    language_code: str
+    language_hint: str
+    gender: VoiceGender
+    description: str
+
+
+OVERSEAS_VOICE_SPECS: Final[list[_OverseasVoiceSpec]] = [
+    _OverseasVoiceSpec(
+        id="cosyvoice_v3_en_warm_male",
+        name="Warm Male (English)",
+        prefix="enwarmmal",
+        language_code="en-US",
+        language_hint="en",
+        gender=VoiceGender.male,
+        description="Warm, conversational male English voice for storytelling.",
+    ),
+    _OverseasVoiceSpec(
+        id="cosyvoice_v3_en_bright_female",
+        name="Bright Female (English)",
+        prefix="enbrtfem",
+        language_code="en-US",
+        language_hint="en",
+        gender=VoiceGender.female,
+        description="Bright, upbeat female English voice for product hooks.",
+    ),
+    _OverseasVoiceSpec(
+        id="cosyvoice_v3_ja_calm_male",
+        name="落ち着いた男声 (日本語)",
+        prefix="jacalmmal",
+        language_code="ja-JP",
+        language_hint="ja",
+        gender=VoiceGender.male,
+        description="落ち着いたトーンの男性ナレーターボイス（日本語）。",
+    ),
+    _OverseasVoiceSpec(
+        id="cosyvoice_v3_ja_friendly_female",
+        name="親しみやすい女声 (日本語)",
+        prefix="jafrnfem",
+        language_code="ja-JP",
+        language_hint="ja",
+        gender=VoiceGender.female,
+        description="親しみやすい女性ボイス、ハウツー動画向け（日本語）。",
+    ),
+    _OverseasVoiceSpec(
+        id="cosyvoice_v3_ko_deep_male",
+        name="깊이 있는 남성 (한국어)",
+        prefix="kodepmal",
+        language_code="ko-KR",
+        language_hint="ko",
+        gender=VoiceGender.male,
+        description="신뢰감 있는 깊은 남성 보이스 (한국어).",
+    ),
+    _OverseasVoiceSpec(
+        id="cosyvoice_v3_ko_soft_female",
+        name="부드러운 여성 (한국어)",
+        prefix="kosoftfem",
+        language_code="ko-KR",
+        language_hint="ko",
+        gender=VoiceGender.female,
+        description="부드러운 여성 보이스, 라이프스타일 영상에 적합 (한국어).",
+    ),
+]
+"""6 条海外音色 spec（en/ja/ko × male/female 各 1）。
+
+与 ``_BUILTIN`` 的差异：
+    - 不会被 ``bootstrap_builtin_voice_packs`` 自动 seed；
+    - 由 ``backend/scripts/seed_overseas_voice_packs.py`` 走
+      voice_clone_service 同管线创建后落库；
+    - target_model 锁死 ``cosyvoice-v3-plus``，region 锁死 ``ap-singapore``，
+      避免被错误派到只支持北京的 v3.5-plus。
+"""
+
+
 __all__ = [
+    "OVERSEAS_VOICE_SPECS",
     "bootstrap_builtin_voice_packs",
 ]

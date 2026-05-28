@@ -122,5 +122,13 @@
       "fileMissing": "Please upload an audio sample first",
       "submitGeneric": "Creation failed, please try again later"
     }
+  },
+  "overseasVoicePacks": {
+    "en_warm_male": "Warm Male (English)",
+    "en_bright_female": "Bright Female (English)",
+    "ja_calm_male": "Calm Male (Japanese)",
+    "ja_friendly_female": "Friendly Female (Japanese)",
+    "ko_deep_male": "Deep Male (Korean)",
+    "ko_soft_female": "Soft Female (Korean)"
   }
 }

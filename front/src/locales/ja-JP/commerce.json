@@ -122,5 +122,13 @@
       "fileMissing": "音声サンプルを先にアップロードしてください",
       "submitGeneric": "作成に失敗しました。しばらくしてから再試行してください"
     }
+  },
+  "overseasVoicePacks": {
+    "en_warm_male": "温かい男声（英語）",
+    "en_bright_female": "明るい女声（英語）",
+    "ja_calm_male": "落ち着いた男声（日本語）",
+    "ja_friendly_female": "親しみやすい女声（日本語）",
+    "ko_deep_male": "深みのある男声（韓国語）",
+    "ko_soft_female": "柔らかい女声（韓国語）"
   }
 }

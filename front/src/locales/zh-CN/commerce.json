@@ -122,5 +122,13 @@
       "fileMissing": "请先上传音频样本",
       "submitGeneric": "创建失败，请稍后重试"
     }
+  },
+  "overseasVoicePacks": {
+    "en_warm_male": "温暖男声（英语）",
+    "en_bright_female": "明亮女声（英语）",
+    "ja_calm_male": "沉稳男声（日语）",
+    "ja_friendly_female": "亲切女声（日语）",
+    "ko_deep_male": "深沉男声（韩语）",
+    "ko_soft_female": "柔和女声（韩语）"
   }
 }
