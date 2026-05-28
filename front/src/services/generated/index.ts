@@ -443,3 +443,4 @@ export { StudioShotsService } from './services/StudioShotsService';
 export { StudioStoryFormulasService } from './services/StudioStoryFormulasService';
 export { StudioStoryProjectsService } from './services/StudioStoryProjectsService';
 export { StudioStoryVariantsService } from './services/StudioStoryVariantsService';
+export { UsersService } from './services/UsersService';

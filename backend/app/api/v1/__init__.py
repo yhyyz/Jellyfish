@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.routes import auth, film, health, llm, studio
+from app.api.v1.routes import auth, film, health, llm, studio, users
 from app.api.v1.routes.commerce import router as commerce_router
 from app.api.v1.routes.public import router as public_router
 from app.api.v1.routes.script import router as script_router
@@ -32,6 +32,12 @@ router.include_router(script_router)
 # 必须放在 ApiKeyMiddleware 之外（middleware 已对未配置 api_key 的部署放行,
 # 且 P5 W32 阶段 jwt_fallback_to_static 双轨保留旧行为）。
 router.include_router(auth.router, prefix="/login", tags=["auth"])
+
+# === P5 W32-followup: 用户自查询入口 ===
+# 挂载点 /api/v1/users/me；任何已登录用户都可调（仅依赖 get_current_user，
+# 不绑定 require_admin）。注意必须独立挂载，不能与 /api/v1/settings/users
+# 子树共用，因为后者是 admin-only。
+router.include_router(users.router, prefix="/users", tags=["users"])
 
 # === P4 W24-T1: settings/api-keys admin（per-key 配额管理）===
 # race-aware：放在 commerce/script 之后，确保上游路由聚合先就位，
