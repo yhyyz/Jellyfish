@@ -20,12 +20,16 @@ from app.api.v1.routes.commerce import (
     subtitle_styles,
     tasks,
     voice_packs,
+    voice_packs_custom,
 )
 
 router = APIRouter()
 
 router.include_router(tasks.router, tags=["commerce/tasks"])
 router.include_router(voice_packs.router, tags=["commerce-voice-packs"])
+router.include_router(
+    voice_packs_custom.router, tags=["commerce-voice-packs-custom"]
+)
 router.include_router(subtitle_styles.router, tags=["commerce-subtitle-styles"])
 router.include_router(outcomes.router, tags=["commerce-outcomes"])
 router.include_router(outcomes_import.router, tags=["commerce-outcomes-import"])
