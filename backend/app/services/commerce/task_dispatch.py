@@ -125,10 +125,23 @@ TASK_KIND_CTA_WRITER = "cta_writer"
 #: 走 ``fast`` 队列。
 TASK_KIND_ARCHETYPE_REWRITE = "archetype_rewrite"
 
-#: 统一 Celery 入口 task name；所有 worker 通过 task_kind 二级路由。
-_CELERY_ENTRY_TASK = "task.execute"
+#: P3 视频生成任务 ``task_kind``，与
+#: ``app.services.film.generated_video`` 注册表同步。
+#: P4 W27-T2 把它纳入 dispatcher：consistency 低分自动重生时，需要在
+#: worker 上下文按 W19b commit-then-send 契约把视频生成任务再派一次，
+#: 不能再走 route 层的 TaskManager + enqueue_task_execution 路径。
+#: 注意：``video_generation`` 走 ``slow`` 队列（小时级 LLM/图像/视频
+#: 生成调用），不要落到 ``fast`` 上挤占分钟级消费者。
+TASK_KIND_VIDEO_GENERATION = "video_generation"
 
-#: 默认投递队列：3 个 commerce/* 任务均属分钟级，与 worker SLA 对齐。
+#: P4 W27 DINOv2 视觉一致性检查任务 ``task_kind``，与
+#: ``app.services.visual_consistency.consistency_worker`` 注册表同步。
+#: 单镜头抽 6 帧 + DINOv2 sidecar embed + cosine similarity，属分钟级，
+#: 走 ``fast`` 队列。video 成功后由 generated_video worker 链式派发。
+TASK_KIND_SHOT_CONSISTENCY_CHECK = "shot_consistency_check"
+
+#: 统一 Celery 入口 task name；所有 worker 通过 task_kind 二级路由。
+_CELERY_ENTRY_TASK = "task.execute"#: 默认投递队列：3 个 commerce/* 任务均属分钟级，与 worker SLA 对齐。
 _DEFAULT_QUEUE = "fast"
 
 #: 批量任务专用队列：从 worker 模块直接读取，避免常量在两个文件间漂移。
@@ -450,6 +463,60 @@ class CommerceTaskDispatchService:
             run_args=body,
         )
 
+    async def enqueue_video_generation(
+        self, body: dict[str, Any]
+    ) -> _EnqueueDescriptor:
+        """落 ``task_kind=video_generation`` 的 :class:`GenerationTask` 行（``slow`` 队列；不发 broker 消息）。
+
+        P4 W27-T2 在 worker 上下文里使用：
+            ``shot_consistency_check`` worker 拿到低分（< 0.75）且
+            ``retry_count < MAX_AUTO_REGEN_RETRY`` 时，按 W19b commit-then-send
+            契约重派 ``video_generation``，让画面重新生成 → 链式再触发一次
+            ``shot_consistency_check`` → 直到 retry_count 触顶或得分回到
+            warning/pass 区。
+            ``video_generation`` 单次包含 LLM/图像/视频小时级调用，因此走
+            ``slow`` 队列与 ``story_video_batch_generate`` 对齐，避免占用
+            ``fast`` 队列上的分钟级消费者。
+
+        Args:
+            body: ``video_generation`` worker 的 ``run_args`` dict；最少应该
+                包含 ``shot_id`` 与 ``input``（与
+                :func:`app.services.film.generated_video.build_run_args` 输出
+                一致）。
+
+        Returns:
+            :class:`_EnqueueDescriptor`；调用方必须 commit 后调
+            :py:meth:`dispatch_after_commit`。
+        """
+
+        return await self._prepare_enqueue(
+            task_kind=TASK_KIND_VIDEO_GENERATION,
+            run_args=body,
+            queue=_STORY_BATCH_QUEUE,
+        )
+
+    async def enqueue_shot_consistency_check(
+        self, body: dict[str, Any]
+    ) -> _EnqueueDescriptor:
+        """落 ``task_kind=shot_consistency_check`` 的 :class:`GenerationTask` 行（``fast`` 队列；不发 broker 消息）。
+
+        P4 W27：单镜头抽帧 + DINOv2 sidecar embed + cosine similarity 后写
+        ``Shot.consistency_score``、由 ``threshold_engine.evaluate`` 决定
+        ``Shot.consistency_status``。属分钟级任务，走 ``fast`` 队列。
+
+        Args:
+            body: 至少包含 ``shot_id``；可选 ``frame_count``。
+
+        Returns:
+            :class:`_EnqueueDescriptor`；调用方必须 commit 后调
+            :py:meth:`dispatch_after_commit`。
+        """
+
+        return await self._prepare_enqueue(
+            task_kind=TASK_KIND_SHOT_CONSISTENCY_CHECK,
+            run_args=body,
+        )
+
     async def enqueue_story_batch(self, body: dict[str, Any]) -> _EnqueueDescriptor:
         """落 ``task_kind=story_video_batch_generate`` 批量任务行（``slow`` 队列；不发 broker 消息）。
 
@@ -628,8 +695,10 @@ __all__ = [
     "TASK_KIND_CTA_WRITER",
     "TASK_KIND_HOOK_WRITER",
     "TASK_KIND_PRODUCT_INFO_EXTRACT",
+    "TASK_KIND_SHOT_CONSISTENCY_CHECK",
     "TASK_KIND_SHOT_SUBTITLE_RENDER",
     "TASK_KIND_STORY_SCRIPT_GENERATE",
     "TASK_KIND_STORY_VIDEO_BATCH_GENERATE",
     "TASK_KIND_TTS_GENERATE",
+    "TASK_KIND_VIDEO_GENERATION",
 ]

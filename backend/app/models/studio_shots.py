@@ -108,6 +108,25 @@ class Shot(Base,TimestampMixin):
             "与数值 0.0（合法 cosine 0）区分"
         ),
     )
+    consistency_status: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+        default=None,
+        comment=(
+            "DINOv2 一致性判定结果：pass / warning / fail（W27-T2）；"
+            "NULL 表示从未跑过 threshold_engine.evaluate"
+        ),
+    )
+    consistency_retry_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment=(
+            "threshold_engine 触发自动重生的累计次数；hard cap=2 "
+            "（MAX_AUTO_REGEN_RETRY），达到后即使分数仍低也不再重派"
+        ),
+    )
 
     chapter: Mapped["Chapter"] = relationship(back_populates="shots")
     generated_video_file: Mapped["FileItem | None"] = relationship(

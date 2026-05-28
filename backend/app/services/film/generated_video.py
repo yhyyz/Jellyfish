@@ -533,6 +533,18 @@ async def run_video_generation_task(
                     )
                 )
 
+            # P4 W27-T2：video 一落地就链式派 shot_consistency_check，让
+            # DINOv2 sidecar 给出 score → threshold_engine.evaluate 决定
+            # status；低分 + retry_count<2 时 worker 内部会再次重派
+            # video_generation，闭环 regen 循环。同样走 W19b commit-then-send：
+            # descriptor 先收集到 pending_dispatches，等主任务 + 子任务行
+            # 一并 commit 后再统一 dispatch_after_commit。
+            pending_dispatches.append(
+                await dispatcher.enqueue_shot_consistency_check(
+                    body={"shot_id": shot_id}
+                )
+            )
+
             await store.set_progress(task_id, 100)
             await store.set_status(task_id, TaskStatus.succeeded)
             await recompute_shot_status(session, shot_id=shot_id)

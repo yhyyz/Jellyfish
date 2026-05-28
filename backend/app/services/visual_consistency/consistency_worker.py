@@ -58,6 +58,8 @@ from app.models.commerce_assets import ProductImage, ProjectProductLink
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.studio_shots import Shot
 from app.models.types import AssetViewAngle
+from app.services.commerce.task_dispatch import CommerceTaskDispatchService
+from app.services.visual_consistency import threshold_engine
 from app.services.visual_consistency.sampler import (
     DEFAULT_FRAME_COUNT,
     FrameSamplingPlan,
@@ -581,6 +583,17 @@ async def run_shot_consistency_check_task(
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
             shot.consistency_score = result.score
+            status, should_regen = threshold_engine.evaluate(
+                result.score, shot.consistency_retry_count or 0
+            )
+            shot.consistency_status = status
+            regen_descriptor = None
+            if should_regen:
+                shot.consistency_retry_count = (shot.consistency_retry_count or 0) + 1
+                dispatcher = CommerceTaskDispatchService(session)
+                regen_descriptor = await dispatcher.enqueue_video_generation(
+                    body=_build_regen_run_args(shot=shot, run_args=run_args),
+                )
             await session.flush()
             await store.set_progress(task_id, 90)
 
@@ -588,6 +601,10 @@ async def run_shot_consistency_check_task(
             await store.set_progress(task_id, 100)
             await store.set_status(task_id, TaskStatus.succeeded)
             await session.commit()
+            if regen_descriptor is not None:
+                CommerceTaskDispatchService(session).dispatch_after_commit(
+                    regen_descriptor
+                )
             log_task_event(
                 TASK_KIND,
                 task_id,
@@ -596,6 +613,8 @@ async def run_shot_consistency_check_task(
                 score=result.score,
                 frame_count=result.frame_count,
                 reason=result.reason,
+                consistency_status=status,
+                regen_dispatched=should_regen,
             )
         except Exception as exc:  # noqa: BLE001
             await session.rollback()
@@ -618,8 +637,32 @@ def _coerce_target_count(raw: Any) -> int:
         return DEFAULT_FRAME_COUNT
     if value <= 0:
         return DEFAULT_FRAME_COUNT
-    # 上限保护：避免恶意调用方传 1e6 把 sidecar 打爆。
     return min(value, 64)
+
+
+def _build_regen_run_args(*, shot: Shot, run_args: dict[str, Any]) -> dict[str, Any]:
+    """构造重派 ``video_generation`` 的最小 ``run_args``。
+
+    本函数只组装"重生这一镜头"必要的标识：``shot_id`` + 一个空的
+    ``input`` 占位 + 一个 ``meta`` 字段。真正的提示词、参考图、ratio 由
+    下游 ``video_generation`` worker 自己读 :class:`Shot` / :class:`ShotDetail`
+    重新拼装——consistency_worker 不该也无法在 worker 上下文里复刻
+    :func:`app.services.film.generated_video.build_run_args` 的全部逻辑
+    （它依赖 HTTP 请求里的 ``reference_mode`` / ``prompt`` / ``images``
+    覆盖语义）。
+
+    把"自动重生"上下文（来源 task / 当前 retry 次数）放进 ``meta``，便于
+    日志与未来排障。
+    """
+
+    return {
+        "shot_id": shot.id,
+        "auto_regen": {
+            "source_task": run_args.get("__task_id"),
+            "retry_count": shot.consistency_retry_count,
+            "trigger": "shot_consistency_check",
+        },
+    }
 
 
 __all__ = [
