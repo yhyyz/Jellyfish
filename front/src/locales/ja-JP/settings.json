@@ -14,5 +14,39 @@
   "validation": {
     "nicknameRequired": "ニックネームを入力してください",
     "roleRequired": "ロールを選択してください"
+  },
+  "users": {
+    "title": "ユーザー管理",
+    "create": "新規ユーザー",
+    "edit": "ユーザー編集",
+    "delete": "無効化",
+    "deleteConfirm": "このユーザーを無効にしますか？編集から再度有効にできます。",
+    "deleteSelfNotAllowed": "現在ログイン中の管理者は無効化できません",
+    "fields": {
+      "username": "ユーザー名",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "passwordPlaceholder": "6 文字以上",
+      "role": "ロール",
+      "isActive": "有効",
+      "createdAt": "作成日時"
+    },
+    "roles": {
+      "admin": "管理者",
+      "member": "メンバー",
+      "viewer": "閲覧者"
+    },
+    "actions": {
+      "edit": "編集",
+      "resetPassword": "パスワード再設定",
+      "delete": "無効化",
+      "enable": "有効化"
+    },
+    "messages": {
+      "created": "ユーザーを作成しました",
+      "updated": "ユーザーを更新しました",
+      "deleted": "ユーザーを無効化しました",
+      "conflict": "ユーザー名またはメールはすでに存在します"
+    }
   }
 }

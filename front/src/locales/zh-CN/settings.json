@@ -14,6 +14,40 @@
   "validation": {
     "nicknameRequired": "请输入昵称",
     "roleRequired": "请选择角色"
+  },
+  "users": {
+    "title": "用户管理",
+    "create": "新建用户",
+    "edit": "编辑用户",
+    "delete": "禁用用户",
+    "deleteConfirm": "确定要禁用该用户吗？此操作可通过编辑重新启用。",
+    "deleteSelfNotAllowed": "无法禁用当前登录的管理员账号",
+    "fields": {
+      "username": "用户名",
+      "email": "邮箱",
+      "password": "密码",
+      "passwordPlaceholder": "至少 6 位",
+      "role": "角色",
+      "isActive": "启用",
+      "createdAt": "创建时间"
+    },
+    "roles": {
+      "admin": "管理员",
+      "member": "成员",
+      "viewer": "只读"
+    },
+    "actions": {
+      "edit": "编辑",
+      "resetPassword": "重置密码",
+      "delete": "禁用",
+      "enable": "启用"
+    },
+    "messages": {
+      "created": "用户已创建",
+      "updated": "用户已更新",
+      "deleted": "用户已禁用",
+      "conflict": "用户名或邮箱已存在"
+    }
   }
 }
 

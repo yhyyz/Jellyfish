@@ -14,6 +14,40 @@
   "validation": {
     "nicknameRequired": "Please input nickname",
     "roleRequired": "Please select role"
+  },
+  "users": {
+    "title": "User Management",
+    "create": "New User",
+    "edit": "Edit User",
+    "delete": "Disable User",
+    "deleteConfirm": "Disable this user? You can re-enable them later via edit.",
+    "deleteSelfNotAllowed": "Cannot disable the currently signed-in admin",
+    "fields": {
+      "username": "Username",
+      "email": "Email",
+      "password": "Password",
+      "passwordPlaceholder": "At least 6 characters",
+      "role": "Role",
+      "isActive": "Active",
+      "createdAt": "Created"
+    },
+    "roles": {
+      "admin": "Admin",
+      "member": "Member",
+      "viewer": "Viewer"
+    },
+    "actions": {
+      "edit": "Edit",
+      "resetPassword": "Reset password",
+      "delete": "Disable",
+      "enable": "Enable"
+    },
+    "messages": {
+      "created": "User created",
+      "updated": "User updated",
+      "deleted": "User disabled",
+      "conflict": "Username or email already exists"
+    }
   }
 }
 

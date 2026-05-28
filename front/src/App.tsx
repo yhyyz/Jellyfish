@@ -42,6 +42,8 @@ const PlatformExportPresetLibrary = lazy(() => import('./pages/aiStudio/commerce
 const AnalyticsPage = lazy(() => import('./pages/aiStudio/commerce/analytics/AnalyticsPage'))
 // W24-T5：API Key admin 管理页（P4 Wave B 7/11）
 const ApiKeysPage = lazy(() => import('./pages/settings/ApiKeysPage'))
+// W32-T10：用户管理页（P5 RBAC，admin only）
+const UsersAdminPage = lazy(() => import('./pages/settings/UsersAdminPage'))
 
 /** 兼容旧链接 `/projects/:projectId/chapters` → 工作台章节 Tab */
 function NavigateToWorkbenchChaptersTab() {
@@ -103,6 +105,16 @@ const App: React.FC = () => {
                 <ProtectedRoute requiredRole="admin">
                   <Suspense fallback={<PageSkeleton />}>
                     <ApiKeysPage />
+                  </Suspense>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="settings/users"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <Suspense fallback={<PageSkeleton />}>
+                    <UsersAdminPage />
                   </Suspense>
                 </ProtectedRoute>
               }

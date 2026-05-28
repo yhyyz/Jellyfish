@@ -84,6 +84,7 @@ export type { ApiResponse_PaginatedData_ShotFrameImageRead__ } from './models/Ap
 export type { ApiResponse_PaginatedData_ShotLinkedAssetItem__ } from './models/ApiResponse_PaginatedData_ShotLinkedAssetItem__';
 export type { ApiResponse_PaginatedData_ShotRead__ } from './models/ApiResponse_PaginatedData_ShotRead__';
 export type { ApiResponse_PaginatedData_TaskListItemRead__ } from './models/ApiResponse_PaginatedData_TaskListItemRead__';
+export type { ApiResponse_PaginatedData_UserRead__ } from './models/ApiResponse_PaginatedData_UserRead__';
 export type { ApiResponse_PlatformExportPresetRead_ } from './models/ApiResponse_PlatformExportPresetRead_';
 export type { ApiResponse_ProductImageGenerationResponse_ } from './models/ApiResponse_ProductImageGenerationResponse_';
 export type { ApiResponse_ProjectActorLinkRead_ } from './models/ApiResponse_ProjectActorLinkRead_';
@@ -128,6 +129,7 @@ export type { ApiResponse_TaskLinkAdoptRead_ } from './models/ApiResponse_TaskLi
 export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResultRead_';
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
 export type { ApiResponse_Token_ } from './models/ApiResponse_Token_';
+export type { ApiResponse_UserRead_ } from './models/ApiResponse_UserRead_';
 export type { ApiResponse_VariantAggregateListResponse_ } from './models/ApiResponse_VariantAggregateListResponse_';
 export type { ApiResponse_VariantAnalysisResult_ } from './models/ApiResponse_VariantAnalysisResult_';
 export type { ApiResponse_VideoGenerationOptionsRead_ } from './models/ApiResponse_VideoGenerationOptionsRead_';
@@ -235,6 +237,7 @@ export type { PaginatedData_ShotFrameImageRead_ } from './models/PaginatedData_S
 export type { PaginatedData_ShotLinkedAssetItem_ } from './models/PaginatedData_ShotLinkedAssetItem_';
 export type { PaginatedData_ShotRead_ } from './models/PaginatedData_ShotRead_';
 export type { PaginatedData_TaskListItemRead_ } from './models/PaginatedData_TaskListItemRead_';
+export type { PaginatedData_UserRead_ } from './models/PaginatedData_UserRead_';
 export type { Pagination } from './models/Pagination';
 export type { Platform } from './models/Platform';
 export type { PlatformExportPresetCreate } from './models/PlatformExportPresetCreate';
@@ -380,6 +383,10 @@ export type { TimelineClipStatus } from './models/TimelineClipStatus';
 export type { TimelineClipType } from './models/TimelineClipType';
 export type { Token } from './models/Token';
 export type { TtsGenerateRequest } from './models/TtsGenerateRequest';
+export type { UserCreate } from './models/UserCreate';
+export type { UserRead } from './models/UserRead';
+export type { UserRole } from './models/UserRole';
+export type { UserUpdate } from './models/UserUpdate';
 export type { ValidationError } from './models/ValidationError';
 export type { VariantAggregateListResponse } from './models/VariantAggregateListResponse';
 export type { VariantAggregateRow } from './models/VariantAggregateRow';
@@ -413,6 +420,7 @@ export { PublicCommerceGenerateService } from './services/PublicCommerceGenerate
 export { PublicCommerceTasksService } from './services/PublicCommerceTasksService';
 export { ScriptProcessingService } from './services/ScriptProcessingService';
 export { SettingsApiKeysService } from './services/SettingsApiKeysService';
+export { SettingsUsersService } from './services/SettingsUsersService';
 export { StudioBrandArchetypesService } from './services/StudioBrandArchetypesService';
 export { StudioBrandStyleGuidesService } from './services/StudioBrandStyleGuidesService';
 export { StudioChaptersService } from './services/StudioChaptersService';

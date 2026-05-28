@@ -14,5 +14,39 @@
   "validation": {
     "nicknameRequired": "닉네임을 입력해 주세요",
     "roleRequired": "역할을 선택해 주세요"
+  },
+  "users": {
+    "title": "사용자 관리",
+    "create": "사용자 추가",
+    "edit": "사용자 편집",
+    "delete": "비활성화",
+    "deleteConfirm": "이 사용자를 비활성화하시겠습니까? 편집을 통해 다시 활성화할 수 있습니다.",
+    "deleteSelfNotAllowed": "현재 로그인된 관리자 계정은 비활성화할 수 없습니다",
+    "fields": {
+      "username": "사용자명",
+      "email": "이메일",
+      "password": "비밀번호",
+      "passwordPlaceholder": "6자 이상",
+      "role": "역할",
+      "isActive": "활성화",
+      "createdAt": "생성일"
+    },
+    "roles": {
+      "admin": "관리자",
+      "member": "멤버",
+      "viewer": "뷰어"
+    },
+    "actions": {
+      "edit": "편집",
+      "resetPassword": "비밀번호 재설정",
+      "delete": "비활성화",
+      "enable": "활성화"
+    },
+    "messages": {
+      "created": "사용자가 생성되었습니다",
+      "updated": "사용자가 업데이트되었습니다",
+      "deleted": "사용자가 비활성화되었습니다",
+      "conflict": "사용자명 또는 이메일이 이미 존재합니다"
+    }
   }
 }
