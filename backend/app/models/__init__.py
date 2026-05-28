@@ -16,7 +16,8 @@ from app.models.story_formula import StoryFormula, StoryOutcome, StoryVariant
 from app.models.subtitle import SubtitleStyle, SubtitleTrack
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
-from app.models.types import FileUsageKind
+from app.models.types import FileUsageKind, UserRole
+from app.models.user import User
 from app.models.voice_pack import TtsCache, VoicePack
 
 from app.models.studio import (
@@ -108,6 +109,8 @@ __all__ = [
     "CommerceStoryConfig",
     "VoicePack",
     "TtsCache",
+    "User",
+    "UserRole",
     "SubtitleStyle",
     "SubtitleTrack",
 ]
