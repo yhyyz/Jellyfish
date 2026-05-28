@@ -409,6 +409,213 @@ P3 阶段 W16–W21 已全部落地并发版 v0.6.0。
 
 ---
 
+## Phase 5 — Localization, Voice Cloning, BGM/SFX, RBAC, Release v0.7.0（约 22 工作日）
+
+> P5 是 P4 商业化能力之上的"基础设施补完"阶段，目标是把 P1-P4 期间为了赶节奏暂留的工程债务清掉，并把"用户体系 / 多语言 / 自定义音色 / 项目级字幕 / BGM-SFX 完整链路"做成 v0.7.0 release。
+
+### P5 总目标
+
+- **i18n 完整化**：当前前端只是 zh-CN hardcoded（D4 决策），P5 完成 en-US / ja-JP / ko-KR 三个出海目标语言整树翻译 + 海外字体 fallback 链。
+- **自定义音色训练**：P3 仅支持系统级音色（仅 reference voice 路径），P5 接入 DashScope `voice-enrollment` 模型，支持用户上传 10–60s 音频样本训练自有音色。
+- **项目级字幕样式覆盖**：当前 `SubtitleStyle` 只有系统模板，P5 加 `project_id` 字段允许项目级覆盖（系统行 NULL，项目行非 NULL）。
+- **BGM/SFX 链路完整化**：当前 `chapter_av_export` 仅做 voice + loudnorm 主合成，P5 把 BGM 与 SFX 时间轴对齐 + sidechaincompress ducking + amerge 接入。
+- **RBAC**：当前 admin / settings 路径都用 `settings.api_key` 静态 token（D-PARTNER 决策），P5 引入 User 表 + JWT + role-based 守卫，Stage-1 fallback 给现有 dev workflow 留 2 周窗口。
+- **数字人调研**：lip-sync / 数字人路径 P5 仅做调研文档，不实装（决策遵循 D10）。
+- **Release v0.7.0**：P5 W28-W33 全部 in HEAD 后整合 release note 上线。
+
+### P5 Wave 28 — i18n Completion（约 3 工作日）
+
+| 任务 ID | 内容                                                                                                                                                                                                                                                  | 依赖     | category + skills                          | 验证手段                          |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------ | --------------------------------- |
+| T28-1   | 翻译 `front/src/locales/en-US/commerce.json` 全部 key（zh-CN 镜像，覆盖 commerce 命名空间所有字段名 / 错误信息 / 表单 label）                                                                                                                          | Phase 0  | `writing / []`                             | `pnpm exec vitest run` + `pnpm exec tsc --noEmit` 绿 |
+| T28-2   | 创建 `front/src/locales/ja-JP/{common,layout,settings,notFound,commerce,compliance,formula,hook,cta,archetype}.json`（10 ns 整树）+ `react-i18next supportedLngs` 注册                                                                                | Phase 0  | `writing / []`                             | i18next 加载日语包不报 missing key |
+| T28-3   | 创建 `front/src/locales/ko-KR/*`（10 ns，与 T28-2 镜像）                                                                                                                                                                                              | Phase 0  | `writing / []`                             | 韩语包 audit 同上                 |
+| T28-4   | `backend/app/services/studio/builtin_subtitle_styles.py` 扩展 `font_fallback_chain` 加海外字体（Hiragino Kaku Gothic Pro / Noto Sans JP / Pretendard / Apple SD Gothic Neo / Inter / Roboto）                                                          | Phase 0  | `quick / []`                               | `pytest tests/services/studio/test_builtin_subtitle_styles.py` 绿 |
+| T28-5   | `front/src/components/LanguageSwitcher.tsx` 4 语言切换 + antd `ConfigProvider` locale 联动（zh_CN / en_US / ja_JP / ko_KR）                                                                                                                            | T28-2/3  | `visual-engineering / [frontend-ui-ux]`    | 切语言 antd DatePicker / Modal 文案同步 |
+| T28-6   | `front/scripts/audit-i18n-completeness.ts` 锁定翻译完整度脚本 + verify batch（任何 ns 缺 key 抛 exit 1）                                                                                                                                               | T28-1/2/3 | `quick / []`                              | `pnpm run i18n:audit` 4 语言 0 missing |
+
+Commit 模板：`[i18n] W28: 完成 ja-JP/ko-KR 整树 + en-US commerce 翻译 + 海外字体 fallback`
+
+### P5 Wave 29 — 自定义音色训练（约 5 工作日）
+
+> DashScope API 接入：`POST /api/v1/services/audio/tts/customization`（北京 / 新加坡两个 region），`model="voice-enrollment"`，actions：`create_voice` / `list_voice` / `query_voice` / `delete_voice`。
+
+任务顺序严格（T29-8 / T29-9 可并行）：
+
+| 任务 ID | 内容                                                                                                                                                                                                                                              | 依赖     | category + skills                          | 验证手段                              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------ | ------------------------------------- |
+| T29-1   | alembic `0018`：`voice_packs` 加 `target_model VARCHAR(64)` / `region VARCHAR(32)` / `clone_status VARCHAR(32)` / `sample_audio_oss_key VARCHAR(255)` / `cloned_at DATETIME(timezone=True)`；backfill `is_system=True` 行 `clone_status='ready'`   | Phase 0  | `quick / []`                               | `alembic upgrade head` + `downgrade -1` 干净 |
+| T29-2   | `backend/app/models/voice_pack.py` + `types.py`：`VoiceCloneStatus` + `VoiceRegion` enum（`native_enum=False, length=16`）                                                                                                                         | T29-1    | `quick / []`                               | `pytest tests/models/test_voice_pack.py` |
+| T29-3   | `backend/app/core/contracts/voice_pack_contracts.py`：`CustomVoiceCreateRequest` / `Response` / `StatusResponse` / `ListItem`（format wav/mp3/m4a，duration 10–60s，size ≤ 10 MB，sampleRate ≥ 16 kHz，channels 1–2）                                | T29-2    | `quick / []`                               | pydantic schema 单测                   |
+| T29-4   | `backend/app/services/studio/voice_clone_service.py`：`validate_audio_metadata` (mutagen + soundfile) / `upload_sample_to_oss` / `create_voice_remote` (DashScope SDK 调用) / `persist_voice_pack`                                                  | T29-3    | `ultrabrain / []`                          | vcr cassette 8 cases 含失败分支       |
+| T29-5   | `backend/app/services/tasks/voice_clone_poll_task.py` + `task_dispatch.enqueue_voice_clone_poll`：`max_attempts=30 × 10s` 轮询，遵守 W19b commit-then-send 契约                                                                                     | T29-4    | `ultrabrain / []`                          | 模拟 ready / failed / timeout 三态测试 |
+| T29-6   | `backend/app/api/v1/routes/commerce/voice_packs_custom.py`：POST/GET/DELETE/LIST 自定义音色 endpoint                                                                                                                                              | T29-5    | `unspecified-high / []`                    | API 测试 7 cases                      |
+| T29-7   | `pnpm run openapi:update` 同步前端 generated client                                                                                                                                                                                               | T29-6    | `quick / [git-master]`                     | `git diff openapi.json` 与 endpoint 一致 |
+| T29-8   | `front/src/pages/aiStudio/commerce/voicePacks/VoicePackUploadModal.tsx`：drag/drop + 客户端校验（`AudioContext.decodeAudioData`） + prefix regex + target_model / region 选择                                                                       | T29-7    | `visual-engineering / [frontend-ui-ux]`    | vitest + 上传 30s wav 走通             |
+| T29-9   | `VoicePackLibrary` 加 `clone_status` 列 + 自动 10s 轮询直到 `ready` / `failed`                                                                                                                                                                     | T29-7    | `visual-engineering / [frontend-ui-ux]`    | RTL 用 fake timer 验证轮询             |
+| T29-10  | `backend/scripts/seed_overseas_voice_packs.py`：通过 `voice_clone_service` 同管线 seed 6 海外音色（en/ja/ko 各 2，禁止 hardcoded SQL insert）                                                                                                       | T29-6    | `unspecified-high / []`                    | seed 后 DB 6 行 + clone_status=ready  |
+| T29-11  | verify batch：`pylint backend ≥ 9.5` + `pytest -q` 全套绿 + `pnpm exec tsc --noEmit` + `pnpm run build`                                                                                                                                            | T29-1/.../10 | `quick / []`                              | CI 全绿                               |
+
+Commit 模板：`[feat] W29: 自定义音色训练完整管线`
+
+### P5 Wave 30 — 项目级字幕样式覆盖（约 2 工作日）
+
+| 任务 ID | 内容                                                                                                                                                                                                                                          | 依赖    | category + skills                                       | 验证手段                                  |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------- | ----------------------------------------- |
+| T30-1   | alembic `0019`：`subtitle_styles` 加 `project_id BIGINT NULL FK projects(id) ON DELETE CASCADE`（系统行 NULL，项目行非 NULL）                                                                                                                  | Phase 0 | `quick / []`                                            | `alembic upgrade head` + 反向迁移         |
+| T30-2   | `backend/app/services/studio/subtitle_style_service.py`：`resolve_for_shot`（project 优先 → system fallback）+ `shot_subtitle_render_worker` rewire 走新 resolver                                                                              | T30-1   | `quick / []`                                            | resolver 3 scenario 单测：has-project / fallback-system / 都没有 |
+| T30-3   | `POST/PATCH/DELETE /api/v1/projects/{id}/subtitle-styles` + `GET` 合并视图（system 行返回 403 不允许改）                                                                                                                                       | T30-2   | `unspecified-high / []`                                 | API 测试 6 cases                          |
+| T30-4   | `pnpm run openapi:update`                                                                                                                                                                                                                     | T30-3   | `quick / [git-master]`                                  | generated client diff 一致                |
+| T30-5   | `front/src/pages/aiStudio/commerce/subtitleStyles/SubtitleStyleEditor.tsx`：完整编辑（font / colour / alignment / margin / fallback）+ 实时预览 + 系统级保护（disabled）                                                                       | T30-4   | `visual-engineering / [frontend-ui-ux,ui-ux-pro-max]`   | RTL 4 cases + 视觉对比                    |
+| T30-6   | verify batch                                                                                                                                                                                                                                  | T30-1/.../5 | `quick / []`                                          | CI 全绿                                   |
+
+Commit 模板：`[feat] W30: 项目级字幕样式覆盖`
+
+### P5 Wave 31 — BGM/SFX 链路完整化（约 4 工作日）
+
+| 任务 ID | 内容                                                                                                                                                                                                                                                                          | 依赖     | category + skills                          | 验证手段                                  |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------ | ----------------------------------------- |
+| T31-1   | alembic `0020`：`chapter_timeline_segments` 加 `bgm_file_id BIGINT NULL FK files(id)` / `sfx_file_id BIGINT NULL FK files(id)` / `bgm_ducking_db FLOAT DEFAULT -12.0`                                                                                                          | Phase 0  | `quick / []`                               | `alembic upgrade head` + 反向迁移         |
+| T31-2   | timeline contracts 更新（`ChapterTimelineSegmentSpec` 加 `bgm` / `sfx` / `ducking` 字段）                                                                                                                                                                                     | T31-1    | `quick / []`                               | pydantic schema 单测                      |
+| T31-3   | `backend/app/services/studio/chapter_av_export_filter.py` 扩 `build_filter_complex`：`voice_bgm` 模式 = `amix weights="1 0.4"`；`full` 模式 = `sidechaincompress(threshold=0.01:ratio=8:attack=20:release=300:makeup=2)` + `amerge` SFX 时间轴对齐                            | T31-2    | `ultrabrain / []`                          | filter 字符串 8 cases + ffmpeg dry-run 通过 |
+| T31-4   | `chapter_av_planner.py` 加载 `bgm_file_id` / `sfx_file_id` 到 temp + 喂给 filter builder（FK resolve 后给到 OSS 路径）                                                                                                                                                          | T31-3    | `unspecified-high / []`                    | planner 集成 3 cases                      |
+| T31-5   | `front/src/pages/aiStudio/commerce/projects/components/AVPreviewPanel.tsx`：BGM / SFX `FileItem` 选择器 + `AudioMixMode` toggle（voice_bgm / full）+ `bgm_ducking_db` 滑块（-24 ~ 0 dB）                                                                                       | T31-4    | `visual-engineering / [frontend-ui-ux]`    | RTL + 视觉                                |
+| T31-6   | `pnpm run openapi:update`                                                                                                                                                                                                                                                     | T31-5    | `quick / [git-master]`                     | generated client diff 一致                |
+| T31-7   | verify batch + `tests/integration/test_chapter_av_export_bgm_sfx.py` 用固定 fixture 跑真实 ffmpeg 烟囱测试（spectrogram 比对 ducking 生效）                                                                                                                                    | T31-1/.../6 | `quick / []`                              | smoke 输出 mp4 + 频谱断言通过             |
+
+Commit 模板：`[feat] W31: BGM/SFX 链路完整化`
+
+### P5 Wave 32 — RBAC（约 6 工作日）
+
+| 任务 ID | 内容                                                                                                                                                                                                                                                                                                                  | 依赖     | category + skills                          | 验证手段                                  |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------ | ----------------------------------------- |
+| T32-1   | alembic `0021`：`users` 表（`id UUID` / `username VARCHAR UNIQUE` / `email VARCHAR UNIQUE` / `hashed_password VARCHAR` / `role SAEnum native_enum=False length=16 INDEX` / `is_active BOOL` / `created_at` / `updated_at`）+ bootstrap admin（env `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD`）            | Phase 0  | `quick / []`                               | `alembic upgrade head` + bootstrap 行存在 |
+| T32-2   | `backend/pyproject.toml`：加 `pwdlib[argon2,bcrypt]` + `pyjwt[crypto]`（`passlib` + `python-jose` 已废弃，禁止引入）                                                                                                                                                                                                  | Phase 0  | `quick / []`                               | `uv lock` 干净                             |
+| T32-3   | `backend/app/models/user.py` + `types.py`：`UserRole(ADMIN/MEMBER/VIEWER)` Python `str` Enum                                                                                                                                                                                                                          | T32-1    | `quick / []`                               | model 单测                                |
+| T32-4   | `backend/app/core/security.py`：`hash_password`（Argon2 默认）/ `verify_password`（`verify_and_update` 自动迁移老 bcrypt 哈希）/ `create_access_token`（HS256 `sub=user.id`）/ `decode_access_token`                                                                                                                  | T32-3    | `ultrabrain / []`                          | 12 cases 含 verify_and_update 路径         |
+| T32-5   | `POST /api/v1/login/access-token`（`OAuth2PasswordRequestForm`）+ `Token` Pydantic                                                                                                                                                                                                                                    | T32-4    | `unspecified-high / []`                    | login API 6 cases                         |
+| T32-6   | `backend/app/api/deps.py`：`get_current_user`（async `session.get` O(1)，不 select-by-username）+ `require_role` 工厂 + `require_admin` 别名 + Stage-1 fallback（env `JWT_FALLBACK_TO_STATIC=true` 时仍接受 `settings.api_key`）                                                                                       | T32-5    | `ultrabrain / []`                          | 9 cases 含 fallback 与 fallback 关闭路径   |
+| T32-7   | `/settings/api-keys` + `/settings/llm-providers` + `/admin/notifications` + `/projects/.../subtitle-styles` 等写操作加 `dependencies=[Depends(require_admin)]`                                                                                                                                                       | T32-6    | `unspecified-high / []`                    | curl smoke matrix（admin 200 / member 403 / no token 401） |
+| T32-8   | `pnpm run openapi:update`                                                                                                                                                                                                                                                                                             | T32-7    | `quick / [git-master]`                     | generated client diff 一致                |
+| T32-9   | `front/src/pages/auth/LoginPage.tsx` + `front/src/contexts/AuthContext.tsx` + `front/src/components/ProtectedRoute.tsx`                                                                                                                                                                                              | T32-8    | `visual-engineering / [frontend-ui-ux]`    | RTL 8 cases + 路由守卫验证                |
+| T32-10  | `/settings/users` admin page（列表 / 创建 / 禁用 / role 切换）                                                                                                                                                                                                                                                        | T32-9    | `visual-engineering / [frontend-ui-ux]`    | RTL 6 cases                              |
+| T32-11  | verify batch + curl smoke matrix（admin 200 / member 403 / no token 401 / Stage-1 static 200）                                                                                                                                                                                                                       | T32-1/.../10 | `quick / []`                              | CI + 4 路 smoke 全过                       |
+
+Commit 模板：`[feat] W32: RBAC 用户体系`
+
+### P5 Wave 33 — 数字人调研（约 2 工作日，仅文档）
+
+| 任务 ID | 内容                                                                                                                                                                       | 依赖    | category + skills      | 验证手段                |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------- | ----------------------- |
+| T33-1   | librarian Sadtalker 深度调研（model size / GPU VRAM / 推理时长 / OSS license / sidecar 部署可行性）                                                                        | Phase 0 | `deep / []`           | 调研笔记入 daily notes  |
+| T33-2   | librarian D-ID API 深度调研（定价 / 延迟 / EULA 商业内容限制 / SLA / 失败降级）                                                                                            | Phase 0 | `deep / []`           | 调研笔记入 daily notes  |
+| T33-3   | librarian Wav2Lip 深度调研（lip-sync only / 实现参考 / OSS license / 真实度对比 Sadtalker）                                                                                | Phase 0 | `deep / []`           | 调研笔记入 daily notes  |
+| T33-4   | `site/content/docs/plans/digital-human-research.md`（5 章：Goals / Comparison / Recommended / Risks / Wave 35+ 预拆解）                                                    | T33-1/2/3 | `writing / []`       | hugo build 绿 + 5 章齐全 |
+
+Commit 模板：`[docs] W33: digital-human-research.md (P5 仅调研，不实装)`
+
+### P5 Wave 34 — Release v0.7.0（约 1 工作日）
+
+| 任务 ID | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 依赖              | category + skills | 验证手段           |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ----------------- | ------------------ |
+| T34-1   | `site/content/blog/v0-7-0.md` 17 章节模板（`Highlights` / `Added` / `Changed` / `Fixed` / `Breaking Changes` / `Deprecations` / `Security` / `Known Issues` / `Migration Guide` / `Rollback Notes` / `Compatibility Matrix` / `Validation Commands` / `Upgrade Checklist` / `References` / `Notes for Contributors` / `Acknowledgements` + frontmatter `title / date / description / tags / authors`）                                                                       | W28–W33 全在 HEAD | `writing / []`    | hugo build 绿 + 17 章节齐全 |
+
+Commit 模板：`[docs] W34-T1: site/content/blog/v0-7-0.md release note (P5 整合)`
+
+### P5 关键架构决策
+
+| ID      | 决定                                                                                                                                                                                          |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-P5-1  | `VoicePack` 字段直接扩（不开 sidecar 表）：自定义音色与系统音色共享同一张表，靠 `is_system` + `clone_status` 区分；避免 P3 已建表二次拆分                                                       |
+| D-P5-2  | `SubtitleStyle.project_id` NULL = 系统模板 / 非 NULL = 项目级覆盖（单表 resolver 优于双表）；resolver 走 project 优先 → system fallback                                                         |
+| D-P5-3  | 单表 `User` + `str` Enum（`UserRole`），不开 `Role` / `Permission` 多对多；P5 阶段团队规模不需要细粒度权限矩阵                                                                                |
+| D-P5-4  | `chapter_av_export` 两挡音频混合策略：`voice_bgm` = `amix weights="1 0.4"` 静态权重；`full` = `sidechaincompress` + `amerge` SFX；前者作为后者失真 fallback                                    |
+| D-P5-5  | `ChapterTimelineSegment` 直接加 `bgm_file_id` / `sfx_file_id` FK 字段（而非 JSON），方便走 OSS 路径 resolve 与级联删除                                                                          |
+| D-P5-6  | alembic 5 个独立 migration（W28 不动 schema / W29 `0018` / W30 `0019` / W31 `0020` / W32 `0021`），按 wave 拆，便于单 wave 回滚                                                                |
+| D-P5-7  | `font_fallback_chain` 用 unioned 列表（中文 + 日韩 + 英文混合），libass 左到右匹配；不按语言切多个 chain（避免运行时 detect language 复杂度）                                                  |
+
+### P5 风险登记
+
+- **R-P5-1**：DashScope 配额 / 定价变化导致 voice clone 测试中断或线上不可用。
+  - 缓解：测试整合 vcr cassette 离线回放；`Settings` 加 `dashscope_max_concurrent_voice_clone` 限并发；线上失败显式降级到系统音色。
+- **R-P5-2**：W32 RBAC 落地后立即锁出现有 dev workflow（无 user table，所有 admin 路径返回 401）。
+  - 缓解：`JWT_FALLBACK_TO_STATIC` env 默认 true 给现有 dev 留 2 周窗口；W32-T11 smoke matrix 验证 fallback 路径。
+- **R-P5-3**：Stage-1 fallback 永远不下线，长期保留静态 token 通道留下安全风险。
+  - 缓解：P6 backlog 里硬截止 `JWT_FALLBACK_TO_STATIC=false` 默认；v0.7.1 patch release 时关闭。
+- **R-P5-4**：W31 `sidechaincompress` 参数不当导致 BGM ducking 出现 pumping 失真，长视频听感差。
+  - 缓解：保留 `voice_bgm` 静态权重模式作为安全 fallback；T31-7 smoke 用真实 fixture 频谱比对断言。
+- **R-P5-5**：W30 项目级 SubtitleStyle 覆盖破坏 system fallback 链（resolver bug 导致系统模板失效）。
+  - 缓解：T30-2 resolver 3 scenario 测试（has-project / fallback-system / 都没有）；worker 不缓存 resolver 结果。
+- **R-P5-6**：W28 `LanguageSwitcher` 切换破坏 antd `ConfigProvider` locale 加载（dynamic import 失败导致整页空白）。
+  - 缓解：locale 包走 lazy import + suspense fallback；切语言失败保留当前语言不抛错。
+- **R-P5-7**：W29 DashScope `create_voice` 永远不返回 ready / failed（远端卡死），轮询任务挂 5 分钟。
+  - 缓解：`max_attempts=30 × 10s` 共 5 分钟硬超时 → `clone_status=failed`；UI 提供"重新训练"入口。
+- **R-P5-8**：alembic 链漂移（部分历史测试 pin 在 head=0011 老 baseline，新 wave 加 migration 后 head 变化破坏老断言）。
+  - 缓解：不动 legacy 测试断言；新测试 pin head=0021；`tests/alembic/test_chain.py` 新增 forward / downgrade 全链路测试。
+- **R-P5-9**：DINOv2 sidecar test 引入隐式网络依赖（CI 环境如无法触达 HF Hub 会拉权重失败）。
+  - 缓解：seed 脚本加 `--dry-run` flag 跳过权重下载；CI 中显式跳过 sidecar 集成测试，仅在本地 / staging 跑。
+- **R-P5-10**：antd Modal 在 jsdom 中 close-animation 缓存导致 RTL 测试残留 DOM 节点（与 W24-T5 同源问题）。
+  - 缓解：`findByRole` 模式 + `xfail strict=False` 让 CI 不阻塞；prod 路径手动验证。
+- **R-P5-11**：W31 BGM / SFX 链路 + sidechaincompress 把 ffmpeg 时长拉长 > 30%，影响 chapter_av_export SLA。
+  - 缓解：T31-7 加 benchmark 门，对比 baseline 5 分钟章节耗时，> 30% 视为回归触发 review。
+- **R-P5-12**：worktree 被外部 `git reset` 或冲突 push 导致 P5 commit 链丢失。
+  - 缓解：每个 wave atomic commit + 立即 `push origin dev` 锁 HEAD；不做长 lived feature branch。
+
+### P5 完成标准
+
+- [ ] Phase 0 commit pushed（P4 ✅ 标记 + 5 architecture pages 已 in HEAD）
+- [ ] Phase 0-B commit pushed（P5 章节加入 plans，本节）
+- [ ] 4 locales 全部通过 `pnpm run i18n:audit` 完整度检查（零 missing key）
+- [ ] alembic head=0021 + 链向前 forward + 反向 downgrade 全部干净
+- [ ] 用户上传 30s wav → 完整 clone 管线 → `voice_packs` 行 `clone_status=ready` → `chapter_av_export` 可用
+- [ ] 6 个海外音色通过 `seed_overseas_voice_packs.py` 同管线 seed（不允许 hardcoded SQL insert）
+- [ ] 项目级 `SubtitleStyle` 覆盖在 `/commerce/subtitle-styles/{project_id}` 可见 + worker 渲染走项目级
+- [ ] `chapter_av_export` `voice_bgm` 与 `full` 两个模式都能产 mp4 + spectral check 验证 ducking 生效
+- [ ] `POST /api/v1/login/access-token` 返回 JWT + admin 端点 401 / 403 / 200 matrix 正确
+- [ ] `LoginPage` + `ProtectedRoute` + admin-only 入口对 member 隐藏
+- [ ] `digital-human-research.md` 发布到 plans
+- [ ] `v0-7-0.md` 17 章节齐全 + frontmatter 完整
+- [ ] `pylint backend ≥ 9.5` + `pytest -q` 全绿（除 pre-existing skip / xfail）+ `pnpm exec tsc --noEmit` + `pnpm run build` + `pnpm run openapi:update` zero diff
+- [ ] `backend/scripts/p3_e2e_smoke.py` 仍绿（P3 回归哨兵不破）
+
+### P5 任务依赖图（ASCII 简版）
+
+```text
+Phase 0 (HEAD)
+   │
+   ├─► W28 i18n           (T28-1..6)
+   │
+   ├─► W29 voice clone    (T29-1 → -2 → -3 → -4 → -5 → -6 → -7 ┬→ -8)
+   │                                                            └→ -9
+   │                                                            T29-10 (并行 -6 之后)
+   │                                                            T29-11 (verify, 全部之后)
+   │
+   ├─► W30 project sub    (T30-1 → -2 → -3 → -4 → -5 → -6)
+   │
+   ├─► W31 BGM/SFX        (T31-1 → -2 → -3 → -4 → -5 → -6 → -7)
+   │
+   ├─► W32 RBAC           (T32-1/2 并行 → -3 → -4 → -5 → -6 → -7 → -8 → -9 → -10 → -11)
+   │
+   └─► W33 数字人调研     (T33-1/2/3 并行 → -4)
+                │
+                └────► W34 release v0.7.0 (T34-1, 等 W28-W33 全 in HEAD)
+```
+
+### P5 alembic 迁移链
+
+P4 末尾 head = `0017_p4_consistency_status_retry`。P5 在此之后串 4 个独立 migration（W28 不动 schema）：
+
+| 版本 | wave | 内容 |
+| ---- | ---- | ---- |
+| `0018_p5_voice_pack_custom_fields.py` | W29 | `voice_packs` 加 `target_model` / `region` / `clone_status` / `sample_audio_oss_key` / `cloned_at` 5 字段；backfill `is_system=True` 行 `clone_status='ready'` |
+| `0019_p5_subtitle_style_project_scope.py` | W30 | `subtitle_styles` 加 `project_id BIGINT NULL FK projects(id) ON DELETE CASCADE`；index `idx_subtitle_styles_project_id` |
+| `0020_p5_timeline_segment_bgm_sfx.py` | W31 | `chapter_timeline_segments` 加 `bgm_file_id BIGINT NULL FK files(id)` / `sfx_file_id BIGINT NULL FK files(id)` / `bgm_ducking_db FLOAT DEFAULT -12.0` |
+| `0021_p5_users_rbac.py` | W32 | 新建 `users` 表（id UUID / username UNIQUE / email UNIQUE / hashed_password / role SAEnum native_enum=False / is_active / created_at / updated_at）+ index 列 |
+
+每个 migration 的 `downgrade()` 必须实测可执行（不允许 `op.execute("...")` 写死的不可逆 DDL）。
+
+---
+
 ## 跨阶段决定（保持稳定）
 
 | ID  | 决定                                                                                                                  |
