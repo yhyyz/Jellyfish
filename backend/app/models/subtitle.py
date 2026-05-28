@@ -3,8 +3,11 @@
 包含两张表：
 
 - subtitle_styles：跨项目复用的字幕样式定义（DOUYIN_DEFAULT / TIKTOK_VIRAL /
-  REELS_LOWER_THIRD 三套系统级内置 + 用户自定义）；启动期由
-  builtin_subtitle_styles 幂等 seed 系统级样式（is_system=True）。
+  REELS_LOWER_THIRD 三套系统级内置 + 项目级覆盖）；启动期由
+  builtin_subtitle_styles 幂等 seed 系统级样式（is_system=True，
+  project_id=NULL）；项目级覆盖样式由 ``POST /api/v1/commerce/projects/
+  {project_id}/subtitle-styles`` 在 P5 W30 上线（is_system=False，
+  project_id 非空）。
 - subtitle_tracks：单镜头/单章节级别的字幕轨道实例，挂在 ``shot_id``，
   关联具体的 ``.ass`` 文件 FileItem 与所用 SubtitleStyle，记录字级时间戳
   来源（来自 TTS word_timestamps 还是 ASR Paraformer-v2 反推）。
@@ -40,9 +43,14 @@ from app.models.types import (
 class SubtitleStyle(Base, TimestampMixin):
     """字幕样式：跨项目复用的 ASS Style 定义。
 
-    系统级样式（is_system=True）由启动期 builtin_subtitle_styles 幂等 seed
-    （DOUYIN_DEFAULT / TIKTOK_VIRAL / REELS_LOWER_THIRD 三套），用户也可
-    在项目层创建自定义样式覆盖。
+    系统级样式（is_system=True，project_id=NULL）由启动期
+    builtin_subtitle_styles 幂等 seed（DOUYIN_DEFAULT / TIKTOK_VIRAL /
+    REELS_LOWER_THIRD 三套）；项目级覆盖样式（is_system=False，
+    project_id=具体 project ID）由前端 SubtitleStyleEditor 通过
+    ``POST /api/v1/commerce/projects/{project_id}/subtitle-styles`` 创建。
+    渲染期 ``shot_subtitle_render_worker`` 通过
+    :func:`subtitle_style_service.resolve_for_shot` 走"项目级 → 系统级
+    fallback"两级 lookup。
 
     字段语义对应 ASS v4+ ``[V4+ Styles] Format`` 行：
 
@@ -226,6 +234,16 @@ class SubtitleStyle(Base, TimestampMixin):
         default=0,
         server_default="0",
         comment="UI 列表显示顺序（升序）",
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment=(
+            "项目级覆盖样式归属的项目 ID；NULL=系统级 seed，"
+            "非 NULL=该项目自定义覆盖；删除项目时随同 CASCADE"
+        ),
     )
 
     __table_args__ = (
