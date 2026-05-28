@@ -29,13 +29,27 @@
     "preview": "자막 미리보기 (샘플)"
   },
   "voicePackLibrary": {
-    "pageTitle": "보이스 팩 라이브러리",
+    "pageTitle": "보이스 라이브러리",
     "filterLanguage": "언어",
-    "uploadCustom": "맞춤형 보이스 업로드",
-    "uploadComingSoon": "곧 출시 — 커스텀 보이스 트레이닝은 P5에서 제공됩니다",
-    "loadFailed": "로드 실패",
-    "retry": "다시 시도",
-    "empty": "조건에 맞는 보이스 팩이 없습니다"
+    "uploadCustom": "커스텀 보이스 업로드",
+    "loadFailed": "불러오기 실패",
+    "retry": "재시도",
+    "empty": "조건에 맞는 보이스가 없습니다",
+    "customSectionTitle": "커스텀 보이스",
+    "customEmpty": "커스텀 보이스가 없습니다. 오른쪽 상단 버튼으로 업로드하세요",
+    "customLoadFailed": "커스텀 보이스 불러오기 실패",
+    "deleteConfirm": "이 커스텀 보이스를 삭제하시겠습니까? DashScope 할당량이 해제됩니다.",
+    "deleteOk": "삭제",
+    "deleteCancel": "취소",
+    "deleteSuccess": "삭제 완료",
+    "deleteFailed": "삭제 실패",
+    "cloneStatus": {
+      "deploying": "학습 중",
+      "ready": "사용 가능",
+      "failed": "학습 실패",
+      "deleted": "삭제됨",
+      "deployingHint": "보통 30-60초, 최대 5분"
+    }
   },
   "platformExportPresetLibrary": {
     "pageTitle": "플랫폼 내보내기 프리셋 라이브러리",
@@ -66,5 +80,47 @@
   "formula": {},
   "hook": {},
   "cta": {},
-  "archetype": {}
+  "archetype": {},
+  "voicePackUpload": {
+    "title": "커스텀 보이스 업로드",
+    "submit": "학습 시작",
+    "cancel": "취소",
+    "reset": "초기화",
+    "successToast": "보이스 학습 중입니다. 라이브러리에서 진행 상황을 확인하세요",
+    "fields": {
+      "sampleFile": "오디오 샘플",
+      "sampleFileHint": "WAV / MP3 / M4A, 10-60초, <=10 MB, 모노/스테레오, 샘플레이트 >=16 kHz",
+      "dragDrop": "클릭하거나 파일을 끌어다 놓으세요",
+      "prefix": "보이스 접두사",
+      "prefixRequired": "접두사는 필수입니다",
+      "prefixPattern": "영문 / 숫자 / 밑줄만 가능, 최대 10자",
+      "displayName": "표시 이름",
+      "displayNameRequired": "표시 이름은 필수입니다",
+      "displayNamePlaceholder": "예: 나의 전용 보이스",
+      "targetModel": "합성 모델",
+      "region": "리전 엔드포인트",
+      "languageHints": "언어 힌트",
+      "languageHintsPlaceholder": "합성 대상 언어 선택 (다중 선택 가능)",
+      "description": "설명",
+      "descriptionPlaceholder": "사용 시나리오를 간단히 기재 (선택)"
+    },
+    "targetModel": {
+      "v35plus": "cosyvoice-v3.5-plus (베이징 전용, 중국어 최적)",
+      "v3plus": "cosyvoice-v3-plus (베이징 / 싱가포르, 다국어)"
+    },
+    "region": {
+      "beijing": "베이징 (cn-beijing)",
+      "singapore": "싱가포르 (ap-singapore)"
+    },
+    "errors": {
+      "format": "지원하지 않는 포맷: {{suffix}} (wav / mp3 / m4a 만 지원)",
+      "size": "파일 크기가 {{max}} 한도를 초과했습니다",
+      "duration": "재생 시간 {{actual}}초가 {{min}}-{{max}}초 범위를 벗어납니다",
+      "sampleRate": "샘플레이트 {{actual}} Hz가 최소 {{min}} Hz보다 낮습니다",
+      "channels": "채널 수 {{actual}}은 1-2 범위를 벗어납니다",
+      "unparseable": "오디오 파일을 파싱할 수 없습니다",
+      "fileMissing": "먼저 오디오 샘플을 업로드해 주세요",
+      "submitGeneric": "생성에 실패했습니다. 잠시 후 다시 시도하세요"
+    }
+  }
 }

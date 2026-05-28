@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CommerceSubtitleStylesService,
   CommerceTasksService,
+  CommerceVoicePacksCustomService,
   CommerceVoicePacksService,
   StudioComplianceService,
   StudioStoryVariantsService,
@@ -26,6 +27,8 @@ import {
 import type {
   ComplianceCheckRequest,
   ComplianceFindingRead,
+  CustomVoiceListItem,
+  CustomVoiceStatusResponse,
   ScriptGenerateRequest,
   StoryVariantCloneRequest,
   StoryVariantCreate,
@@ -253,6 +256,93 @@ export function useVoicePacks(languageCode: string | null | undefined) {
           languageCode,
         })
       return res.data ?? []
+    },
+  })
+}
+
+// ---------- 自定义 VoicePack（W29 自定义音色训练） ----------
+
+/**
+ * 自定义音色 query key factory。
+ *
+ * key 携带 cloneStatus 过滤维度（null 时返回非 deleted 全集）。
+ */
+export const customVoicePackKeys = {
+  all: ['commerce', 'voice-packs', 'custom'] as const,
+  list: (cloneStatus: string | null) =>
+    [...customVoicePackKeys.all, 'list', { cloneStatus }] as const,
+  status: (voicePackId: string) =>
+    [...customVoicePackKeys.all, 'status', voicePackId] as const,
+}
+
+/**
+ * 拉取自定义音色列表（W29 VoicePackLibrary 调用）。
+ *
+ * - cloneStatus=null 时后端默认隐藏 deleted；显式传 deleted 可访问审计视图。
+ * - refetchInterval：仅当列表存在 deploying 行时由调用方 setInterval；
+ *   本 hook 不带轮询参数，避免 refetch 与列表过滤竞态。
+ */
+export function useCustomVoicePacks(
+  cloneStatus: string | null = null,
+  options: { refetchInterval?: number | false } = {},
+) {
+  return useQuery({
+    queryKey: customVoicePackKeys.list(cloneStatus),
+    queryFn: async (): Promise<CustomVoiceListItem[]> => {
+      const res =
+        await CommerceVoicePacksCustomService.listCustomVoicePacksEndpointApiV1CommerceVoicePacksCustomGet(
+          {
+            cloneStatus: cloneStatus ?? undefined,
+            page: 1,
+            pageSize: 100,
+          },
+        )
+      return res.data?.items ?? []
+    },
+    refetchInterval: options.refetchInterval ?? false,
+  })
+}
+
+/**
+ * 单条自定义音色 status 查询（W29 前端轮询用）。
+ *
+ * 仅当 voicePackId 非空且 enabled 为 true 时启用；上层一般在
+ * deploying 行被打开 detail drawer 时启用，配合 refetchInterval=10000。
+ */
+export function useCustomVoiceStatus(
+  voicePackId: string | null | undefined,
+  options: { enabled?: boolean; refetchInterval?: number | false } = {},
+) {
+  return useQuery({
+    queryKey: customVoicePackKeys.status(voicePackId ?? ''),
+    enabled: !!voicePackId && (options.enabled ?? true),
+    refetchInterval: options.refetchInterval ?? false,
+    queryFn: async (): Promise<CustomVoiceStatusResponse | null> => {
+      if (!voicePackId) return null
+      const res =
+        await CommerceVoicePacksCustomService.getCustomVoiceStatusEndpointApiV1CommerceVoicePacksCustomVoicePackIdStatusGet(
+          { voicePackId },
+        )
+      return res.data ?? null
+    },
+  })
+}
+
+/**
+ * 删除自定义音色（W29 VoicePackLibrary 删除按钮调用）。
+ *
+ * 成功后 invalidate list 缓存以刷新 UI。
+ */
+export function useDeleteCustomVoicePack() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (voicePackId: string): Promise<void> => {
+      await CommerceVoicePacksCustomService.deleteCustomVoicePackEndpointApiV1CommerceVoicePacksCustomVoicePackIdDelete(
+        { voicePackId },
+      )
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: customVoicePackKeys.all })
     },
   })
 }

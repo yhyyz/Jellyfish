@@ -32,10 +32,24 @@
     "pageTitle": "音色库",
     "filterLanguage": "语言",
     "uploadCustom": "上传定制音色",
-    "uploadComingSoon": "敬请期待 — 自定义音色训练能力将在 W21 开放",
     "loadFailed": "加载失败",
     "retry": "重试",
-    "empty": "暂无符合条件的音色"
+    "empty": "暂无符合条件的音色",
+    "customSectionTitle": "自定义音色",
+    "customEmpty": "暂无自定义音色，点击右上角上传定制音色",
+    "customLoadFailed": "加载自定义音色失败",
+    "deleteConfirm": "确定要删除该自定义音色？删除后将释放 DashScope 配额。",
+    "deleteOk": "删除",
+    "deleteCancel": "取消",
+    "deleteSuccess": "已删除",
+    "deleteFailed": "删除失败",
+    "cloneStatus": {
+      "deploying": "训练中",
+      "ready": "可用",
+      "failed": "训练失败",
+      "deleted": "已删除",
+      "deployingHint": "约需 30-60 秒，最长 5 分钟"
+    }
   },
   "platformExportPresetLibrary": {
     "pageTitle": "平台导出预设库",
@@ -66,5 +80,47 @@
   "formula": {},
   "hook": {},
   "cta": {},
-  "archetype": {}
+  "archetype": {},
+  "voicePackUpload": {
+    "title": "上传定制音色",
+    "submit": "开始训练",
+    "cancel": "取消",
+    "reset": "重置",
+    "successToast": "音色创建中，可在音色库查看进度",
+    "fields": {
+      "sampleFile": "音频样本",
+      "sampleFileHint": "WAV / MP3 / M4A 格式，10-60 秒，<=10 MB，单/双声道，采样率 >=16 kHz",
+      "dragDrop": "点击或拖拽文件到此处",
+      "prefix": "音色前缀",
+      "prefixRequired": "请填写音色前缀",
+      "prefixPattern": "仅允许字母 / 数字 / 下划线，最多 10 字符",
+      "displayName": "展示名称",
+      "displayNameRequired": "请填写展示名称",
+      "displayNamePlaceholder": "例如：我的专属男声",
+      "targetModel": "目标合成模型",
+      "region": "区域端点",
+      "languageHints": "语言提示",
+      "languageHintsPlaceholder": "选择目标合成语言（可多选）",
+      "description": "描述",
+      "descriptionPlaceholder": "简短描述用途与场景（可选）"
+    },
+    "targetModel": {
+      "v35plus": "cosyvoice-v3.5-plus（仅北京，推荐中文）",
+      "v3plus": "cosyvoice-v3-plus（北京 / 新加坡，多语言）"
+    },
+    "region": {
+      "beijing": "北京（cn-beijing）",
+      "singapore": "新加坡（ap-singapore）"
+    },
+    "errors": {
+      "format": "不支持的格式：{{suffix}}（仅支持 wav / mp3 / m4a）",
+      "size": "文件超过 {{max}} 上限",
+      "duration": "时长 {{actual}} 秒超出 {{min}}-{{max}} 秒区间",
+      "sampleRate": "采样率 {{actual}} Hz 低于最低要求 {{min}} Hz",
+      "channels": "声道数 {{actual}} 不在 1-2 之间",
+      "unparseable": "音频文件无法解析",
+      "fileMissing": "请先上传音频样本",
+      "submitGeneric": "创建失败，请稍后重试"
+    }
+  }
 }

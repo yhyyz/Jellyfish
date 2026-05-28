@@ -29,13 +29,27 @@
     "preview": "Sample subtitle preview"
   },
   "voicePackLibrary": {
-    "pageTitle": "Voice pack library",
+    "pageTitle": "Voice Library",
     "filterLanguage": "Language",
-    "uploadCustom": "Upload custom voice",
-    "uploadComingSoon": "Coming soon — custom voice training will be available in W21",
+    "uploadCustom": "Upload Custom Voice",
     "loadFailed": "Failed to load",
     "retry": "Retry",
-    "empty": "No voice packs match the current filter"
+    "empty": "No voices match your filter",
+    "customSectionTitle": "Custom Voices",
+    "customEmpty": "No custom voices yet. Click the upload button to start training.",
+    "customLoadFailed": "Failed to load custom voices",
+    "deleteConfirm": "Delete this custom voice? Its DashScope quota will be released.",
+    "deleteOk": "Delete",
+    "deleteCancel": "Cancel",
+    "deleteSuccess": "Deleted",
+    "deleteFailed": "Delete failed",
+    "cloneStatus": {
+      "deploying": "Training",
+      "ready": "Ready",
+      "failed": "Failed",
+      "deleted": "Deleted",
+      "deployingHint": "Typically 30-60s, up to 5 minutes"
+    }
   },
   "platformExportPresetLibrary": {
     "pageTitle": "Platform export preset library",
@@ -66,5 +80,47 @@
   "formula": {},
   "hook": {},
   "cta": {},
-  "archetype": {}
+  "archetype": {},
+  "voicePackUpload": {
+    "title": "Upload Custom Voice",
+    "submit": "Start Training",
+    "cancel": "Cancel",
+    "reset": "Reset",
+    "successToast": "Voice training started. Track progress in the voice library.",
+    "fields": {
+      "sampleFile": "Audio Sample",
+      "sampleFileHint": "WAV / MP3 / M4A, 10-60s, <=10 MB, mono/stereo, sample rate >=16 kHz",
+      "dragDrop": "Click or drag file here",
+      "prefix": "Voice Prefix",
+      "prefixRequired": "Prefix is required",
+      "prefixPattern": "Letters / digits / underscores only, max 10 characters",
+      "displayName": "Display Name",
+      "displayNameRequired": "Display name is required",
+      "displayNamePlaceholder": "e.g. My Studio Voice",
+      "targetModel": "Target Synthesis Model",
+      "region": "Region Endpoint",
+      "languageHints": "Language Hints",
+      "languageHintsPlaceholder": "Pick target synthesis languages (multi-select)",
+      "description": "Description",
+      "descriptionPlaceholder": "Brief usage notes (optional)"
+    },
+    "targetModel": {
+      "v35plus": "cosyvoice-v3.5-plus (Beijing only, best for Chinese)",
+      "v3plus": "cosyvoice-v3-plus (Beijing / Singapore, multilingual)"
+    },
+    "region": {
+      "beijing": "Beijing (cn-beijing)",
+      "singapore": "Singapore (ap-singapore)"
+    },
+    "errors": {
+      "format": "Unsupported format: {{suffix}} (only wav / mp3 / m4a)",
+      "size": "File exceeds {{max}} limit",
+      "duration": "Duration {{actual}}s is outside {{min}}-{{max}}s range",
+      "sampleRate": "Sample rate {{actual}} Hz is below the minimum {{min}} Hz",
+      "channels": "Channel count {{actual}} is not within 1-2",
+      "unparseable": "Audio file could not be parsed",
+      "fileMissing": "Please upload an audio sample first",
+      "submitGeneric": "Creation failed, please try again later"
+    }
+  }
 }

@@ -29,13 +29,27 @@
     "preview": "字幕プレビュー（サンプル）"
   },
   "voicePackLibrary": {
-    "pageTitle": "音声パックライブラリ",
+    "pageTitle": "ボイスライブラリ",
     "filterLanguage": "言語",
-    "uploadCustom": "カスタム音声をアップロード",
-    "uploadComingSoon": "近日公開 — カスタム音声トレーニングは P5 で利用可能になります",
+    "uploadCustom": "カスタムボイスをアップロード",
     "loadFailed": "読み込みに失敗しました",
     "retry": "再試行",
-    "empty": "条件に一致する音声パックがありません"
+    "empty": "条件に一致するボイスがありません",
+    "customSectionTitle": "カスタムボイス",
+    "customEmpty": "カスタムボイスがありません。右上のボタンからアップロードしてください",
+    "customLoadFailed": "カスタムボイスの読み込みに失敗しました",
+    "deleteConfirm": "このカスタムボイスを削除しますか？DashScope の枠が解放されます。",
+    "deleteOk": "削除",
+    "deleteCancel": "キャンセル",
+    "deleteSuccess": "削除しました",
+    "deleteFailed": "削除に失敗しました",
+    "cloneStatus": {
+      "deploying": "トレーニング中",
+      "ready": "利用可能",
+      "failed": "トレーニング失敗",
+      "deleted": "削除済み",
+      "deployingHint": "通常 30〜60 秒、最長 5 分"
+    }
   },
   "platformExportPresetLibrary": {
     "pageTitle": "プラットフォームエクスポート プリセットライブラリ",
@@ -66,5 +80,47 @@
   "formula": {},
   "hook": {},
   "cta": {},
-  "archetype": {}
+  "archetype": {},
+  "voicePackUpload": {
+    "title": "カスタムボイスをアップロード",
+    "submit": "トレーニング開始",
+    "cancel": "キャンセル",
+    "reset": "リセット",
+    "successToast": "ボイスをトレーニング中。ライブラリで進捗を確認できます",
+    "fields": {
+      "sampleFile": "音声サンプル",
+      "sampleFileHint": "WAV / MP3 / M4A、10-60秒、<=10 MB、モノラル/ステレオ、サンプルレート >=16 kHz",
+      "dragDrop": "クリックまたはドラッグでファイルを選択",
+      "prefix": "ボイス接頭辞",
+      "prefixRequired": "接頭辞は必須です",
+      "prefixPattern": "英字 / 数字 / アンダースコアのみ、最大 10 文字",
+      "displayName": "表示名",
+      "displayNameRequired": "表示名は必須です",
+      "displayNamePlaceholder": "例：マイ専用ボイス",
+      "targetModel": "合成モデル",
+      "region": "リージョンエンドポイント",
+      "languageHints": "言語ヒント",
+      "languageHintsPlaceholder": "目的の合成言語を選択（複数選択可）",
+      "description": "説明",
+      "descriptionPlaceholder": "使用シーンを簡単に記述（任意）"
+    },
+    "targetModel": {
+      "v35plus": "cosyvoice-v3.5-plus（北京のみ、中国語に最適）",
+      "v3plus": "cosyvoice-v3-plus（北京 / シンガポール、多言語対応）"
+    },
+    "region": {
+      "beijing": "北京（cn-beijing）",
+      "singapore": "シンガポール（ap-singapore）"
+    },
+    "errors": {
+      "format": "未対応の形式：{{suffix}}（wav / mp3 / m4a のみ）",
+      "size": "ファイルが {{max}} を超えています",
+      "duration": "再生時間 {{actual}} 秒は {{min}}-{{max}} 秒の範囲外です",
+      "sampleRate": "サンプルレート {{actual}} Hz は最低 {{min}} Hz を下回っています",
+      "channels": "チャンネル数 {{actual}} は 1-2 の範囲外です",
+      "unparseable": "音声ファイルを解析できません",
+      "fileMissing": "音声サンプルを先にアップロードしてください",
+      "submitGeneric": "作成に失敗しました。しばらくしてから再試行してください"
+    }
+  }
 }

@@ -8,3 +8,21 @@ import { afterEach } from 'vitest';
 afterEach(() => {
   cleanup();
 });
+
+// jsdom 没有实现 window.matchMedia，antd v5 的 Grid / Modal / Tooltip 等
+// 组件初始化阶段会调用，必须用最简空实现兜底，否则触发
+// `TypeError: window.matchMedia is not a function`。
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(window as any).matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  });
+}
+
