@@ -60,6 +60,9 @@ async def bootstrap_async_state(db: AsyncSession) -> dict[str, dict[str, int]]:
     from app.services.commerce.builtin_hook_patterns import (
         bootstrap_builtin_hook_patterns,
     )
+    from app.services.commerce.bootstrap_export_presets import (
+        bootstrap_platform_export_presets,
+    )
     from app.services.commerce.builtin_story_formulas import (
         bootstrap_builtin_story_formulas,
     )
@@ -81,4 +84,6 @@ async def bootstrap_async_state(db: AsyncSession) -> dict[str, dict[str, int]]:
     stats["brand_archetypes"] = await bootstrap_builtin_brand_archetypes(db)
     stats["voice_packs"] = await bootstrap_builtin_voice_packs(db)
     stats["subtitle_styles"] = await bootstrap_builtin_subtitle_styles(db)
+    # P4 W23-T1: 平台导出预设（5 个系统级 seed：抖音 / 快手 / 小红书 / YT Shorts / TikTok）
+    stats["platform_export_presets"] = await bootstrap_platform_export_presets(db)
     return stats

@@ -33,6 +33,8 @@ const FormulaLibrary = lazy(() => import('./pages/aiStudio/commerce/formulas/For
 // W20 Wave C：音色库 / 字幕样式库（剧情带货模块的资源管理页）
 const VoicePackLibrary = lazy(() => import('./pages/aiStudio/commerce/voicePacks/VoicePackLibrary'))
 const SubtitleStyleLibrary = lazy(() => import('./pages/aiStudio/commerce/subtitleStyles/SubtitleStyleLibrary'))
+// W23-T1：多平台导出预设库（P4 Wave A）
+const PlatformExportPresetLibrary = lazy(() => import('./pages/aiStudio/commerce/exportPresets/PlatformExportPresetLibrary'))
 
 /** 兼容旧链接 `/projects/:projectId/chapters` → 工作台章节 Tab */
 function NavigateToWorkbenchChaptersTab() {
@@ -74,6 +76,7 @@ const App: React.FC = () => {
           <Route path="commerce/formulas" element={<Suspense fallback={<PageSkeleton />}><FormulaLibrary /></Suspense>} />
           <Route path="commerce/voice-packs" element={<Suspense fallback={<PageSkeleton />}><VoicePackLibrary /></Suspense>} />
           <Route path="commerce/subtitle-styles" element={<Suspense fallback={<PageSkeleton />}><SubtitleStyleLibrary /></Suspense>} />
+          <Route path="commerce/export-presets" element={<Suspense fallback={<PageSkeleton />}><PlatformExportPresetLibrary /></Suspense>} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>

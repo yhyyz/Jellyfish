@@ -37,6 +37,19 @@
     "retry": "Retry",
     "empty": "No voice packs match the current filter"
   },
+  "platformExportPresetLibrary": {
+    "pageTitle": "Platform export preset library",
+    "systemSection": "System presets",
+    "filterPlatform": "Platform",
+    "filterAll": "All",
+    "loadFailed": "Failed to load",
+    "retry": "Retry",
+    "empty": "No presets match the current filter",
+    "aspectRatio": "Aspect",
+    "maxDuration": "Max duration",
+    "codec": "Codec",
+    "loudness": "Loudness"
+  },
   "avPreview": {
     "drawerTitle": "AV Preview",
     "videoFallback": "Your browser does not support the video tag",

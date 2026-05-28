@@ -8,6 +8,7 @@ from app.models.brand_style_guide import BrandStyleGuide
 from app.models.compliance import ComplianceFinding, ComplianceProfile
 from app.models.notification_channel import NotificationChannel, NotificationDelivery
 from app.models.cta_pattern import CtaPattern
+from app.models.platform_export_preset import PlatformExportPreset
 from app.models.hook_pattern import HookPattern
 from app.models.llm import Model, ModelSettings, Provider
 from app.models.story_formula import StoryFormula, StoryOutcome, StoryVariant
@@ -98,6 +99,7 @@ __all__ = [
     "CtaPattern",
     "BrandArchetype",
     "BrandStyleGuide",
+    "PlatformExportPreset",
     "Product",
     "ProductImage",
     "ProjectProductLink",

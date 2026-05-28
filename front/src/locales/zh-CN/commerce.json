@@ -37,6 +37,19 @@
     "retry": "重试",
     "empty": "暂无符合条件的音色"
   },
+  "platformExportPresetLibrary": {
+    "pageTitle": "平台导出预设库",
+    "systemSection": "系统预设",
+    "filterPlatform": "平台",
+    "filterAll": "全部",
+    "loadFailed": "加载失败",
+    "retry": "重试",
+    "empty": "暂无符合条件的预设",
+    "aspectRatio": "画幅",
+    "maxDuration": "时长上限",
+    "codec": "编码",
+    "loudness": "响度"
+  },
   "avPreview": {
     "drawerTitle": "音视频预览",
     "videoFallback": "您的浏览器不支持 video 标签",

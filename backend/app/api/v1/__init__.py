@@ -11,6 +11,7 @@ from app.api.v1.routes.studio import (
     brand_style_guides,
     cta_patterns,
     hook_patterns,
+    platform_export_presets,
     story_formulas,
     story_projects,
     story_variants,
@@ -73,4 +74,11 @@ router.include_router(
     brand_style_guides.router,
     prefix="/studio",
     tags=["studio/brand-style-guides"],
+)
+
+# === P4 W23-T1: PlatformExportPreset CRUD（5 个平台预设 + is_system 保护）===
+router.include_router(
+    platform_export_presets.router,
+    prefix="/studio/platform-export-presets",
+    tags=["studio/platform-export-presets"],
 )
