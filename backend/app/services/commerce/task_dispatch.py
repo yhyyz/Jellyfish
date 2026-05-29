@@ -235,13 +235,51 @@ class CommerceTaskDispatchService:
     async def enqueue_script_generate(self, body: dict[str, Any]) -> _EnqueueDescriptor:
         """落 ``task_kind=story_script_generate`` 的 :class:`GenerationTask` 行（不发 broker 消息）。
 
+        v0.7.3 修补：dispatcher 层 hydrate ``formula_id`` → ``formula`` dict。
+        前端 / 第三方 API 只传 ``formula_id``（轻量），但 worker 的
+        :class:`StoryGenerationVars` 期望 ``formula`` 完整结构（公式
+        beats / 字数约束 / 风险标记等）。在 dispatcher 把 hydration 集中
+        做掉，避免每个 worker 都要 DB 重查公式或前端把整个 formula 序列
+        化进 run_args（前后端契约重）。
+
         Args:
             body: ``ScriptGenerateRequest.model_dump()`` 输出。
+                必须含 ``formula_id``；若未携带 ``formula`` 则在此 hydrate。
 
         Returns:
             :class:`_EnqueueDescriptor`；调用方必须 commit 后调
             :py:meth:`dispatch_after_commit`。
         """
+
+        # Hydrate formula_id → formula dict（worker 期望的完整结构）。
+        # 已含 formula 时跳过（兼容批量调用方提前预热的场景）。
+        if "formula" not in body and body.get("formula_id"):
+            from app.models.story_formula import StoryFormula
+
+            formula_id = body["formula_id"]
+            formula_row = await self.db.get(StoryFormula, formula_id)
+            if formula_row is None:
+                raise ValueError(
+                    f"enqueue_script_generate: story_formula '{formula_id}' "
+                    "not found; check builtin_story_formulas seed."
+                )
+            body = {
+                **body,
+                "formula": {
+                    "id": formula_row.id,
+                    "name": formula_row.name,
+                    "region": formula_row.region.value if hasattr(formula_row.region, "value") else str(formula_row.region),
+                    "category": formula_row.category,
+                    "structure": formula_row.structure or {},
+                    "risk_flags": formula_row.risk_flags or [],
+                    "sample_dialog": formula_row.sample_dialog or "",
+                    "typical_duration_sec": formula_row.typical_duration_sec,
+                    "typical_shot_count": formula_row.typical_shot_count,
+                    "psychology": formula_row.psychology or "",
+                    "use_cases": formula_row.use_cases or [],
+                    "avoid_cases": formula_row.avoid_cases or [],
+                },
+            }
 
         return await self._prepare_enqueue(
             task_kind=TASK_KIND_STORY_SCRIPT_GENERATE,
