@@ -36,7 +36,7 @@ class FileUsageWrite(BaseModel):
     usage_kind: str = Field(
         ...,
         description=(
-            "用途：shot_frame / generated_video / chapter_master_video / "
+            "用途：shot_frame / generated_video / chapter_master_dubbed / "
             "character_image / asset_image / upload / api 等"
         ),
     )

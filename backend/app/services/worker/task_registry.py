@@ -43,7 +43,6 @@ from app.services.studio.chapter_av_plan_worker import build_chapter_av_plan_exe
 from app.services.studio.shot_subtitle_render_worker import (
     build_shot_subtitle_render_executor,
 )
-from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.studio.tts_generate_worker import build_tts_generate_executor
 from app.services.studio.voice_clone_poll_task import build_voice_clone_poll_executor
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
@@ -98,14 +97,6 @@ task_executor_registry.register(
         task_kind="video_generation",
         runner=run_video_generation_task,
         timeout_seconds=3600.0,
-    ),
-)
-task_executor_registry.register(
-    "chapter_timeline_export",
-    AbstractAsyncDelegatingExecutor(
-        task_kind="chapter_timeline_export",
-        runner=run_chapter_timeline_export_task,
-        timeout_seconds=7200.0,
     ),
 )
 task_executor_registry.register(
@@ -173,7 +164,8 @@ task_executor_registry.register(
 )
 # P3 W19: 章节级 AV 合成 worker（slow 队列，1800s 超时），按 Shot.audio_strategy
 # 分流（amix TTS / 原音 pass-through）+ ASS 硬烧 + loudnorm 响度归一化，
-# 产出"配音 + 字幕"最终成片，与老 chapter_timeline_export 并存（后者标 deprecated）。
+# 产出"配音 + 字幕"最终成片。v0.7.2 起作为章节级合成的唯一入口
+# （历史 ``chapter_timeline_export`` 已删）。
 task_executor_registry.register(
     "chapter_av_export", build_chapter_av_export_executor()
 )

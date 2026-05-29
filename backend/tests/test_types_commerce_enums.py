@@ -95,7 +95,6 @@ def test_platform_members() -> None:
 _FILE_USAGE_LEGACY = {
     "shot_frame",
     "generated_video",
-    "chapter_master_video",
     "character_image",
     "asset_image",
     "task_link",
@@ -116,7 +115,7 @@ _FILE_USAGE_EXPORT_W23 = {"product_export"}
 
 
 def test_file_usage_kind_preserves_legacy_values() -> None:
-    """FileUsageKind 必须保留全部 8 个原值。"""
+    """FileUsageKind 必须保留 7 个原值（v0.7.2 删除已 deprecated 的 chapter_master_video）。"""
     assert _FILE_USAGE_LEGACY.issubset(_values(FileUsageKind))
 
 

@@ -1,14 +1,15 @@
-"""章节级 AV 合成 worker（P3 W19 T19-1）。
+"""章节级 AV 合成 worker（P3 W19 T19-1 → v0.7.2 收口）。
 
 为什么存在：
     把 W17 双路径产出（silent_with_tts → CosyVoice TTS / keep_native →
     Paraformer-v2 ASR 反推）+ W18 字幕渲染（``.ass``）+ 各 segment 的
     raw 视频，一次 ffmpeg ``filter_complex`` 合成最终"配音 + 字幕"成片
-    （``FileUsageKind.chapter_master_dubbed``），代替老 ``chapter_timeline_export``
-    的"裸视频拼接"。
+    （``FileUsageKind.chapter_master_dubbed``）。
 
-    与老 worker 并存：``chapter_timeline_export`` 标 deprecated 至 v0.7.0
-    删除（仍可用于无字幕无音轨的快速合并场景）。
+    历史背景：v0.6.0 ~ v0.7.1 期间与已 deprecated 的 ``chapter_timeline_export``
+    并存，提供"无字幕无音轨快速合并"兜底；v0.7.2 起老 task_kind 被正式
+    删除（W31 BGM/SFX 落地后兼容窗口闭合），本 worker 成为章节级合成
+    的唯一入口。
 
 做什么：
     异步 runner 输入 ``run_args``：
@@ -28,9 +29,9 @@
     - ``aspect`` / ``fps`` / ``lufs_target``: 实际生效参数（便于排障）。
 
 设计要点：
-- 完整复用 hotfix-4 canonical 模板（与 ``chapter_timeline_export_task`` 同形）：
-  ``set_status(running)`` → cancel check → 业务 → cancel check → ``set_result`` →
-  ``set_status(succeeded)``；失败时 rollback + 独立会话写 failed。
+- 完整复用 hotfix-4 canonical 模板：``set_status(running)`` → cancel check →
+  业务 → cancel check → ``set_result`` → ``set_status(succeeded)``；
+  失败时 rollback + 独立会话写 failed。
 - ``slow`` 队列、1800s 超时（plan 约定）：单章节通常 5-10 段、每段 5s 视频
   + TTS / ASR + 字幕烧录，整体在 3-10 分钟级。
 - ffmpeg 命令通过 ``-filter_complex_script`` 落地（filter graph 长度往往
@@ -84,7 +85,7 @@ from app.services.studio.chapter_av_export_filter import (
     build_filter_complex,
 )
 from app.services.studio.chapter_timeline import build_timeline_read
-from app.services.studio.chapter_timeline_export import ensure_timeline_exportable
+from app.services.studio.chapter_av_export import ensure_timeline_exportable
 from app.services.studio.chapter_timeline_media import (
     ffprobe_local_file,
     probe_duration_and_audio,
@@ -106,14 +107,14 @@ DEFAULT_TIMEOUT_SECONDS = 1800.0
 """默认超时（秒）：单章节通常 3-10 分钟级，1800s 留 3x 余量。"""
 
 _RUNNING_PROGRESS = 5
-"""进入 running 时的初始进度（与 chapter_timeline_export 一致）。"""
+"""进入 running 时的初始进度。"""
 
 _LOAD_PROGRESS = 20
 """加载 segments + 校验文件后、ffmpeg 启动前的进度水位。"""
 
 _SUCCEEDED_PROGRESS = 100
 
-#: 输出对象存储 key 前缀：与 chapter_timeline_export 显式分离便于排查。
+#: 输出对象存储 key 前缀。
 _OUTPUT_PREFIX = "generated-videos/chapters"
 
 
@@ -602,9 +603,8 @@ async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> 
     """异步 runner：合成章节"配音 + 字幕"成片。
 
     异常处理：
-        与 ``chapter_timeline_export_task`` 一致：try 中 rollback、独立会话
-        写 failed、再向上抛由 ``AbstractAsyncDelegatingExecutor`` 转换为
-        Celery 失败状态。
+        try 中 rollback、独立会话写 failed、再向上抛由
+        ``AbstractAsyncDelegatingExecutor`` 转换为 Celery 失败状态。
     """
 
     chapter_id = _coerce_str(run_args.get("chapter_id"))
@@ -633,8 +633,8 @@ async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> 
                 log_task_event(TASK_KIND, task_id, "cancelled", stage="before_load")
                 return
 
-            # Step 1: 通用导出前置校验（复用 chapter_timeline_export 的校验函数，
-            # 但走 ChapterTimelineSegment 直查，避免 build_timeline_read 引入的
+            # Step 1: 通用导出前置校验（ensure_timeline_exportable 走
+            # ChapterTimelineSegment 直查，避免 build_timeline_read 引入的
             # auto-append 行为干扰 av 路径）。
             read = await build_timeline_read(session, chapter_id)
             ensure_timeline_exportable(read)
@@ -734,8 +734,7 @@ async def run_chapter_av_export_task(task_id: str, run_args: dict[str, Any]) -> 
             if link_row is not None:
                 link_row.file_id = new_file_id
 
-            # 同步 file_usages 行：新枚举 chapter_master_dubbed 区分 timeline_export
-            # 的 chapter_master_video 产物。
+            # 同步 file_usages 行：chapter_master_dubbed 标记本任务的成片产物。
             await upsert_file_usage(
                 session,
                 file_id=new_file_id,

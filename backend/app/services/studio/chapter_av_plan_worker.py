@@ -21,7 +21,7 @@
   cancel check → 业务逻辑 → cancel check → ``set_result`` → cancel
   check → ``set_status(succeeded)``），共三道 cancel checkpoint，
   避免长链路任务无法及时响应取消；
-- 默认超时 ``7200s``，对齐 ``chapter_timeline_export`` 的 slow 队列 SLA；
+- 默认超时 ``7200s``，对齐 slow 队列 SLA；
 - LLM rewriter 通过 ``_default_rewriter_invoker`` 工厂函数注入，
   单测可通过 monkeypatch 替换为 fake，避免真实 LLM 调用。
 """
@@ -61,7 +61,7 @@ TASK_KIND = "chapter_av_plan"
 """注册键：与 plan ``task_kind`` 表保持一致。"""
 
 DEFAULT_TIMEOUT_SECONDS = 7200.0
-"""默认超时（秒）：与 chapter_timeline_export 一致；slow 队列。"""
+"""默认超时（秒）：slow 队列。"""
 
 _RUNNING_PROGRESS = 5
 """进入 running 时的初始进度。"""

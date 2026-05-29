@@ -7,9 +7,7 @@ import type { ApiResponse_ChapterTimelineRead_ } from '../models/ApiResponse_Cha
 import type { ApiResponse_ChapterTimelineSegmentRead_ } from '../models/ApiResponse_ChapterTimelineSegmentRead_';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_ChapterRead__ } from '../models/ApiResponse_PaginatedData_ChapterRead__';
-import type { ApiResponse_TaskCreated_ } from '../models/ApiResponse_TaskCreated_';
 import type { ChapterCreate } from '../models/ChapterCreate';
-import type { ChapterTimelineExportRequest } from '../models/ChapterTimelineExportRequest';
 import type { ChapterTimelineSegmentAudioPatch } from '../models/ChapterTimelineSegmentAudioPatch';
 import type { ChapterTimelineWrite } from '../models/ChapterTimelineWrite';
 import type { ChapterUpdate } from '../models/ChapterUpdate';
@@ -53,31 +51,6 @@ export class StudioChaptersService {
         return __request(OpenAPI, {
             method: 'PUT',
             url: '/api/v1/studio/chapters/{chapter_id}/timeline',
-            path: {
-                'chapter_id': chapterId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 发起章节时间线拼接导出任务
-     * @returns ApiResponse_TaskCreated_ Successful Response
-     * @throws ApiError
-     */
-    public static postChapterTimelineExportApiV1StudioChaptersChapterIdTimelineExportPost({
-        chapterId,
-        requestBody,
-    }: {
-        chapterId: string,
-        requestBody?: (ChapterTimelineExportRequest | null),
-    }): CancelablePromise<ApiResponse_TaskCreated_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chapters/{chapter_id}/timeline/export',
             path: {
                 'chapter_id': chapterId,
             },

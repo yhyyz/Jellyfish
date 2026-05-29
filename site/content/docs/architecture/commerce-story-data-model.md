@@ -820,7 +820,7 @@ dispatcher 共用 video worker 的 session：子任务行与 `video_generation` 
 
 ### W19 章节级 AV 合成
 
-W19 把 W17 双引擎产出（CosyVoice TTS / Paraformer-v2 ASR）+ W18 字幕（`.ass`）+ 各 segment raw 视频，一次 ffmpeg `filter_complex` 合成最终"配音 + 字幕"成片，与老 `chapter_timeline_export` 并存（后者保留至 v0.7.0 删除）：
+W19 把 W17 双引擎产出（CosyVoice TTS / Paraformer-v2 ASR）+ W18 字幕（`.ass`）+ 各 segment raw 视频，一次 ffmpeg `filter_complex` 合成最终"配音 + 字幕"成片。v0.7.2 起作为章节级合成的唯一入口（原 `chapter_timeline_export` 已于 v0.7.2 删除）：
 
 | 表 / 列 | 用途 |
 | --- | --- |

@@ -249,7 +249,7 @@ def test_executor_registered_with_chapter_av_plan_task_kind() -> None:
 
 
 def test_executor_timeout_set_to_7200s() -> None:
-    """slow 队列超时上限：7200s（与 chapter_timeline_export 对齐）。"""
+    """slow 队列超时上限：7200s。"""
 
     executor = build_chapter_av_plan_executor()
     assert executor.timeout_seconds == DEFAULT_TIMEOUT_SECONDS == 7200.0

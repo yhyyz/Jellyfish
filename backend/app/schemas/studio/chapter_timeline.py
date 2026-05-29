@@ -1,4 +1,4 @@
-"""章节视频时间线读写与导出相关 Schema（与 OpenAPI 契约对齐）。"""
+"""章节视频时间线读写相关 Schema（与 OpenAPI 契约对齐）。"""
 
 from __future__ import annotations
 
@@ -139,23 +139,6 @@ class ChapterTimelineRead(BaseModel):
     layout_version: int = Field(1, ge=1)
     segments: list[ChapterTimelineSegmentRead] = Field(default_factory=list)
     preview_note: str = Field(default=_PREVIEW_NOTE_DEFAULT, description="连续预览能力说明")
-
-
-class ChapterTimelineEncodeMode(str, Enum):
-    """导出编码策略。"""
-
-    uniform_transcode = "uniform_transcode"
-    lossless_concat_only = "lossless_concat_only"
-
-
-class ChapterTimelineExportRequest(BaseModel):
-    """发起章节时间线导出任务。"""
-
-    idempotency_key: str | None = Field(None, description="可选幂等键")
-    encode_mode: ChapterTimelineEncodeMode = Field(
-        default=ChapterTimelineEncodeMode.uniform_transcode,
-        description="uniform_transcode：统一转码拼接；lossless_concat_only：仅当片段编码一致时无损拼接",
-    )
 
 
 class ChapterTimelineSegmentAudioPatch(BaseModel):

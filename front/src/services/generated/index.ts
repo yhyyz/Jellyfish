@@ -156,8 +156,6 @@ export type { ChapterAvPlanRequest } from './models/ChapterAvPlanRequest';
 export type { ChapterCreate } from './models/ChapterCreate';
 export type { ChapterRead } from './models/ChapterRead';
 export type { ChapterStatus } from './models/ChapterStatus';
-export type { ChapterTimelineEncodeMode } from './models/ChapterTimelineEncodeMode';
-export type { ChapterTimelineExportRequest } from './models/ChapterTimelineExportRequest';
 export type { ChapterTimelineRead } from './models/ChapterTimelineRead';
 export type { ChapterTimelineSegmentAudioPatch } from './models/ChapterTimelineSegmentAudioPatch';
 export type { ChapterTimelineSegmentRead } from './models/ChapterTimelineSegmentRead';

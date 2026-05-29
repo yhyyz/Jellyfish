@@ -1,46 +1,48 @@
 ---
 title: "章节时间线与导出成片"
 weight: 45
-description: "章节级镜头编排时间线、乐观锁保存与异步 FFmpeg 拼接导出任务。"
+description: "章节级镜头编排时间线（仍存）；裸视频拼接导出 chapter_timeline_export 已于 v0.7.2 删除，章节合成统一走 chapter_av_export。"
 ---
 
-## 数据
+## 当前事实
+
+章节级时间线编辑能力**保留**：
 
 - 表 `chapter_timeline_states`：每章一行可选状态，`layout_version` 在每次成功 `PUT` 后递增，用于与客户端 `layout_version` 对比（冲突时 HTTP 409）。
 - 表 `chapter_timeline_segments`：每章内每镜至多一条，按 `position` 排序；`trim_start_ms` / `trim_end_ms` 表示**相对镜头成片文件**的裁剪毫秒坐标：**二者均为空表示全长**；否则区间为**左闭右开** `[start, end)`，缺省入点为 `0`、缺省出点为源成片时长。`PUT` 在设置任一端非空时会 **ffprobe 下载校验** 成片时长（镜头须已有 `generated_video`）。
-- `FileUsageKind.chapter_master_video`：标识「章节时间线导出」产出的单一成片。
+- API 仍保留 `GET/PUT /api/v1/studio/chapters/{chapter_id}/timeline` 与新增的 `PATCH .../segments/{segment_id}/audio`（W31 BGM/SFX）。
 
-与历史 `timeline_clips`（项目级素材线）语义分离：本章时间线只绑定 `Shot`，成片文件在导出时从 `Shot.generated_video_file_id` 解析，避免与镜头成片脱节。
+章节级**成片导出**已统一收口到 `chapter_av_export`：详见下一节"含字幕配音的合成流水线"。
 
-## API
+## v0.7.2 删除：chapter_timeline_export
 
-- `GET/PUT /api/v1/studio/chapters/{chapter_id}/timeline`：读取合并「已保存顺序 + 未入线镜头按 `shot.index` 追加」；`PUT` 全量替换片段并 bump 版本（含裁剪字段校验）。
-- `POST /api/v1/studio/chapters/{chapter_id}/timeline/export`：创建 `task_kind=chapter_timeline_export` 的异步任务；请求体可选 `encode_mode`（默认 `uniform_transcode`，可选 `lossless_concat_only`）。若存在同章进行中的导出任务则 409。
+历史背景：
 
-## 任务与 Worker
+- v0.6.0 引入 `chapter_av_export` 作为章节级合成新主路径，将原 `chapter_timeline_export`（裸视频 ffmpeg concat 拼接）标记为 `deprecated`，原计划 v0.7.0 删除。
+- v0.7.0 因 W31 BGM/SFX 链路兼容窗口未关，删除节点延期至 v0.8.0。
+- v0.7.2 W31 BGM/SFX 已落地、兼容窗口闭合，提前于 v0.7.2 正式删除。
 
-- 执行器在 `task_executor_registry` 中注册为 `chapter_timeline_export`（`AbstractAsyncDelegatingExecutor`，超时 7200s）。
-- Runner **仅信任** `run_args` 中的 `chapter_id` / `encode_mode`；在库内按时间线顺序再次校验 `shot` 归属与 `FileItem`（视频类型与 `storage_key`），再下载、探测、拼接、上传，并写入 `FileUsage` 与 `GenerationTaskLink.file_id`。
-- `uniform_transcode`：每段先按 `trim_*` 做 `trim`/`atrim`，再统一 H.264 + **AAC** 拼接；无音轨段用 `anullsrc` 按**裁剪后时长**补静音。`lossless_concat_only` 仍用 concat demuxer `-c copy`，**不支持实质裁剪**（任一段入出点非全长则 Runner 报错，需改 `uniform_transcode`）；若各段编码不一致同样需改走统一转码。
-- 生产镜像在 `deploy/docker/backend.Dockerfile` 中安装 `ffmpeg`（含 `ffprobe`），与 API/Worker 共用镜像时需保证容器内可调用。
+具体删除项（v0.7.2）：
 
-## 前端
+- `app/services/studio/chapter_timeline_export.py` / `chapter_timeline_export_task.py` 文件删除
+- `task_kind="chapter_timeline_export"` 注册项从 `task_executor_registry` 移除
+- 路由 `POST /api/v1/studio/chapters/{chapter_id}/timeline/export` 删除（OpenAPI generated client 同步重生成）
+- Schema `ChapterTimelineExportRequest` / `ChapterTimelineEncodeMode` 从 `app/schemas/studio/chapter_timeline.py` 删除
+- 枚举 `FileUsageKind.chapter_master_video` 从 `app/models/types.py` 删除（产物用途由 `chapter_master_dubbed` 表达）
+- 前端 `front/src/pages/aiStudio/editor/VideoEditor.tsx` 的"导出成片"按钮迁移至分镜工作室 `AVPreviewPanel`
 
-- 路由：`/projects/:projectId/chapters/:chapterId/timeline`；OpenAPI 生成 `StudioChaptersService` 对应方法。
-- 剪辑页提供片段级入出点编辑、**顺序预览**（按时间线顺序在单播放器内衔接播放，尊重裁剪区间），以及导出入口。
-- 任务中心仍只展示通用任务信息；导出结果通过任务轮询/文件库消费，业务说明留在剪辑页。
+下游升级要点：
 
-## 与产品边界
-
-- 分镜编辑页/分镜工作室职责不变；「章节剪辑」仅负责章节内镜头顺序与导出成片，不承载分镜提取确认主流程。
+- 调用方应改用 `chapter_av_export` task_kind（W19 落地，W31 加 BGM/SFX）；触发入口为分镜工作室 `AVPreviewPanel` 的"立即生成成片"按钮。
+- `FileItem.usage_kind="chapter_master_video"` 在 v0.7.2 之后将无法反序列化（如有历史数据需在 DB 层迁移到 `chapter_master_dubbed` 或保留为字符串 raw 字段）。
+- 前 v0.6.0 客户端调用 `/timeline/export` 路由会收到 404。
 
 ## chapter_av_export：含字幕配音的合成流水线
 
-除上面"裸视频拼接"路径外，章节级当前还提供 `chapter_av_export` 路径，用来一次合成"视频 + TTS/原音 + 字幕 + 响度归一化"成片。
+章节级现仅提供 `chapter_av_export` 路径，用来一次合成"视频 + TTS/原音 + 字幕 + 响度归一化"成片。
 
 - task_kind：`chapter_av_export`（slow queue, 1800s 超时）
-- 编排层：`services/studio/chapter_av_export.py`，纯函数滤镜组装在 `services/studio/chapter_av_export_filter.py`
-- 与老 `chapter_timeline_export` 并存，老接口标 deprecated，计划在 v0.7.0 删除
+- 编排层：`services/studio/chapter_av_export.py`（v0.7.2 起承接原 `chapter_timeline_export.py` 的 `ensure_timeline_exportable` 校验函数），worker 实装在 `services/studio/chapter_av_export_task.py`
 
 输出文件类型：
 
@@ -59,7 +61,11 @@ description: "章节级镜头编排时间线、乐观锁保存与异步 FFmpeg �
 
 响度：concat 之后统一接 `loudnorm I=-16:TP=-1.5:LRA=11`，目标 -16 LUFS（移动端标准 ±1）。
 
-入参信任规则与老 `chapter_timeline_export` 相同：runner 只信任 `run_args.chapter_id`，再进库重新解析镜头顺序、`generated_video_file_id` / `dubbed_video_file_id` / `subtitle_track_file_id`，避免请求时刻与执行时刻数据漂移。
+入参信任规则：runner 只信任 `run_args.chapter_id`，再进库重新解析镜头顺序、`generated_video_file_id` / `dubbed_video_file_id` / `subtitle_track_file_id`，避免请求时刻与执行时刻数据漂移。
 
 成片可见性依赖前置链路：`chapter_av_export` 之前必须完成 video_generation → ASR/TTS chain dispatch → shot_subtitle_render，详见 [持久化引擎与事务边界](/docs/architecture/persistence-engine/) 与 [任务执行架构](/docs/architecture/task-execution/)。
 
+## 与产品边界
+
+- 分镜编辑页/分镜工作室职责不变；"章节剪辑"页 `VideoEditor.tsx` 仅负责章节内镜头顺序与裁剪入出点编辑，不再承担成片导出入口。
+- 章节级成片导出统一由分镜工作室 `AVPreviewPanel` 触发 `chapter_av_export`，对应"工作室 = 生成"边界（AGENTS.md 前端页面职责小节）。

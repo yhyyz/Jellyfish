@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Checkbox, Empty, Layout, Slider, Space, Spin, Switch, Tag, Typography, message } from 'antd'
+import { Alert, Button, Empty, Layout, Slider, Space, Spin, Switch, Tag, Typography, message } from 'antd'
 import {
   ArrowLeftOutlined,
   CaretRightOutlined,
-  ExportOutlined,
   PauseOutlined,
   SaveOutlined,
   StepBackwardOutlined,
@@ -98,7 +97,6 @@ const VideoEditor: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [losslessOnly, setLosslessOnly] = useState(false)
   const [activeIdx, setActiveIdx] = useState(0)
   const [autoChainPlay, setAutoChainPlay] = useState(true)
   const [playing, setPlaying] = useState(false)
@@ -293,30 +291,13 @@ const VideoEditor: React.FC = () => {
     }
   }
 
+  // v0.7.2 起 chapter_timeline_export task_kind 已删除，章节级"配音 + 字幕"
+  // 成片走 chapter_av_export，由分镜工作室 AVPreviewPanel "立即生成成片"
+  // 按钮触发；本剪辑页保留时间线编辑能力，不再承担导出入口。
   const exportMaster = async () => {
     setExporting(true)
     try {
-      const res = await StudioChaptersService.postChapterTimelineExportApiV1StudioChaptersChapterIdTimelineExportPost({
-        chapterId,
-        requestBody: {
-          encode_mode: losslessOnly ? 'lossless_concat_only' : 'uniform_transcode',
-        },
-      })
-      const tid = res.data?.task_id
-      message.success(tid ? `已创建导出任务：${tid}` : '已创建导出任务')
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 400) {
-          const body = err.body as { message?: string; detail?: string } | undefined
-          message.error(body?.message ?? body?.detail ?? '导出条件不满足')
-          return
-        }
-        if (err.status === 409) {
-          message.warning('已有导出任务进行中')
-          return
-        }
-      }
-      message.error('导出请求失败')
+      message.info('章节成片导出已迁至分镜工作室，请前往 AVPreviewPanel 触发')
     } finally {
       setExporting(false)
     }
@@ -423,14 +404,11 @@ const VideoEditor: React.FC = () => {
             </Title>
           </div>
           <Space wrap>
-            <Checkbox checked={losslessOnly} onChange={(e) => setLosslessOnly(e.target.checked)} className="text-slate-300">
-              <span className="text-slate-300">无损拼接（不支持裁剪）</span>
-            </Checkbox>
             <Button icon={<SaveOutlined />} loading={saving} onClick={() => void save()}>
               保存顺序与裁剪
             </Button>
-            <Button type="primary" icon={<ExportOutlined />} loading={exporting} onClick={() => void exportMaster()}>
-              导出成片
+            <Button loading={exporting} onClick={() => void exportMaster()}>
+              导出成片入口已迁移
             </Button>
           </Space>
         </div>
