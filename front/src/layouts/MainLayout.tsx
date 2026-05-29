@@ -16,10 +16,11 @@ import { useAppStore } from '../store/useAppStore'
 import { useTranslation } from 'react-i18next'
 import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
-// P5 W32-followup-2 (Manual QA Bug B 修复)：
+// P5 W32-followup-2 (Manual QA Bug B 修复) → v0.7.2 收口：
 // 头部 user dropdown 之前用 useAppStore.user（hardcode 'Admin / 系统管理员'），
 // 与真实登录态完全脱节。改为读 AuthContext.user，显示真实 username + role。
-// useAppStore.user 字段保留不删，避免影响仍依赖它的旧消费者；后续 P6 清理。
+// v0.7.2 进一步删掉 useAppStore.user / setUser，前端 user state 单一源
+// 收口到 AuthContext，避免双源真相。
 import { useAuth } from '../contexts/AuthContext'
 
 const { Header, Sider, Content } = Layout

@@ -1,20 +1,38 @@
 import { Card, Form, Input, Select, Switch, Button, message, Divider, Space, Typography } from 'antd'
 import { KeyOutlined, RightOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
-import { useAppStore } from '../store/useAppStore'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '../contexts/AuthContext'
 
 const { Title, Text } = Typography
 
+/**
+ * Settings 页面 — 个人偏好与系统设置入口（v0.7.2 收口到 AuthContext）。
+ *
+ * 历史背景（v0.7.2 之前）：
+ *   - 该页同时读写 ``useAppStore.user.name`` / ``useAppStore.user.role``
+ *     （hardcode 'Admin' / '系统管理员' 占位），save 时 ``useAppStore.setUser``
+ *     仅本地 zustand state，不触达后端。
+ *   - W32-followup-2 起 user state 已迁到 ``AuthContext``，nickname/role
+ *     由后端 ``GET /me`` 真实返回，``useAppStore.user`` 失去消费者。
+ *
+ * v0.7.2 行为：
+ *   - nickname / role 来自 ``useAuth().user``，read-only 展示（编辑入口
+ *     仍需后端 user 管理 API，本期不做）；
+ *   - darkMode 暂时保留前端表单占位（无后端支持，仅本地 message 提示）。
+ *
+ * 该改动同步删除 ``useAppStore.user`` / ``useAppStore.setUser`` 字段，
+ * 让前端 user state 单一源收口到 AuthContext。
+ */
 const Settings: React.FC = () => {
   const { t } = useTranslation(['settings', 'common'])
-  const user = useAppStore((state) => state.user)
-  const setUser = useAppStore((state) => state.setUser)
+  const { user } = useAuth()
 
   const [form] = Form.useForm()
 
-  const handleFinish = (values: { name: string; role: string; darkMode: boolean }) => {
-    setUser({ name: values.name, role: values.role })
+  const handleFinish = (_values: { name: string; role: string; darkMode: boolean }) => {
+    // nickname / role 编辑能力暂未对接后端 user 管理 API；
+    // 这里保留 message.success 视觉反馈，避免 form submit 静默无响应。
     message.success(t('settings.updated'))
   }
 
@@ -25,8 +43,8 @@ const Settings: React.FC = () => {
           form={form}
           layout="vertical"
           initialValues={{
-            name: user.name,
-            role: user.role,
+            name: user?.username ?? '',
+            role: user?.role ?? '',
             darkMode: false,
           }}
           onFinish={handleFinish}
@@ -36,7 +54,7 @@ const Settings: React.FC = () => {
             name="name"
             rules={[{ required: true, message: t('settings.validation.nicknameRequired') }]}
           >
-            <Input placeholder={t('settings.nickname')} />
+            <Input placeholder={t('settings.nickname')} disabled />
           </Form.Item>
 
           <Form.Item
@@ -45,13 +63,11 @@ const Settings: React.FC = () => {
             rules={[{ required: true, message: t('settings.validation.roleRequired') }]}
           >
             <Select
+              disabled
               options={[
-                { label: t('settings.roleOptions.admin'), value: t('settings.roleOptions.admin') },
-                {
-                  label: t('settings.roleOptions.operator'),
-                  value: t('settings.roleOptions.operator'),
-                },
-                { label: t('settings.roleOptions.guest'), value: t('settings.roleOptions.guest') },
+                { label: t('settings.roleOptions.admin'), value: 'admin' },
+                { label: t('settings.roleOptions.operator'), value: 'member' },
+                { label: t('settings.roleOptions.guest'), value: 'viewer' },
               ]}
             />
           </Form.Item>
@@ -96,7 +112,7 @@ const Settings: React.FC = () => {
         </Link>
         <Divider className="!my-3" />
         <Text type="secondary" style={{ fontSize: 12 }}>
-          TODO(P5)：接 RBAC 后用 user.role / permissions 控制 API Keys 入口可见性。
+          TODO(P5)：接 RBAC 后用 useAuth().user.role / permissions 控制 API Keys 入口可见性。
         </Text>
       </Card>
     </Space>
@@ -104,4 +120,3 @@ const Settings: React.FC = () => {
 }
 
 export default Settings
-

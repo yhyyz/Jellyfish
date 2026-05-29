@@ -18,7 +18,7 @@
  * 权限门：当前 SaaS admin 接口尚无 RBAC，沿用 ``settings.api_key``
  *   的静态 admin token 占位（由请求头透传，未在 UI 显式暴露）；
  *
- *   TODO(P5)：接 RBAC 后用 ``useAppStore`` 的 user.role/permissions 控
+ *   TODO(P5)：接 RBAC 后用 ``useAuth().user`` 的 role/permissions 控
  *   制本页可见性，并替换占位。当前阶段保持任何登录用户可访问以解
  *   锁前端验收链路。
  */

@@ -75,7 +75,7 @@ describe('MainLayout 头部用户区（AuthContext 接通 + role i18n + logout�
     void i18n.changeLanguage('zh-CN')
   })
 
-  it('显示 AuthContext.user.username（而非 useAppStore.user.name = "Admin"）', () => {
+  it('显示 AuthContext.user.username（v0.7.2 起 useAppStore.user 字段已删）', () => {
     renderLayout()
     expect(screen.getByText('alice')).toBeInTheDocument()
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
