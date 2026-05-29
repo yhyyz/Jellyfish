@@ -53,6 +53,10 @@ NEW_INDEXES_0020: set[str] = {
     "ix_chapter_timeline_segments_sfx_file_id",
 }
 
+# 0023 (P5 W31-followup) 又在 chapter_timeline_segments 上加了 sfx_offset_ms；
+# 同样需要在 pre-0019 fixture 中 strip，否则 alembic 0022→0023 会撞列。
+SEGMENT_FUTURE_COLUMNS: set[str] = NEW_COLUMNS_0020 | {"sfx_offset_ms"}
+
 
 def _alembic_dir() -> Path:
     """返回 ``backend/alembic`` 的绝对路径。"""
@@ -68,16 +72,24 @@ def _make_alembic_config(db_url: str) -> Config:
 
 
 def _setup_pre_0019_schema(engine: Engine) -> None:
-    """搭建 "pre-0019" 状态：建出当前完整 ORM schema，再丢掉 0019 + 0020 引入的列。
+    """搭建 "pre-0019" 状态：建出当前完整 ORM schema，再丢掉 0019+ 引入的列与表。
 
     SQLite 不支持原生 DROP COLUMN with FK；这里把表复制到独立 MetaData 上
     并在复制时跳过 0019 / 0020 列与对应 FK 约束，避免污染共享 ``Base.metadata``。
+
+    W32 (alembic 0021) 引入 ``users`` 表后，pre-0019 schema 还不应该有该表，
+    否则 ``upgrade head`` 经过 0021 ``op.create_table('users', ...)`` 时与
+    ``Base.metadata.create_all`` 已建出的 ``users`` 冲突（"users 已存在"）。
     """
     fresh = MetaData()
     skip_cols_subtitle = {NEW_COLUMN_0019}
-    skip_cols_segment = NEW_COLUMNS_0020
+    skip_cols_segment = SEGMENT_FUTURE_COLUMNS
+    # pre-0019 baseline 之后才被 alembic 0021+ 创建的表，必须从 fixture 中跳过
+    skip_tables: set[str] = {"users"}
 
     for source in Base.metadata.sorted_tables:
+        if source.name in skip_tables:
+            continue
         copy_target = source.to_metadata(
             fresh,
             referred_schema_fn=lambda _t, _to_schema, _ck, referred_schema: referred_schema,
@@ -211,7 +223,12 @@ def test_downgrade_removes_project_id_column(baseline_engine: Engine) -> None:
 
 
 def test_upgrade_preserves_system_rows_null(baseline_engine: Engine) -> None:
-    """upgrade head 后，已存在的系统行 project_id 应为 NULL（不被 backfill）。"""
+    """upgrade 到 0019 后，已存在的系统行 project_id 应为 NULL（不被 backfill）。
+
+    本测试只验证 0019 自身的 NULL 保留语义；后续 0022 在 SQLite 上往
+    ``subtitle_styles`` 加 STORED 生成列，对已有行的表 SQLite 不允许
+    ALTER ADD STORED，因此测试目标显式锁在 0019。
+    """
     # 在 baseline（0018，无 project_id 列）上塞一条系统行
     with baseline_engine.begin() as conn:
         conn.execute(
@@ -233,7 +250,7 @@ def test_upgrade_preserves_system_rows_null(baseline_engine: Engine) -> None:
         )
 
     cfg = _make_alembic_config(str(baseline_engine.url))
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "0019")
 
     with baseline_engine.connect() as conn:
         result = conn.execute(

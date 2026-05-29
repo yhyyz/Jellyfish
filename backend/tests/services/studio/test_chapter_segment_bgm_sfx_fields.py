@@ -47,6 +47,10 @@ NEW_INDEXES_0020: set[str] = {
     "ix_chapter_timeline_segments_sfx_file_id",
 }
 
+# 0023 (P5 W31-followup) 在 chapter_timeline_segments 上又加了 sfx_offset_ms；
+# pre-0020 fixture 也必须 strip，否则 alembic 0022→0023 会与 ORM 已建列冲突。
+SEGMENT_FUTURE_COLUMNS: set[str] = NEW_COLUMNS_0020 | {"sfx_offset_ms"}
+
 
 def _alembic_dir() -> Path:
     """返回 ``backend/alembic`` 的绝对路径。"""
@@ -62,15 +66,23 @@ def _make_alembic_config(db_url: str) -> Config:
 
 
 def _setup_pre_0020_schema(engine: Engine) -> None:
-    """搭建 "pre-0020" 状态：建出当前完整 ORM schema，再丢掉 0020 引入的列。
+    """搭建 "pre-0020" 状态：建出当前完整 ORM schema，再丢掉 0020+ 引入的列与表。
 
     SQLite 不支持原生 DROP COLUMN with FK；这里把表复制到独立 MetaData 上
     并在复制时跳过 0020 列与对应 FK 约束，避免污染共享 ``Base.metadata``。
+
+    W32 (alembic 0021) 引入 ``users`` 表后，pre-0020 schema 还不应该有该表，
+    否则 ``upgrade head`` 经过 0021 ``op.create_table('users', ...)`` 时与
+    ``Base.metadata.create_all`` 已建出的 ``users`` 冲突（"users 已存在"）。
     """
     fresh = MetaData()
-    skip_cols = NEW_COLUMNS_0020
+    skip_cols = SEGMENT_FUTURE_COLUMNS
+    # pre-0020 baseline 之后才被 alembic 0021+ 创建的表，必须从 fixture 中跳过
+    skip_tables: set[str] = {"users"}
 
     for source in Base.metadata.sorted_tables:
+        if source.name in skip_tables:
+            continue
         copy_target = source.to_metadata(
             fresh,
             referred_schema_fn=lambda _t, _to_schema, _ck, referred_schema: referred_schema,
@@ -172,10 +184,14 @@ def test_upgrade_head_adds_bgm_sfx_ducking_columns(baseline_engine: Engine) -> N
 
 
 def test_downgrade_removes_bgm_sfx_ducking_columns(baseline_engine: Engine) -> None:
-    """downgrade -1 (head 0020 -> 0019) 后必须干净移除三列与索引。"""
+    """downgrade 到 0019 (跨过 0020) 后必须干净移除 0020 引入的三列与索引。
+
+    head 已经从 0020 推进到 0023，``downgrade -1`` 只回到 0022 而不是 0019，
+    需要显式指定 target=``0019`` 才能验证 0020 的反向语义。
+    """
     cfg = _make_alembic_config(str(baseline_engine.url))
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, "0019")
 
     cols = _table_columns(baseline_engine, "chapter_timeline_segments")
     leaked = NEW_COLUMNS_0020 & cols
