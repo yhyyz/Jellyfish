@@ -53,10 +53,25 @@ import app.models.voice_pack  # noqa: F401  pylint: disable=unused-import
 # 0009 引入的新表
 NEW_TABLES_0009: tuple[str, ...] = ("voice_packs", "tts_cache")
 
-#: 0010 (W18) 引入的两张新表；本文件聚焦 0009，但 fixture 必须把
-#: 0010 表也排除在 ``Base.metadata.create_all`` 之外，否则 alembic
-#: 升级到 head（=0010）时会因表已存在而 OperationalError。
-_NEW_TABLES_0010: tuple[str, ...] = ("subtitle_styles", "subtitle_tracks")
+#: 0010+ 引入的全部新表；本文件聚焦 0009，但 fixture 必须把这些表
+#: 也排除在 ``Base.metadata.create_all`` 之外，否则 alembic 升级到 head
+#: （= 0023）时会因表已存在而 OperationalError。
+_NEW_TABLES_POST_0009: tuple[str, ...] = (
+    # 0010: subtitle 引擎
+    "subtitle_styles",
+    "subtitle_tracks",
+    # 0012: platform export presets
+    "platform_export_presets",
+    # 0013: brand style guides
+    "brand_style_guides",
+    # 0014: notification 通道 / 投递
+    "notification_channels",
+    "notification_deliveries",
+    # 0016: escalation 状态
+    "escalation_state",
+    # 0021: users (W32 RBAC)
+    "users",
+)
 
 # 0009 在既有表上新增的 FK 列：表 -> 列名集合
 NEW_FK_COLUMNS: dict[str, tuple[str, ...]] = {
@@ -70,15 +85,35 @@ NEW_FK_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-#: 0011 (W19) 在既有表上新增的 FK 列；本文件聚焦 0009 测试，但 fixture 必须把
-#: 0011 列也从 ``Base.metadata.create_all`` 排除掉，否则 alembic 升级到 head
-#: （= 0011）时会因列已存在而 OperationalError。
-_FK_COLUMNS_0011: dict[str, tuple[str, ...]] = {
-    "shots": ("dubbed_video_file_id",),
+#: 0011-0023 在既有表上新增的 FK / 普通列；本文件聚焦 0009 测试，但 fixture
+#: 必须把这些列也从 ``Base.metadata.create_all`` 排除掉，否则 alembic 升级到
+#: head（= 0023）时会因列已存在而 OperationalError。
+_FK_COLUMNS_POST_0009: dict[str, tuple[str, ...]] = {
+    # 0011: shots / chapter_timeline_segments FK 列
+    "shots": (
+        "dubbed_video_file_id",
+        # 0015: shot.consistency_score
+        "consistency_score",
+        # 0017: shot.consistency_status / consistency_retry_count
+        "consistency_status",
+        "consistency_retry_count",
+    ),
     "chapter_timeline_segments": (
         "subtitle_track_file_id",
         "tts_audio_file_id",
+        # 0020: BGM/SFX/ducking
+        "bgm_file_id",
+        "sfx_file_id",
+        "bgm_ducking_db",
+        # 0023: SFX offset
+        "sfx_offset_ms",
     ),
+    # 0018: voice_packs 增列；voice_packs 由 0009 创建，这些列不在 fixture
+    # baseline 物化，等 alembic 升级到 0018 时再加，但 ORM Base.metadata 已
+    # 自动包含 → 在 0009 fixture 跳过 voice_packs 整表（NEW_TABLES_0009），
+    # 故这些列无需单独再列出。
+    # 0019: subtitle_styles.project_id；subtitle_styles 已在 _NEW_TABLES_POST_0009
+    # 中跳过，列同样不需要再列。
 }
 
 
@@ -108,10 +143,10 @@ def _setup_pre_0009_schema(engine: Engine) -> None:
 
     fresh = MetaData()
     for source in Base.metadata.sorted_tables:
-        if source.name in NEW_TABLES_0009 or source.name in _NEW_TABLES_0010:
+        if source.name in NEW_TABLES_0009 or source.name in _NEW_TABLES_POST_0009:
             continue
         skip_cols = set(NEW_FK_COLUMNS.get(source.name, ())) | set(
-            _FK_COLUMNS_0011.get(source.name, ())
+            _FK_COLUMNS_POST_0009.get(source.name, ())
         )
 
         copy_target = source.to_metadata(
@@ -184,7 +219,11 @@ def _table_columns(engine: Engine, table: str) -> set[str]:
 
 
 def test_revision_chain_includes_0009() -> None:
-    """0009 必须接在 0008 之后；当前 head 已被 0011（W19 章节 AV 合成）接管。"""
+    """0009 必须接在 0008 之后，且仍存在于当前 revision 链中。
+
+    head 随后续 P3-P5 推进而漂移（0011 → 0023），因此不再硬编码 head 断言；
+    用 ``walk_revisions()`` 检查 0009 仍在链上即可。
+    """
     cfg = _make_alembic_config("sqlite:///:memory:")
     script = ScriptDirectory.from_config(cfg)
 
@@ -192,8 +231,8 @@ def test_revision_chain_includes_0009() -> None:
     assert rev is not None, "revision 0009 missing"
     assert rev.down_revision == "0008"
 
-    heads = script.get_heads()
-    assert list(heads) == ["0011"], f"expected single head 0011, got {heads!r}"
+    revisions = {r.revision for r in script.walk_revisions()}
+    assert "0009" in revisions, f"0009 missing from revision chain: {revisions!r}"
 
 
 def test_upgrade_head_creates_new_tables(baseline_engine: Engine) -> None:

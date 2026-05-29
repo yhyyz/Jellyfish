@@ -51,7 +51,10 @@ import app.models.subtitle  # noqa: F401  pylint: disable=unused-import
 import app.models.voice_pack  # noqa: F401  pylint: disable=unused-import
 
 
-# === 常量：W2/W11/W17/W18 新增的 17 张表 ===
+# === 常量：W2/W11/W17/W18 + 后续 P3-P5 (W19+) 新增的所有表 ===
+# 本测试聚焦 0002-0011 commerce 系列 migration 在 pre-0002 baseline 上能跑通；
+# 但 fixture 用 ``Base.metadata.create_all`` 物化全 ORM schema，所以必须把
+# 0012+ migration 才落地的表也加进 skip 集合，否则 alembic upgrade head 会撞库。
 NEW_TABLES: frozenset[str] = frozenset(
     {
         "products",
@@ -75,6 +78,17 @@ NEW_TABLES: frozenset[str] = frozenset(
         "subtitle_styles",
         "subtitle_tracks",
         # W19 T19-3 (revision 0011) 仅新增 FK 列，不新增表，故此集合不变
+        # P4 W22+ (revision 0012) — platform export presets
+        "platform_export_presets",
+        # P4 (revision 0013) — brand style guides
+        "brand_style_guides",
+        # P4 (revision 0014) — notification 通道 / 投递
+        "notification_channels",
+        "notification_deliveries",
+        # P4 (revision 0016) — escalation 状态
+        "escalation_state",
+        # P5 W32 (revision 0021) — users (RBAC)
+        "users",
     }
 )
 
@@ -150,11 +164,21 @@ def _setup_pre_0002_schema(engine: Engine) -> None:
             "tts_voice_id",
             "tts_audio_file_id",
         ),
-        # 0011 (W19) 给已有表加的 3 个 FK 列。
-        "shots": ("dubbed_video_file_id",),
+        # 0011/0015/0017 给 shots 加的 FK / 普通列。
+        "shots": (
+            "dubbed_video_file_id",
+            "consistency_score",
+            "consistency_status",
+            "consistency_retry_count",
+        ),
+        # 0011/0020/0023 给 chapter_timeline_segments 加的列。
         "chapter_timeline_segments": (
             "subtitle_track_file_id",
             "tts_audio_file_id",
+            "bgm_file_id",
+            "sfx_file_id",
+            "bgm_ducking_db",
+            "sfx_offset_ms",
         ),
     }
 
@@ -379,12 +403,15 @@ def test_roundtrip_preserves_schema(baseline_engine: Engine) -> None:
 # Test 4: linear revision chain
 # --------------------------------------------------------------------------- #
 def test_revision_chain_is_linear() -> None:
-    """The revision graph must form a single linear chain ending at 0007.
+    """The revision graph must form a single linear chain through 0001-0011.
 
     Verifies, for every expected (rev, down_rev) pair, that:
     - the revision exists in the script directory
     - its ``down_revision`` matches the predecessor exactly
-    - the resulting graph has exactly one head (no branching)
+    - the resulting graph still forms a single linear chain (no branching)
+
+    head 随后续 P3-P5 推进而漂移（0011 → 0023），因此不再硬编码 head 断言；
+    用 ``walk_revisions()`` 检查 0001-0011 都仍在链上即可。
     """
     cfg = _make_alembic_config("sqlite:///:memory:")
     script = ScriptDirectory.from_config(cfg)
@@ -403,8 +430,17 @@ def test_revision_chain_is_linear() -> None:
                 f"got {revision.down_revision!r}"
             )
 
+    revisions = {r.revision for r in script.walk_revisions()}
+    expected_revisions = {rev for rev, _ in EXPECTED_CHAIN}
+    missing = expected_revisions - revisions
+    assert not missing, (
+        f"commerce-series revisions missing from chain: {missing!r}"
+    )
+
     heads = script.get_heads()
-    assert list(heads) == ["0011"], f"expected single head 0011, got {heads!r}"
+    assert len(heads) == 1, (
+        f"alembic chain must remain single-head (no branching), got {heads!r}"
+    )
 
 
 # --------------------------------------------------------------------------- #

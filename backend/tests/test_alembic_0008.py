@@ -70,11 +70,10 @@ def _make_alembic_config(db_url: str) -> Config:
 def _setup_pre_0008_schema(engine: Engine) -> None:
     """搭建 "pre-0008" 状态：完整 schema 但 ``shots`` 表无新列。
 
-    ``Base.metadata.create_all`` 同样会物化 0009 引入的两张新表
-    （voice_packs / tts_cache）与 5 个 FK 列；为了让后续 0008 upgrade
-    在 0007 baseline 上执行而不撞库，我们把 ORM 表复制到独立 MetaData
-    上，并在复制时丢弃 0009 的新表与新列。这样不会污染共享的全局
-    ``Base.metadata`` mapper 配置。
+    ``Base.metadata.create_all`` 会物化所有 0009-0023 migration 引入的表
+    与列；为了让 0008 自身的 upgrade 能在 0007 baseline 上执行而不撞库，
+    我们把 ORM 表复制到独立 MetaData 上，并在复制时丢弃所有 0008 之后
+    才落地的表与列。这样不会污染共享的全局 ``Base.metadata``。
     """
     from sqlalchemy import MetaData
 
@@ -88,19 +87,46 @@ def _setup_pre_0008_schema(engine: Engine) -> None:
             "tts_voice_id",
             "tts_audio_file_id",
         ),
-        # 0011 (W19) 给已有表加的 3 个 FK 列。
-        "shots": ("dubbed_video_file_id",),
+        # 0011 (W19) 给已有表加的 3 个 FK 列；0015/0017 又往 shots 加;
+        # 0020/0023 往 chapter_timeline_segments 加。
+        "shots": (
+            "dubbed_video_file_id",
+            "consistency_score",
+            "consistency_status",
+            "consistency_retry_count",
+        ),
         "chapter_timeline_segments": (
             "subtitle_track_file_id",
             "tts_audio_file_id",
+            "bgm_file_id",
+            "sfx_file_id",
+            "bgm_ducking_db",
+            "sfx_offset_ms",
         ),
     }
-    new_tables_0009 = ("voice_packs", "tts_cache")
-    new_tables_0010 = ("subtitle_styles", "subtitle_tracks")
+    new_tables_post_0008: tuple[str, ...] = (
+        # 0009: voice_packs / tts_cache
+        "voice_packs",
+        "tts_cache",
+        # 0010: subtitle_*
+        "subtitle_styles",
+        "subtitle_tracks",
+        # 0012: platform export presets
+        "platform_export_presets",
+        # 0013: brand style guides
+        "brand_style_guides",
+        # 0014: notification channels & deliveries
+        "notification_channels",
+        "notification_deliveries",
+        # 0016: escalation state
+        "escalation_state",
+        # 0021: users (W32 RBAC)
+        "users",
+    )
 
     fresh = MetaData()
     for source in Base.metadata.sorted_tables:
-        if source.name in new_tables_0009 or source.name in new_tables_0010:
+        if source.name in new_tables_post_0008:
             continue
         skip_cols = set(fk_columns_post_0008.get(source.name, ()))
         copy_target = source.to_metadata(fresh)
@@ -175,7 +201,11 @@ def _shot_columns(engine: Engine) -> dict[str, dict[str, object]]:
 
 
 def test_revision_chain_includes_0008() -> None:
-    """0008 必须接在 0007 之后；当前 head 已被 0011（W19 章节 AV 合成）接管。"""
+    """0008 必须接在 0007 之后，且仍存在于当前 revision 链中。
+
+    head 随后续 P3-P5 推进而漂移（0011 → 0023），因此不再硬编码 head 断言；
+    用 ``walk_revisions()`` 检查 0008 仍在链上即可。
+    """
     cfg = _make_alembic_config("sqlite:///:memory:")
     script = ScriptDirectory.from_config(cfg)
 
@@ -183,8 +213,8 @@ def test_revision_chain_includes_0008() -> None:
     assert rev is not None, "revision 0008 missing"
     assert rev.down_revision == "0007"
 
-    heads = script.get_heads()
-    assert list(heads) == ["0011"], f"expected single head 0011, got {heads!r}"
+    revisions = {r.revision for r in script.walk_revisions()}
+    assert "0008" in revisions, f"0008 missing from revision chain: {revisions!r}"
 
 
 def test_upgrade_head_adds_new_columns(baseline_engine: Engine) -> None:
