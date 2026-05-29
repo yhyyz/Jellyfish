@@ -40,6 +40,22 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // v0.7.2 (build chunk size review)：
+    // 之前 ``vite build`` 报 "Some chunks are larger than 500 kB after
+    // minification"，主 vendor chunk 把 antd / charts / react / i18n / tanstack
+    // 全塞一起。把 4 类大型第三方库按用途拆出独立 vendor chunk，让浏览器
+    // 能并行下载并复用强缓存（其中一个 chunk 改动不会让其它一起失效）。
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          antd: ['antd', '@ant-design/icons'],
+          charts: ['@ant-design/charts'],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          i18n: ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          tanstack: ['@tanstack/react-query', '@tanstack/react-query-devtools'],
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',
