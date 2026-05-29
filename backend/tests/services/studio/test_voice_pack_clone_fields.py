@@ -83,16 +83,31 @@ def _setup_pre_0018_schema(engine: Engine) -> None:
     模拟 0017 时刻的 schema。
 
     W31 又在 ``chapter_timeline_segments`` 表上加了 ``bgm_file_id`` /
-    ``sfx_file_id`` / ``bgm_ducking_db`` 三列（0020）；同样必须从 fixture
-    schema 中剔除，否则 0020 batch_alter_table 重排已存在列时会触发
-    SQLAlchemy ``CircularDependencyError``。
+    ``sfx_file_id`` / ``bgm_ducking_db`` 三列（0020）；W31-followup 0023
+    再加 ``sfx_offset_ms``；这些列同样必须从 fixture schema 中剔除，否则
+    0020 / 0023 batch_alter_table 重排已存在列时会触发 SQLAlchemy
+    ``CircularDependencyError`` 或 ``duplicate column``。
+
+    W32 (0021) 落地了 ``users`` 表；pre-0018 baseline 还没有该表，必须
+    整表从 fresh metadata 中跳过，否则 ``upgrade head`` 经过 0021 的
+    ``op.create_table('users')`` 时会与 ``Base.metadata.create_all`` 已建
+    出的 ``users`` 冲突（"users 已存在"）。
     """
     fresh = MetaData()
     skip_voice_pack_cols = set(NEW_COLUMNS_0018)
     skip_subtitle_styles_cols = {"project_id"}
-    skip_segment_cols = {"bgm_file_id", "sfx_file_id", "bgm_ducking_db"}
+    skip_segment_cols = {
+        "bgm_file_id",
+        "sfx_file_id",
+        "bgm_ducking_db",
+        "sfx_offset_ms",
+    }
+    # pre-0018 baseline 之后才被 alembic 0021+ 创建的整表。
+    skip_tables: set[str] = {"users"}
 
     for source in Base.metadata.sorted_tables:
+        if source.name in skip_tables:
+            continue
         copy_target = source.to_metadata(
             fresh,
             referred_schema_fn=lambda _t, _to_schema, _ck, referred_schema: referred_schema,
