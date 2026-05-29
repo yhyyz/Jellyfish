@@ -41,7 +41,18 @@ import time
 
 import pytest
 
-pytestmark = pytest.mark.integration
+# 该文件仅在显式开启 ``DINOV2_INTEGRATION=1`` 时才执行；默认 skip 以避免
+# CI / 本地开发未起 sidecar 容器时拖累常规 pytest 跑全量。
+# 配套约定保持不变：
+#   - ``pytest.mark.integration`` marker 仍存在，``-m "not integration"`` 仍能过滤；
+#   - 显式跑：``DINOV2_INTEGRATION=1 uv run pytest tests/integration/test_dinov2_sidecar.py``。
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        os.environ.get("DINOV2_INTEGRATION", "").lower() not in {"1", "true", "yes"},
+        reason="需要外部 DINOv2 sidecar 容器；显式 export DINOV2_INTEGRATION=1 才跑",
+    ),
+]
 
 
 def _get_base_url() -> str:

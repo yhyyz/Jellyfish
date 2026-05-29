@@ -375,9 +375,9 @@ async def test_silent_with_tts_dispatches_one_tts_per_dialog_line(
             assert row.payload["run_args"]["voice_pack_id"] == _VOICE_PACK_ID
             assert row.status == GenerationTaskStatus.pending
 
-    # send_task 被调用 3 次（每个 tts_generate 一次）+ 主任务的子任务派发，
-    # 不含 video_generation 自身（worker 自己启动）。
-    assert send_task.call_count == 3
+    # send_task 被调用 4 次：3 tts_generate + 1 shot_consistency_check
+    # （P4 W27-T2 给 video 成功路径加的无条件链式派发，与 audio_strategy 无关）。
+    assert send_task.call_count == 4
 
 
 # ---------------------------------------------------------------------------
@@ -431,7 +431,8 @@ async def test_keep_native_dispatches_single_asr_subtitle_generate(
             "B3：keep_native chain dispatch 必须把默认 style_id 写进 ASR run_args"
         )
 
-    assert send_task.call_count == 1
+    # send_task 被调用 2 次：1 asr_subtitle_generate + 1 shot_consistency_check (W27-T2)。
+    assert send_task.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +481,10 @@ async def test_no_audio_strategy_means_no_chain_dispatch(
         ).scalars().all()
         assert rows == []
 
-    assert send_task.call_count == 0
+    # send_task 被调用 1 次：仅 W27-T2 给 video 成功路径加的无条件
+    # shot_consistency_check 链式派发；audio_strategy 缺失意味着不派发
+    # tts/asr 子任务，但 consistency check 与 audio 无关，仍会派发。
+    assert send_task.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -537,7 +541,9 @@ async def test_silent_with_tts_skips_lines_missing_voice_id(
         ).scalars().all()
         assert len(rows) == 2
 
-    assert send_task.call_count == 2
+    # send_task 被调用 3 次：2 tts_generate (1 行因缺 voice_id 被 skip) +
+    # 1 shot_consistency_check (W27-T2 无条件链式派发)。
+    assert send_task.call_count == 3
 
 
 # ---------------------------------------------------------------------------

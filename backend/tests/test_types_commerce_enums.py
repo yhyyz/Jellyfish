@@ -111,6 +111,8 @@ _FILE_USAGE_CHAPTER_AV_W19 = {
     "chapter_master_subtitle",
     "chapter_master_dubbed",
 }
+# P4 W23 引入的多平台 export 产物（commerce_export task_kind 的输出文件）。
+_FILE_USAGE_EXPORT_W23 = {"product_export"}
 
 
 def test_file_usage_kind_preserves_legacy_values() -> None:
@@ -124,12 +126,13 @@ def test_file_usage_kind_adds_commerce_values() -> None:
 
 
 def test_file_usage_kind_total_count() -> None:
-    """FileUsageKind 总数 = legacy + commerce(P1) + W17 audio + W19 chapter AV。"""
+    """FileUsageKind 总数 = legacy + commerce(P1) + W17 audio + W19 chapter AV + W23 export。"""
     assert len(FileUsageKind) == (
         len(_FILE_USAGE_LEGACY)
         + len(_FILE_USAGE_NEW)
         + len(_FILE_USAGE_AUDIO_W17)
         + len(_FILE_USAGE_CHAPTER_AV_W19)
+        + len(_FILE_USAGE_EXPORT_W23)
     )
 
 
