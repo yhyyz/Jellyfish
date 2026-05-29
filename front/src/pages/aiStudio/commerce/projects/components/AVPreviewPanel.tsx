@@ -290,8 +290,18 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
 
   /**
    * ducking 滑块：``onChange`` 仅更新本地 UI（拖动期间高频，不写库），
-   * ``onAfterChange`` 在用户松开手时触发一次 mutate（antd 5.10 API；
-   * v5.12+ 改名 onChangeComplete，本仓库 5.10 仍用 onAfterChange）。
+   * ``onAfterChange`` 在用户松开手时触发一次 mutate。
+   *
+   * antd Slider API 命名变迁（v0.7.2 review，跟踪 W31 sub-agent 披露）：
+   *   - antd 5.10：``onAfterChange``（本仓库当前实装，package.json ^5.10.0）
+   *   - antd 5.12+：``onChangeComplete``（推荐新名，5.10 不支持）
+   *
+   * 升级路线：
+   *   - 当 ``front/package.json`` antd 升级到 ≥5.12 时，连同此 prop
+   *     一起改名为 ``onChangeComplete``，并同步 ``handleSfxOffsetChangeComplete``
+   *     与 vitest 中的语义说明；
+   *   - 在那之前保留 ``onAfterChange``，避免 prop 名在低版本 antd 下
+   *     被静默忽略，导致松开手时漏触发持久化。
    */
   const handleDuckingChange = (next: number): void => {
     setBgmDuckingDb(next)
@@ -309,6 +319,9 @@ export const AVPreviewPanel: React.FC<AVPreviewPanelProps> = ({
    * 与 ducking 滑块同源逻辑：``onChange`` 仅更新本地 UI（拖动期间高频
    * 不写库），``onAfterChange`` 在用户松开手时触发一次 PATCH。
    * ``segmentId`` 缺失时静默不发请求，仅更新 UI。
+   *
+   * v0.7.2 review：与 ducking 滑块共享 antd Slider API 升级路线，
+   * 当 antd ≥5.12 时再统一改名 ``onChangeComplete``。
    */
   const handleSfxOffsetChange = (next: number): void => {
     setSfxOffsetMs(next)

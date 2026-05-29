@@ -425,6 +425,10 @@ describe('AVPreviewPanel', () => {
     // antd Slider (rc-slider 10.3.1) 内部 onKeyDown 用 ``e.which || e.keyCode``
     // 判断方向键，并在同一回调里同步触发 onChange + onAfterChange。
     // 必须传 keyCode=37 (LEFT)，``key: 'ArrowLeft'`` 不会被识别。
+    //
+    // v0.7.2 review：``onAfterChange`` 是 antd 5.10 命名（package.json
+    // ^5.10.0），antd ≥5.12 改名 ``onChangeComplete``；当前测试覆盖
+    // 5.10 行为，将随 antd 版本升级在 AVPreviewPanel.tsx 内一并切换。
     const duckingRow = screen.getByTestId('av-preview-ducking-row')
     const slider = within(duckingRow).getByRole('slider')
     fireEvent.keyDown(slider, { key: 'ArrowLeft', keyCode: 37, which: 37 })
@@ -613,6 +617,9 @@ describe('AVPreviewPanel', () => {
 
     // antd Slider 用 keyCode 触发 onChange + onAfterChange 同步回调，
     // 与 case 12 ducking 滑块同一套交互机制；用 ArrowRight 让初始 0 上移。
+    //
+    // v0.7.2 review：与 case 12 同一处 antd 5.10 / 5.12+ API 命名差异，
+    // 升级 antd 后 prop 改 ``onChangeComplete`` 时此处一并跟进。
     const sfxOffsetRow = screen.getByTestId('av-preview-sfx-offset-row')
     const slider = within(sfxOffsetRow).getByRole('slider')
     fireEvent.keyDown(slider, { key: 'ArrowRight', keyCode: 39, which: 39 })
